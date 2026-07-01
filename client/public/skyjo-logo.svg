@@ -1,0 +1,664 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 116 116" width="116" height="116" style="background: transparent;">
+  <defs>
+    <clipPath id="sj-logo-transparent-circle">
+      <circle cx="58" cy="58" r="58"/>
+    </clipPath>
+  </defs>
+  <g clip-path="url(#sj-logo-transparent-circle)">
+  <foreignObject x="0" y="0" width="116" height="116">
+    <div xmlns="http://www.w3.org/1999/xhtml" class="sj-logo-capture-root">
+      <style>
+        .sj-logo-capture-root { width: 116px; height: 116px; display: grid; place-items: center; overflow: visible; }
+        .sj-brand-logo-mark { position: relative; width: 116px; aspect-ratio: 1; display: grid; place-items: center; border-radius: 50%; background: radial-gradient(circle at 30% 18%, rgba(240, 189, 87, 0.2), transparent 28%), radial-gradient(circle at 76% 72%, rgba(232, 137, 194, 0.18), transparent 36%), linear-gradient(145deg, rgba(31, 123, 89, 0.98), rgba(13, 52, 40, 0.98)); box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.1), inset 0 0 0 5px rgba(8, 23, 19, 0.18), 0 18px 28px rgba(0, 0, 0, 0.34), 0 0 18px rgba(240, 189, 87, 0.14); overflow: hidden; filter: drop-shadow(0 18px 28px rgba(0, 0, 0, 0.34)) drop-shadow(0 0 18px rgba(240, 189, 87, 0.14)); }
+        .sj-brand-logo-mark::after { content: ""; position: absolute; inset: 0; z-index: 5; border-radius: inherit; box-shadow: inset 0 0 0 3px rgba(255, 255, 255, 0.12), inset 0 0 0 1px rgba(255, 255, 255, 0.32); pointer-events: none; }
+        .sj-brand-logo-card { position: absolute; z-index: 1; width: 35%; transform-origin: center; }
+        .sj-brand-logo-card .sj-card-size-logo { --sj-card-width: 100%; --sj-card-height: auto; width: 100%; height: auto; filter: drop-shadow(0 5px 6px rgba(0, 0, 0, 0.38)); }
+        .sj-brand-logo-card-left { left: 20%; top: 32%; z-index: 3; transform: rotate(-14deg); }
+        .sj-brand-logo-card-center { left: 32%; top: 12%; z-index: 1; width: 37%; transform: rotate(4deg); }
+        .sj-brand-logo-card-right { right: 18%; top: 35%; z-index: 4; transform: rotate(15deg); }
+        .sj-card { --sj-card-frame-color: rgba(255, 255, 255, 0.52); --sj-card-frame-width: 1.2; --sj-card-frame-opacity: 0.92; width: var(--sj-card-width, 64px); height: var(--sj-card-height, calc(var(--sj-card-width, 64px) * 122 / 88)); aspect-ratio: 88 / 122; display: block; overflow: visible; border: 0; border-radius: 12.5% / 9.0164%; filter: drop-shadow(0 4px 5px rgba(0, 0, 0, 0.38)); shape-rendering: geometricPrecision; transform-box: fill-box; transform-origin: center; backface-visibility: hidden; }
+        .sj-card-frame { fill: none; stroke: var(--sj-card-frame-color); stroke-width: var(--sj-card-frame-width); stroke-opacity: var(--sj-card-frame-opacity); stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
+      </style>
+      <span class="sj-brand-logo-mark" aria-hidden="true">
+      <span class="sj-brand-logo-card sj-brand-logo-card-center">
+      <svg xmlns="http://www.w3.org/2000/svg" class="sj-card sj-card-size-logo" viewBox="0 0 88 122" preserveAspectRatio="none" role="img" aria-label="Carte Étoile">
+      <defs>
+      <linearGradient id="sj-star-grad-2" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#63d8e5">
+      </stop>
+      <stop offset="48%" stop-color="#f5d94c">
+      </stop>
+      <stop offset="100%" stop-color="#ef5f67">
+      </stop>
+      </linearGradient>
+      </defs>
+      <rect x="1.2" y="1.2" width="85.6" height="119.6" rx="9.8" ry="9.8" fill="url(#sj-star-grad-2)">
+      </rect>
+      <text x="44" y="63" text-anchor="middle" dominant-baseline="central" font-family="Arial, sans-serif" font-weight="900" font-size="58" fill="#ffffff">★</text>
+      <rect x="1.2" y="1.2" width="85.6" height="119.6" rx="9.8" ry="9.8" class="sj-card-frame">
+      </rect>
+      </svg>
+      </span>
+      <span class="sj-brand-logo-card sj-brand-logo-card-left">
+      <svg xmlns="http://www.w3.org/2000/svg" class="sj-card sj-card-size-logo" viewBox="0 0 88 122" preserveAspectRatio="none" role="img" aria-label="Carte 12">
+      <g>
+      <defs>
+      <linearGradient id="sj-card-grad-4" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffaaa0">
+      </stop>
+      <stop offset="52%" stop-color="#d84b42">
+      </stop>
+      <stop offset="100%" stop-color="#8f1d25">
+      </stop>
+      </linearGradient>
+      <clipPath id="sj-card-clip-4">
+      <rect x="1.2" y="1.2" width="85.6" height="119.6" rx="9.8" ry="9.8">
+      </rect>
+      </clipPath>
+      </defs>
+      <g clip-path="url(#sj-card-clip-4)">
+      <rect x="1.2" y="1.2" width="85.6" height="119.6" rx="9.8" ry="9.8" fill="url(#sj-card-grad-4)">
+      </rect>
+      <polygon points="-3.8,-0.0 14.5,2.5 3.2,13.2" fill="#ffffff" opacity="0.140">
+      </polygon>
+      <polygon points="14.5,2.5 21.5,16.6 3.2,13.2" fill="#ffffff" opacity="0.029">
+      </polygon>
+      <polygon points="14.5,2.5 32.3,-4.2 21.5,16.6" fill="#ffffff" opacity="0.102">
+      </polygon>
+      <polygon points="32.3,-4.2 34.9,18.5 21.5,16.6" fill="#ffffff" opacity="0.097">
+      </polygon>
+      <polygon points="32.3,-4.2 48.1,2.3 34.9,18.5" fill="#ffffff" opacity="0.112">
+      </polygon>
+      <polygon points="48.1,2.3 57.6,14.8 34.9,18.5" fill="#ffffff" opacity="0.041">
+      </polygon>
+      <polygon points="48.1,2.3 69.5,3.3 72.2,15.5" fill="#ffffff" opacity="0.059">
+      </polygon>
+      <polygon points="48.1,2.3 72.2,15.5 57.6,14.8" fill="#ffffff" opacity="0.092">
+      </polygon>
+      <polygon points="69.5,3.3 86.3,1.2 72.2,15.5" fill="#ffffff" opacity="0.128">
+      </polygon>
+      <polygon points="86.3,1.2 86.9,13.1 72.2,15.5" fill="#ffffff" opacity="0.018">
+      </polygon>
+      <polygon points="3.2,13.2 21.5,16.6 15.0,36.9" fill="#ffffff" opacity="0.091">
+      </polygon>
+      <polygon points="3.2,13.2 15.0,36.9 -3.1,38.2" fill="#ffffff" opacity="0.002">
+      </polygon>
+      <polygon points="21.5,16.6 34.9,18.5 36.0,34.4" fill="#ffffff" opacity="0.008">
+      </polygon>
+      <polygon points="21.5,16.6 36.0,34.4 15.0,36.9" fill="#ffffff" opacity="0.109">
+      </polygon>
+      <polygon points="34.9,18.5 57.6,14.8 49.2,33.4" fill="#ffffff" opacity="0.113">
+      </polygon>
+      <polygon points="34.9,18.5 49.2,33.4 36.0,34.4" fill="#ffffff" opacity="0.065">
+      </polygon>
+      <polygon points="57.6,14.8 72.2,15.5 66.8,31.0" fill="#ffffff" opacity="0.084">
+      </polygon>
+      <polygon points="57.6,14.8 66.8,31.0 49.2,33.4" fill="#ffffff" opacity="0.044">
+      </polygon>
+      <polygon points="72.2,15.5 86.9,13.1 66.8,31.0" fill="#ffffff" opacity="0.099">
+      </polygon>
+      <polygon points="86.9,13.1 86.4,36.0 66.8,31.0" fill="#ffffff" opacity="0.006">
+      </polygon>
+      <polygon points="-3.1,38.2 15.0,36.9 -0.2,57.0" fill="#ffffff" opacity="0.055">
+      </polygon>
+      <polygon points="15.0,36.9 17.9,56.0 -0.2,57.0" fill="#ffffff" opacity="0.117">
+      </polygon>
+      <polygon points="15.0,36.9 36.0,34.4 33.8,52.1" fill="#ffffff" opacity="0.031">
+      </polygon>
+      <polygon points="15.0,36.9 33.8,52.1 17.9,56.0" fill="#ffffff" opacity="0.129">
+      </polygon>
+      <polygon points="36.0,34.4 49.2,33.4 33.8,52.1" fill="#ffffff" opacity="0.086">
+      </polygon>
+      <polygon points="49.2,33.4 55.4,50.3 33.8,52.1" fill="#ffffff" opacity="0.118">
+      </polygon>
+      <polygon points="49.2,33.4 66.8,31.0 71.0,50.1" fill="#ffffff" opacity="0.077">
+      </polygon>
+      <polygon points="49.2,33.4 71.0,50.1 55.4,50.3" fill="#ffffff" opacity="0.016">
+      </polygon>
+      <polygon points="66.8,31.0 86.4,36.0 87.1,55.7" fill="#ffffff" opacity="0.118">
+      </polygon>
+      <polygon points="66.8,31.0 87.1,55.7 71.0,50.1" fill="#ffffff" opacity="0.028">
+      </polygon>
+      <polygon points="-0.2,57.0 17.9,56.0 21.3,70.4" fill="#ffffff" opacity="0.061">
+      </polygon>
+      <polygon points="-0.2,57.0 21.3,70.4 -1.1,68.0" fill="#ffffff" opacity="0.115">
+      </polygon>
+      <polygon points="17.9,56.0 33.8,52.1 40.0,74.4" fill="#ffffff" opacity="0.043">
+      </polygon>
+      <polygon points="17.9,56.0 40.0,74.4 21.3,70.4" fill="#ffffff" opacity="0.089">
+      </polygon>
+      <polygon points="33.8,52.1 55.4,50.3 40.0,74.4" fill="#ffffff" opacity="0.046">
+      </polygon>
+      <polygon points="55.4,50.3 52.5,72.3 40.0,74.4" fill="#ffffff" opacity="0.072">
+      </polygon>
+      <polygon points="55.4,50.3 71.0,50.1 66.8,65.6" fill="#ffffff" opacity="0.037">
+      </polygon>
+      <polygon points="55.4,50.3 66.8,65.6 52.5,72.3" fill="#ffffff" opacity="0.084">
+      </polygon>
+      <polygon points="71.0,50.1 87.1,55.7 66.8,65.6" fill="#ffffff" opacity="0.091">
+      </polygon>
+      <polygon points="87.1,55.7 84.6,73.8 66.8,65.6" fill="#ffffff" opacity="0.026">
+      </polygon>
+      <polygon points="-1.1,68.0 21.3,70.4 -1.5,82.7" fill="#ffffff" opacity="0.036">
+      </polygon>
+      <polygon points="21.3,70.4 16.1,86.0 -1.5,82.7" fill="#ffffff" opacity="0.072">
+      </polygon>
+      <polygon points="21.3,70.4 40.0,74.4 16.1,86.0" fill="#ffffff" opacity="0.039">
+      </polygon>
+      <polygon points="40.0,74.4 31.2,84.3 16.1,86.0" fill="#ffffff" opacity="0.078">
+      </polygon>
+      <polygon points="40.0,74.4 52.5,72.3 49.6,88.5" fill="#ffffff" opacity="0.059">
+      </polygon>
+      <polygon points="40.0,74.4 49.6,88.5 31.2,84.3" fill="#ffffff" opacity="0.092">
+      </polygon>
+      <polygon points="52.5,72.3 66.8,65.6 71.2,91.8" fill="#ffffff" opacity="0.096">
+      </polygon>
+      <polygon points="52.5,72.3 71.2,91.8 49.6,88.5" fill="#ffffff" opacity="0.008">
+      </polygon>
+      <polygon points="66.8,65.6 84.6,73.8 71.2,91.8" fill="#ffffff" opacity="0.016">
+      </polygon>
+      <polygon points="84.6,73.8 84.7,84.0 71.2,91.8" fill="#ffffff" opacity="0.045">
+      </polygon>
+      <polygon points="-1.5,82.7 16.1,86.0 2.4,103.7" fill="#ffffff" opacity="0.087">
+      </polygon>
+      <polygon points="16.1,86.0 18.4,101.1 2.4,103.7" fill="#ffffff" opacity="0.063">
+      </polygon>
+      <polygon points="16.1,86.0 31.2,84.3 31.4,105.5" fill="#ffffff" opacity="0.000">
+      </polygon>
+      <polygon points="16.1,86.0 31.4,105.5 18.4,101.1" fill="#ffffff" opacity="0.015">
+      </polygon>
+      <polygon points="31.2,84.3 49.6,88.5 31.4,105.5" fill="#ffffff" opacity="0.010">
+      </polygon>
+      <polygon points="49.6,88.5 52.3,102.4 31.4,105.5" fill="#ffffff" opacity="0.112">
+      </polygon>
+      <polygon points="49.6,88.5 71.2,91.8 68.4,109.0" fill="#ffffff" opacity="0.129">
+      </polygon>
+      <polygon points="49.6,88.5 68.4,109.0 52.3,102.4" fill="#ffffff" opacity="0.027">
+      </polygon>
+      <polygon points="71.2,91.8 84.7,84.0 68.4,109.0" fill="#ffffff" opacity="0.037">
+      </polygon>
+      <polygon points="84.7,84.0 88.1,102.4 68.4,109.0" fill="#ffffff" opacity="0.035">
+      </polygon>
+      <polygon points="2.4,103.7 18.4,101.1 22.2,124.5" fill="#ffffff" opacity="0.090">
+      </polygon>
+      <polygon points="2.4,103.7 22.2,124.5 -0.5,125.0" fill="#ffffff" opacity="0.029">
+      </polygon>
+      <polygon points="18.4,101.1 31.4,105.5 37.0,126.7" fill="#ffffff" opacity="0.048">
+      </polygon>
+      <polygon points="18.4,101.1 37.0,126.7 22.2,124.5" fill="#ffffff" opacity="0.023">
+      </polygon>
+      <polygon points="31.4,105.5 52.3,102.4 37.0,126.7" fill="#ffffff" opacity="0.066">
+      </polygon>
+      <polygon points="52.3,102.4 48.9,121.6 37.0,126.7" fill="#ffffff" opacity="0.111">
+      </polygon>
+      <polygon points="52.3,102.4 68.4,109.0 71.0,121.2" fill="#ffffff" opacity="0.002">
+      </polygon>
+      <polygon points="52.3,102.4 71.0,121.2 48.9,121.6" fill="#ffffff" opacity="0.039">
+      </polygon>
+      <polygon points="68.4,109.0 88.1,102.4 83.9,119.1" fill="#ffffff" opacity="0.032">
+      </polygon>
+      <polygon points="68.4,109.0 83.9,119.1 71.0,121.2" fill="#ffffff" opacity="0.107">
+      </polygon>
+      <polygon points="-3.8,-0.0 14.5,2.5 3.2,13.2" fill="#000000" opacity="0.020">
+      </polygon>
+      <polygon points="14.5,2.5 21.5,16.6 3.2,13.2" fill="#000000" opacity="0.083">
+      </polygon>
+      <polygon points="14.5,2.5 32.3,-4.2 21.5,16.6" fill="#000000" opacity="0.042">
+      </polygon>
+      <polygon points="32.3,-4.2 34.9,18.5 21.5,16.6" fill="#000000" opacity="0.044">
+      </polygon>
+      <polygon points="32.3,-4.2 48.1,2.3 34.9,18.5" fill="#000000" opacity="0.036">
+      </polygon>
+      <polygon points="48.1,2.3 57.6,14.8 34.9,18.5" fill="#000000" opacity="0.076">
+      </polygon>
+      <polygon points="48.1,2.3 69.5,3.3 72.2,15.5" fill="#000000" opacity="0.066">
+      </polygon>
+      <polygon points="48.1,2.3 72.2,15.5 57.6,14.8" fill="#000000" opacity="0.047">
+      </polygon>
+      <polygon points="69.5,3.3 86.3,1.2 72.2,15.5" fill="#000000" opacity="0.027">
+      </polygon>
+      <polygon points="86.3,1.2 86.9,13.1 72.2,15.5" fill="#000000" opacity="0.089">
+      </polygon>
+      <polygon points="3.2,13.2 21.5,16.6 15.0,36.9" fill="#000000" opacity="0.048">
+      </polygon>
+      <polygon points="3.2,13.2 15.0,36.9 -3.1,38.2" fill="#000000" opacity="0.099">
+      </polygon>
+      <polygon points="21.5,16.6 34.9,18.5 36.0,34.4" fill="#000000" opacity="0.095">
+      </polygon>
+      <polygon points="21.5,16.6 36.0,34.4 15.0,36.9" fill="#000000" opacity="0.038">
+      </polygon>
+      <polygon points="34.9,18.5 57.6,14.8 49.2,33.4" fill="#000000" opacity="0.035">
+      </polygon>
+      <polygon points="34.9,18.5 49.2,33.4 36.0,34.4" fill="#000000" opacity="0.063">
+      </polygon>
+      <polygon points="57.6,14.8 72.2,15.5 66.8,31.0" fill="#000000" opacity="0.052">
+      </polygon>
+      <polygon points="57.6,14.8 66.8,31.0 49.2,33.4" fill="#000000" opacity="0.075">
+      </polygon>
+      <polygon points="72.2,15.5 86.9,13.1 66.8,31.0" fill="#000000" opacity="0.044">
+      </polygon>
+      <polygon points="86.9,13.1 86.4,36.0 66.8,31.0" fill="#000000" opacity="0.096">
+      </polygon>
+      <polygon points="-3.1,38.2 15.0,36.9 -0.2,57.0" fill="#000000" opacity="0.068">
+      </polygon>
+      <polygon points="15.0,36.9 17.9,56.0 -0.2,57.0" fill="#000000" opacity="0.033">
+      </polygon>
+      <polygon points="15.0,36.9 36.0,34.4 33.8,52.1" fill="#000000" opacity="0.082">
+      </polygon>
+      <polygon points="15.0,36.9 33.8,52.1 17.9,56.0" fill="#000000" opacity="0.026">
+      </polygon>
+      <polygon points="36.0,34.4 49.2,33.4 33.8,52.1" fill="#000000" opacity="0.051">
+      </polygon>
+      <polygon points="49.2,33.4 55.4,50.3 33.8,52.1" fill="#000000" opacity="0.032">
+      </polygon>
+      <polygon points="49.2,33.4 66.8,31.0 71.0,50.1" fill="#000000" opacity="0.056">
+      </polygon>
+      <polygon points="49.2,33.4 71.0,50.1 55.4,50.3" fill="#000000" opacity="0.091">
+      </polygon>
+      <polygon points="66.8,31.0 86.4,36.0 87.1,55.7" fill="#000000" opacity="0.033">
+      </polygon>
+      <polygon points="66.8,31.0 87.1,55.7 71.0,50.1" fill="#000000" opacity="0.084">
+      </polygon>
+      <polygon points="-0.2,57.0 17.9,56.0 21.3,70.4" fill="#000000" opacity="0.065">
+      </polygon>
+      <polygon points="-0.2,57.0 21.3,70.4 -1.1,68.0" fill="#000000" opacity="0.034">
+      </polygon>
+      <polygon points="17.9,56.0 33.8,52.1 40.0,74.4" fill="#000000" opacity="0.076">
+      </polygon>
+      <polygon points="17.9,56.0 40.0,74.4 21.3,70.4" fill="#000000" opacity="0.049">
+      </polygon>
+      <polygon points="33.8,52.1 55.4,50.3 40.0,74.4" fill="#000000" opacity="0.074">
+      </polygon>
+      <polygon points="55.4,50.3 52.5,72.3 40.0,74.4" fill="#000000" opacity="0.059">
+      </polygon>
+      <polygon points="55.4,50.3 71.0,50.1 66.8,65.6" fill="#000000" opacity="0.079">
+      </polygon>
+      <polygon points="55.4,50.3 66.8,65.6 52.5,72.3" fill="#000000" opacity="0.052">
+      </polygon>
+      <polygon points="71.0,50.1 87.1,55.7 66.8,65.6" fill="#000000" opacity="0.048">
+      </polygon>
+      <polygon points="87.1,55.7 84.6,73.8 66.8,65.6" fill="#000000" opacity="0.085">
+      </polygon>
+      <polygon points="-1.1,68.0 21.3,70.4 -1.5,82.7" fill="#000000" opacity="0.079">
+      </polygon>
+      <polygon points="21.3,70.4 16.1,86.0 -1.5,82.7" fill="#000000" opacity="0.059">
+      </polygon>
+      <polygon points="21.3,70.4 40.0,74.4 16.1,86.0" fill="#000000" opacity="0.078">
+      </polygon>
+      <polygon points="40.0,74.4 31.2,84.3 16.1,86.0" fill="#000000" opacity="0.055">
+      </polygon>
+      <polygon points="40.0,74.4 52.5,72.3 49.6,88.5" fill="#000000" opacity="0.066">
+      </polygon>
+      <polygon points="40.0,74.4 49.6,88.5 31.2,84.3" fill="#000000" opacity="0.047">
+      </polygon>
+      <polygon points="52.5,72.3 66.8,65.6 71.2,91.8" fill="#000000" opacity="0.045">
+      </polygon>
+      <polygon points="52.5,72.3 71.2,91.8 49.6,88.5" fill="#000000" opacity="0.096">
+      </polygon>
+      <polygon points="66.8,65.6 84.6,73.8 71.2,91.8" fill="#000000" opacity="0.091">
+      </polygon>
+      <polygon points="84.6,73.8 84.7,84.0 71.2,91.8" fill="#000000" opacity="0.074">
+      </polygon>
+      <polygon points="-1.5,82.7 16.1,86.0 2.4,103.7" fill="#000000" opacity="0.050">
+      </polygon>
+      <polygon points="16.1,86.0 18.4,101.1 2.4,103.7" fill="#000000" opacity="0.064">
+      </polygon>
+      <polygon points="16.1,86.0 31.2,84.3 31.4,105.5" fill="#000000" opacity="0.100">
+      </polygon>
+      <polygon points="16.1,86.0 31.4,105.5 18.4,101.1" fill="#000000" opacity="0.092">
+      </polygon>
+      <polygon points="31.2,84.3 49.6,88.5 31.4,105.5" fill="#000000" opacity="0.094">
+      </polygon>
+      <polygon points="49.6,88.5 52.3,102.4 31.4,105.5" fill="#000000" opacity="0.036">
+      </polygon>
+      <polygon points="49.6,88.5 71.2,91.8 68.4,109.0" fill="#000000" opacity="0.026">
+      </polygon>
+      <polygon points="49.6,88.5 68.4,109.0 52.3,102.4" fill="#000000" opacity="0.084">
+      </polygon>
+      <polygon points="71.2,91.8 84.7,84.0 68.4,109.0" fill="#000000" opacity="0.079">
+      </polygon>
+      <polygon points="84.7,84.0 88.1,102.4 68.4,109.0" fill="#000000" opacity="0.080">
+      </polygon>
+      <polygon points="2.4,103.7 18.4,101.1 22.2,124.5" fill="#000000" opacity="0.049">
+      </polygon>
+      <polygon points="2.4,103.7 22.2,124.5 -0.5,125.0" fill="#000000" opacity="0.084">
+      </polygon>
+      <polygon points="18.4,101.1 31.4,105.5 37.0,126.7" fill="#000000" opacity="0.072">
+      </polygon>
+      <polygon points="18.4,101.1 37.0,126.7 22.2,124.5" fill="#000000" opacity="0.087">
+      </polygon>
+      <polygon points="31.4,105.5 52.3,102.4 37.0,126.7" fill="#000000" opacity="0.062">
+      </polygon>
+      <polygon points="52.3,102.4 48.9,121.6 37.0,126.7" fill="#000000" opacity="0.036">
+      </polygon>
+      <polygon points="52.3,102.4 68.4,109.0 71.0,121.2" fill="#000000" opacity="0.099">
+      </polygon>
+      <polygon points="52.3,102.4 71.0,121.2 48.9,121.6" fill="#000000" opacity="0.078">
+      </polygon>
+      <polygon points="68.4,109.0 88.1,102.4 83.9,119.1" fill="#000000" opacity="0.082">
+      </polygon>
+      <polygon points="68.4,109.0 83.9,119.1 71.0,121.2" fill="#000000" opacity="0.039">
+      </polygon>
+      </g>
+      </g>
+      <text x="7" y="7" text-anchor="start" dominant-baseline="hanging" font-family="Arial, sans-serif" font-weight="900" font-size="13" fill="#4d080d">12</text>
+      <text x="44" y="62" text-anchor="middle" dominant-baseline="central" font-family="Arial, sans-serif" font-weight="900" font-size="42" fill="#4d080d">12</text>
+      <text x="81" y="118" text-anchor="end" dominant-baseline="text-after-edge" font-family="Arial, sans-serif" font-weight="900" font-size="13" fill="#4d080d">12</text>
+      <rect x="1.2" y="1.2" width="85.6" height="119.6" rx="9.8" ry="9.8" class="sj-card-frame">
+      </rect>
+      </svg>
+      </span>
+      <span class="sj-brand-logo-card sj-brand-logo-card-right">
+      <svg xmlns="http://www.w3.org/2000/svg" class="sj-card sj-card-size-logo" viewBox="0 0 88 122" preserveAspectRatio="none" role="img" aria-label="Carte 0">
+      <g>
+      <defs>
+      <linearGradient id="sj-card-grad-6" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#93e5f4">
+      </stop>
+      <stop offset="52%" stop-color="#27a8ce">
+      </stop>
+      <stop offset="100%" stop-color="#116f85">
+      </stop>
+      </linearGradient>
+      <clipPath id="sj-card-clip-6">
+      <rect x="1.2" y="1.2" width="85.6" height="119.6" rx="9.8" ry="9.8">
+      </rect>
+      </clipPath>
+      </defs>
+      <g clip-path="url(#sj-card-clip-6)">
+      <rect x="1.2" y="1.2" width="85.6" height="119.6" rx="9.8" ry="9.8" fill="url(#sj-card-grad-6)">
+      </rect>
+      <polygon points="0.6,-1.3 13.4,-4.3 18.2,16.1" fill="#ffffff" opacity="0.130">
+      </polygon>
+      <polygon points="0.6,-1.3 18.2,16.1 -2.0,14.2" fill="#ffffff" opacity="0.084">
+      </polygon>
+      <polygon points="13.4,-4.3 30.7,-4.7 35.9,18.5" fill="#ffffff" opacity="0.116">
+      </polygon>
+      <polygon points="13.4,-4.3 35.9,18.5 18.2,16.1" fill="#ffffff" opacity="0.002">
+      </polygon>
+      <polygon points="30.7,-4.7 48.8,-1.4 49.1,18.8" fill="#ffffff" opacity="0.031">
+      </polygon>
+      <polygon points="30.7,-4.7 49.1,18.8 35.9,18.5" fill="#ffffff" opacity="0.095">
+      </polygon>
+      <polygon points="48.8,-1.4 71.0,3.6 69.8,18.9" fill="#ffffff" opacity="0.109">
+      </polygon>
+      <polygon points="48.8,-1.4 69.8,18.9 49.1,18.8" fill="#ffffff" opacity="0.018">
+      </polygon>
+      <polygon points="71.0,3.6 89.5,2.5 69.8,18.9" fill="#ffffff" opacity="0.073">
+      </polygon>
+      <polygon points="89.5,2.5 86.4,13.6 69.8,18.9" fill="#ffffff" opacity="0.087">
+      </polygon>
+      <polygon points="-2.0,14.2 18.2,16.1 2.4,33.9" fill="#ffffff" opacity="0.106">
+      </polygon>
+      <polygon points="18.2,16.1 13.6,33.1 2.4,33.9" fill="#ffffff" opacity="0.023">
+      </polygon>
+      <polygon points="18.2,16.1 35.9,18.5 30.8,30.7" fill="#ffffff" opacity="0.115">
+      </polygon>
+      <polygon points="18.2,16.1 30.8,30.7 13.6,33.1" fill="#ffffff" opacity="0.105">
+      </polygon>
+      <polygon points="35.9,18.5 49.1,18.8 30.8,30.7" fill="#ffffff" opacity="0.059">
+      </polygon>
+      <polygon points="49.1,18.8 50.8,38.8 30.8,30.7" fill="#ffffff" opacity="0.138">
+      </polygon>
+      <polygon points="49.1,18.8 69.8,18.9 50.8,38.8" fill="#ffffff" opacity="0.074">
+      </polygon>
+      <polygon points="69.8,18.9 69.1,37.0 50.8,38.8" fill="#ffffff" opacity="0.019">
+      </polygon>
+      <polygon points="69.8,18.9 86.4,13.6 69.1,37.0" fill="#ffffff" opacity="0.093">
+      </polygon>
+      <polygon points="86.4,13.6 85.3,33.6 69.1,37.0" fill="#ffffff" opacity="0.108">
+      </polygon>
+      <polygon points="2.4,33.9 13.6,33.1 12.9,52.6" fill="#ffffff" opacity="0.042">
+      </polygon>
+      <polygon points="2.4,33.9 12.9,52.6 -2.0,54.2" fill="#ffffff" opacity="0.116">
+      </polygon>
+      <polygon points="13.6,33.1 30.8,30.7 31.2,49.3" fill="#ffffff" opacity="0.049">
+      </polygon>
+      <polygon points="13.6,33.1 31.2,49.3 12.9,52.6" fill="#ffffff" opacity="0.080">
+      </polygon>
+      <polygon points="30.8,30.7 50.8,38.8 31.2,49.3" fill="#ffffff" opacity="0.041">
+      </polygon>
+      <polygon points="50.8,38.8 52.0,48.6 31.2,49.3" fill="#ffffff" opacity="0.104">
+      </polygon>
+      <polygon points="50.8,38.8 69.1,37.0 67.2,50.0" fill="#ffffff" opacity="0.134">
+      </polygon>
+      <polygon points="50.8,38.8 67.2,50.0 52.0,48.6" fill="#ffffff" opacity="0.026">
+      </polygon>
+      <polygon points="69.1,37.0 85.3,33.6 67.2,50.0" fill="#ffffff" opacity="0.106">
+      </polygon>
+      <polygon points="85.3,33.6 92.1,48.6 67.2,50.0" fill="#ffffff" opacity="0.101">
+      </polygon>
+      <polygon points="-2.0,54.2 12.9,52.6 -3.2,72.2" fill="#ffffff" opacity="0.115">
+      </polygon>
+      <polygon points="12.9,52.6 14.3,65.9 -3.2,72.2" fill="#ffffff" opacity="0.086">
+      </polygon>
+      <polygon points="12.9,52.6 31.2,49.3 14.3,65.9" fill="#ffffff" opacity="0.017">
+      </polygon>
+      <polygon points="31.2,49.3 32.9,73.6 14.3,65.9" fill="#ffffff" opacity="0.019">
+      </polygon>
+      <polygon points="31.2,49.3 52.0,48.6 32.9,73.6" fill="#ffffff" opacity="0.096">
+      </polygon>
+      <polygon points="52.0,48.6 57.6,72.3 32.9,73.6" fill="#ffffff" opacity="0.092">
+      </polygon>
+      <polygon points="52.0,48.6 67.2,50.0 57.6,72.3" fill="#ffffff" opacity="0.018">
+      </polygon>
+      <polygon points="67.2,50.0 66.8,68.5 57.6,72.3" fill="#ffffff" opacity="0.101">
+      </polygon>
+      <polygon points="67.2,50.0 92.1,48.6 66.8,68.5" fill="#ffffff" opacity="0.004">
+      </polygon>
+      <polygon points="92.1,48.6 83.6,72.4 66.8,68.5" fill="#ffffff" opacity="0.121">
+      </polygon>
+      <polygon points="-3.2,72.2 14.3,65.9 14.1,89.0" fill="#ffffff" opacity="0.122">
+      </polygon>
+      <polygon points="-3.2,72.2 14.1,89.0 -3.4,84.7" fill="#ffffff" opacity="0.080">
+      </polygon>
+      <polygon points="14.3,65.9 32.9,73.6 14.1,89.0" fill="#ffffff" opacity="0.042">
+      </polygon>
+      <polygon points="32.9,73.6 38.4,91.6 14.1,89.0" fill="#ffffff" opacity="0.021">
+      </polygon>
+      <polygon points="32.9,73.6 57.6,72.3 38.4,91.6" fill="#ffffff" opacity="0.109">
+      </polygon>
+      <polygon points="57.6,72.3 51.5,86.2 38.4,91.6" fill="#ffffff" opacity="0.126">
+      </polygon>
+      <polygon points="57.6,72.3 66.8,68.5 72.3,91.0" fill="#ffffff" opacity="0.132">
+      </polygon>
+      <polygon points="57.6,72.3 72.3,91.0 51.5,86.2" fill="#ffffff" opacity="0.084">
+      </polygon>
+      <polygon points="66.8,68.5 83.6,72.4 89.4,89.1" fill="#ffffff" opacity="0.035">
+      </polygon>
+      <polygon points="66.8,68.5 89.4,89.1 72.3,91.0" fill="#ffffff" opacity="0.070">
+      </polygon>
+      <polygon points="-3.4,84.7 14.1,89.0 18.0,107.2" fill="#ffffff" opacity="0.023">
+      </polygon>
+      <polygon points="-3.4,84.7 18.0,107.2 2.1,108.6" fill="#ffffff" opacity="0.087">
+      </polygon>
+      <polygon points="14.1,89.0 38.4,91.6 18.0,107.2" fill="#ffffff" opacity="0.090">
+      </polygon>
+      <polygon points="38.4,91.6 35.5,107.9 18.0,107.2" fill="#ffffff" opacity="0.016">
+      </polygon>
+      <polygon points="38.4,91.6 51.5,86.2 50.6,106.0" fill="#ffffff" opacity="0.009">
+      </polygon>
+      <polygon points="38.4,91.6 50.6,106.0 35.5,107.9" fill="#ffffff" opacity="0.136">
+      </polygon>
+      <polygon points="51.5,86.2 72.3,91.0 67.6,102.7" fill="#ffffff" opacity="0.073">
+      </polygon>
+      <polygon points="51.5,86.2 67.6,102.7 50.6,106.0" fill="#ffffff" opacity="0.124">
+      </polygon>
+      <polygon points="72.3,91.0 89.4,89.1 89.2,103.6" fill="#ffffff" opacity="0.025">
+      </polygon>
+      <polygon points="72.3,91.0 89.2,103.6 67.6,102.7" fill="#ffffff" opacity="0.063">
+      </polygon>
+      <polygon points="2.1,108.6 18.0,107.2 20.3,118.3" fill="#ffffff" opacity="0.099">
+      </polygon>
+      <polygon points="2.1,108.6 20.3,118.3 -3.8,117.9" fill="#ffffff" opacity="0.059">
+      </polygon>
+      <polygon points="18.0,107.2 35.5,107.9 39.3,124.8" fill="#ffffff" opacity="0.037">
+      </polygon>
+      <polygon points="18.0,107.2 39.3,124.8 20.3,118.3" fill="#ffffff" opacity="0.029">
+      </polygon>
+      <polygon points="35.5,107.9 50.6,106.0 39.3,124.8" fill="#ffffff" opacity="0.082">
+      </polygon>
+      <polygon points="50.6,106.0 51.4,125.9 39.3,124.8" fill="#ffffff" opacity="0.049">
+      </polygon>
+      <polygon points="50.6,106.0 67.6,102.7 51.4,125.9" fill="#ffffff" opacity="0.027">
+      </polygon>
+      <polygon points="67.6,102.7 74.3,118.6 51.4,125.9" fill="#ffffff" opacity="0.137">
+      </polygon>
+      <polygon points="67.6,102.7 89.2,103.6 74.3,118.6" fill="#ffffff" opacity="0.068">
+      </polygon>
+      <polygon points="89.2,103.6 86.5,118.5 74.3,118.6" fill="#ffffff" opacity="0.129">
+      </polygon>
+      <polygon points="0.6,-1.3 13.4,-4.3 18.2,16.1" fill="#000000" opacity="0.026">
+      </polygon>
+      <polygon points="0.6,-1.3 18.2,16.1 -2.0,14.2" fill="#000000" opacity="0.052">
+      </polygon>
+      <polygon points="13.4,-4.3 30.7,-4.7 35.9,18.5" fill="#000000" opacity="0.034">
+      </polygon>
+      <polygon points="13.4,-4.3 35.9,18.5 18.2,16.1" fill="#000000" opacity="0.099">
+      </polygon>
+      <polygon points="30.7,-4.7 48.8,-1.4 49.1,18.8" fill="#000000" opacity="0.082">
+      </polygon>
+      <polygon points="30.7,-4.7 49.1,18.8 35.9,18.5" fill="#000000" opacity="0.046">
+      </polygon>
+      <polygon points="48.8,-1.4 71.0,3.6 69.8,18.9" fill="#000000" opacity="0.037">
+      </polygon>
+      <polygon points="48.8,-1.4 69.8,18.9 49.1,18.8" fill="#000000" opacity="0.090">
+      </polygon>
+      <polygon points="71.0,3.6 89.5,2.5 69.8,18.9" fill="#000000" opacity="0.058">
+      </polygon>
+      <polygon points="89.5,2.5 86.4,13.6 69.8,18.9" fill="#000000" opacity="0.050">
+      </polygon>
+      <polygon points="-2.0,14.2 18.2,16.1 2.4,33.9" fill="#000000" opacity="0.039">
+      </polygon>
+      <polygon points="18.2,16.1 13.6,33.1 2.4,33.9" fill="#000000" opacity="0.087">
+      </polygon>
+      <polygon points="18.2,16.1 35.9,18.5 30.8,30.7" fill="#000000" opacity="0.034">
+      </polygon>
+      <polygon points="18.2,16.1 30.8,30.7 13.6,33.1" fill="#000000" opacity="0.040">
+      </polygon>
+      <polygon points="35.9,18.5 49.1,18.8 30.8,30.7" fill="#000000" opacity="0.066">
+      </polygon>
+      <polygon points="49.1,18.8 50.8,38.8 30.8,30.7" fill="#000000" opacity="0.021">
+      </polygon>
+      <polygon points="49.1,18.8 69.8,18.9 50.8,38.8" fill="#000000" opacity="0.058">
+      </polygon>
+      <polygon points="69.8,18.9 69.1,37.0 50.8,38.8" fill="#000000" opacity="0.089">
+      </polygon>
+      <polygon points="69.8,18.9 86.4,13.6 69.1,37.0" fill="#000000" opacity="0.047">
+      </polygon>
+      <polygon points="86.4,13.6 85.3,33.6 69.1,37.0" fill="#000000" opacity="0.038">
+      </polygon>
+      <polygon points="2.4,33.9 13.6,33.1 12.9,52.6" fill="#000000" opacity="0.076">
+      </polygon>
+      <polygon points="2.4,33.9 12.9,52.6 -2.0,54.2" fill="#000000" opacity="0.034">
+      </polygon>
+      <polygon points="13.6,33.1 30.8,30.7 31.2,49.3" fill="#000000" opacity="0.072">
+      </polygon>
+      <polygon points="13.6,33.1 31.2,49.3 12.9,52.6" fill="#000000" opacity="0.054">
+      </polygon>
+      <polygon points="30.8,30.7 50.8,38.8 31.2,49.3" fill="#000000" opacity="0.077">
+      </polygon>
+      <polygon points="50.8,38.8 52.0,48.6 31.2,49.3" fill="#000000" opacity="0.041">
+      </polygon>
+      <polygon points="50.8,38.8 69.1,37.0 67.2,50.0" fill="#000000" opacity="0.024">
+      </polygon>
+      <polygon points="50.8,38.8 67.2,50.0 52.0,48.6" fill="#000000" opacity="0.085">
+      </polygon>
+      <polygon points="69.1,37.0 85.3,33.6 67.2,50.0" fill="#000000" opacity="0.039">
+      </polygon>
+      <polygon points="85.3,33.6 92.1,48.6 67.2,50.0" fill="#000000" opacity="0.042">
+      </polygon>
+      <polygon points="-2.0,54.2 12.9,52.6 -3.2,72.2" fill="#000000" opacity="0.034">
+      </polygon>
+      <polygon points="12.9,52.6 14.3,65.9 -3.2,72.2" fill="#000000" opacity="0.051">
+      </polygon>
+      <polygon points="12.9,52.6 31.2,49.3 14.3,65.9" fill="#000000" opacity="0.091">
+      </polygon>
+      <polygon points="31.2,49.3 32.9,73.6 14.3,65.9" fill="#000000" opacity="0.089">
+      </polygon>
+      <polygon points="31.2,49.3 52.0,48.6 32.9,73.6" fill="#000000" opacity="0.045">
+      </polygon>
+      <polygon points="52.0,48.6 57.6,72.3 32.9,73.6" fill="#000000" opacity="0.048">
+      </polygon>
+      <polygon points="52.0,48.6 67.2,50.0 57.6,72.3" fill="#000000" opacity="0.090">
+      </polygon>
+      <polygon points="67.2,50.0 66.8,68.5 57.6,72.3" fill="#000000" opacity="0.042">
+      </polygon>
+      <polygon points="67.2,50.0 92.1,48.6 66.8,68.5" fill="#000000" opacity="0.098">
+      </polygon>
+      <polygon points="92.1,48.6 83.6,72.4 66.8,68.5" fill="#000000" opacity="0.031">
+      </polygon>
+      <polygon points="-3.2,72.2 14.3,65.9 14.1,89.0" fill="#000000" opacity="0.030">
+      </polygon>
+      <polygon points="-3.2,72.2 14.1,89.0 -3.4,84.7" fill="#000000" opacity="0.054">
+      </polygon>
+      <polygon points="14.3,65.9 32.9,73.6 14.1,89.0" fill="#000000" opacity="0.076">
+      </polygon>
+      <polygon points="32.9,73.6 38.4,91.6 14.1,89.0" fill="#000000" opacity="0.088">
+      </polygon>
+      <polygon points="32.9,73.6 57.6,72.3 38.4,91.6" fill="#000000" opacity="0.038">
+      </polygon>
+      <polygon points="57.6,72.3 51.5,86.2 38.4,91.6" fill="#000000" opacity="0.028">
+      </polygon>
+      <polygon points="57.6,72.3 66.8,68.5 72.3,91.0" fill="#000000" opacity="0.025">
+      </polygon>
+      <polygon points="57.6,72.3 72.3,91.0 51.5,86.2" fill="#000000" opacity="0.052">
+      </polygon>
+      <polygon points="66.8,68.5 83.6,72.4 89.4,89.1" fill="#000000" opacity="0.080">
+      </polygon>
+      <polygon points="66.8,68.5 89.4,89.1 72.3,91.0" fill="#000000" opacity="0.060">
+      </polygon>
+      <polygon points="-3.4,84.7 14.1,89.0 18.0,107.2" fill="#000000" opacity="0.087">
+      </polygon>
+      <polygon points="-3.4,84.7 18.0,107.2 2.1,108.6" fill="#000000" opacity="0.050">
+      </polygon>
+      <polygon points="14.1,89.0 38.4,91.6 18.0,107.2" fill="#000000" opacity="0.049">
+      </polygon>
+      <polygon points="38.4,91.6 35.5,107.9 18.0,107.2" fill="#000000" opacity="0.091">
+      </polygon>
+      <polygon points="38.4,91.6 51.5,86.2 50.6,106.0" fill="#000000" opacity="0.095">
+      </polygon>
+      <polygon points="38.4,91.6 50.6,106.0 35.5,107.9" fill="#000000" opacity="0.022">
+      </polygon>
+      <polygon points="51.5,86.2 72.3,91.0 67.6,102.7" fill="#000000" opacity="0.058">
+      </polygon>
+      <polygon points="51.5,86.2 67.6,102.7 50.6,106.0" fill="#000000" opacity="0.029">
+      </polygon>
+      <polygon points="72.3,91.0 89.4,89.1 89.2,103.6" fill="#000000" opacity="0.086">
+      </polygon>
+      <polygon points="72.3,91.0 89.2,103.6 67.6,102.7" fill="#000000" opacity="0.064">
+      </polygon>
+      <polygon points="2.1,108.6 18.0,107.2 20.3,118.3" fill="#000000" opacity="0.044">
+      </polygon>
+      <polygon points="2.1,108.6 20.3,118.3 -3.8,117.9" fill="#000000" opacity="0.066">
+      </polygon>
+      <polygon points="18.0,107.2 35.5,107.9 39.3,124.8" fill="#000000" opacity="0.079">
+      </polygon>
+      <polygon points="18.0,107.2 39.3,124.8 20.3,118.3" fill="#000000" opacity="0.083">
+      </polygon>
+      <polygon points="35.5,107.9 50.6,106.0 39.3,124.8" fill="#000000" opacity="0.053">
+      </polygon>
+      <polygon points="50.6,106.0 51.4,125.9 39.3,124.8" fill="#000000" opacity="0.072">
+      </polygon>
+      <polygon points="50.6,106.0 67.6,102.7 51.4,125.9" fill="#000000" opacity="0.084">
+      </polygon>
+      <polygon points="67.6,102.7 74.3,118.6 51.4,125.9" fill="#000000" opacity="0.022">
+      </polygon>
+      <polygon points="67.6,102.7 89.2,103.6 74.3,118.6" fill="#000000" opacity="0.061">
+      </polygon>
+      <polygon points="89.2,103.6 86.5,118.5 74.3,118.6" fill="#000000" opacity="0.027">
+      </polygon>
+      </g>
+      </g>
+      <text x="7" y="7" text-anchor="start" dominant-baseline="hanging" font-family="Arial, sans-serif" font-weight="900" font-size="13" fill="#053543">0</text>
+      <text x="44" y="62" text-anchor="middle" dominant-baseline="central" font-family="Arial, sans-serif" font-weight="900" font-size="50" fill="#053543">0</text>
+      <text x="81" y="118" text-anchor="end" dominant-baseline="text-after-edge" font-family="Arial, sans-serif" font-weight="900" font-size="13" fill="#053543">0</text>
+      <rect x="1.2" y="1.2" width="85.6" height="119.6" rx="9.8" ry="9.8" class="sj-card-frame">
+      </rect>
+      </svg>
+      </span>
+      </span>
+    </div>
+  </foreignObject>
+  </g>
+</svg>

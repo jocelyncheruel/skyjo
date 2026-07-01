@@ -1,0 +1,14 @@
+{
+  "name": "skyjo",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "install:all": "npm install --prefix server && npm install --prefix client",
+    "build": "npm run build --prefix client",
+    "check": "node --check server/index.js && node --check server/game.js && node --check server/actionGame.js && node --check server/actionDeck.js && node --check server/deck.js && node --check scripts/dev.mjs && npm run build --prefix client"
+  }
+}
