@@ -114,7 +114,17 @@ function GameToast({ message, tone = 'error' }) {
   );
 }
 
-function SkyjoLogo({ label = 'Skyjo' }) {
+function ConnectionBadge({ connected }) {
+  return (
+    <span
+      className={`sj-connection-badge ${connected ? 'sj-connection-badge-ok' : ''}`}
+      aria-label={connected ? 'Connecté au serveur' : 'Connexion au serveur'}
+      title={connected ? 'Connecté au serveur' : 'Connexion au serveur'}
+    />
+  );
+}
+
+function SkyjoLogo({ label = 'Skyjo', connectionBadge = null }) {
   return (
     <div className="sj-brand-logo" aria-label={label}>
       <span className="sj-brand-logo-mark" aria-hidden="true">
@@ -130,6 +140,7 @@ function SkyjoLogo({ label = 'Skyjo' }) {
       </span>
       <span className="sj-brand-logo-copy">
         <strong>{label}</strong>
+        {connectionBadge}
       </span>
     </div>
   );
@@ -440,6 +451,11 @@ export default function App() {
   });
   const [joinRoomInput, setJoinRoomInput] = useState('');
   const [nameInput, setNameInput] = useState(playerName);
+  const [roomVisibilityInput, setRoomVisibilityInput] = useState('private');
+  const [publicRooms, setPublicRooms] = useState([]);
+  const [publicRoomsLoading, setPublicRoomsLoading] = useState(false);
+  const [homePanel, setHomePanel] = useState('home');
+  const [homePanelHeight, setHomePanelHeight] = useState(0);
   const [state, setState] = useState(null);
   const [pendingReconnectState, setPendingReconnectState] = useState(null);
   const [error, setError] = useState('');
@@ -447,6 +463,8 @@ export default function App() {
   const autoReconnectPendingRef = useRef(autoReconnectPending);
   const autoReconnectStartedAtRef = useRef(autoReconnectPending ? Date.now() : 0);
   const errorTimerRef = useRef(null);
+  const publicRoomsRequestRef = useRef(0);
+  const homeCardRef = useRef(null);
 
   const clearError = useCallback(() => {
     if (errorTimerRef.current) {
@@ -474,6 +492,26 @@ export default function App() {
       }, timeout);
     }
   }, [clearError]);
+
+  const loadPublicRooms = useCallback(async ({ silent = false } = {}) => {
+    const requestId = publicRoomsRequestRef.current + 1;
+    publicRoomsRequestRef.current = requestId;
+    if (!silent) setPublicRoomsLoading(true);
+    try {
+      const res = await fetch(`${SERVER_URL}/api/rooms/public`);
+      if (!res.ok) throw new Error('Impossible de charger les salles publiques.');
+      const data = await res.json();
+      if (publicRoomsRequestRef.current !== requestId) return;
+      setPublicRooms(Array.isArray(data.rooms) ? data.rooms : []);
+    } catch {
+      if (publicRoomsRequestRef.current !== requestId) return;
+      setPublicRooms([]);
+    } finally {
+      if (publicRoomsRequestRef.current === requestId) {
+        setPublicRoomsLoading(false);
+      }
+    }
+  }, []);
 
   useEffect(() => {
     const handleKeyDown = (event) => {
@@ -513,6 +551,12 @@ export default function App() {
       autoReconnectStartedAtRef.current = 0;
     }
   }, [autoReconnectPending]);
+
+  useEffect(() => {
+    if (state || autoReconnectPending || homePanel !== 'public') return undefined;
+    const interval = window.setInterval(() => loadPublicRooms({ silent: true }), 5000);
+    return () => window.clearInterval(interval);
+  }, [autoReconnectPending, homePanel, loadPublicRooms, state]);
 
   useEffect(() => {
     if (!pendingReconnectState) return undefined;
@@ -594,14 +638,18 @@ export default function App() {
     if (!socket || !connected) return;
     const name = nameInput.trim();
     if (!name) {
-      showError('Entrez votre nom pour continuer.');
+      showError('Votre nom est obligatoire.');
       return;
     }
     clearError();
     setAutoReconnectPending(false);
     setPendingReconnectState(null);
     try {
-      const res = await fetch(`${SERVER_URL}/api/rooms`, { method: 'POST' });
+      const res = await fetch(`${SERVER_URL}/api/rooms`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ roomVisibility: roomVisibilityInput }),
+      });
       if (!res.ok) throw new Error('Impossible de créer la salle.');
       const data = await res.json();
       setPlayerName(name);
@@ -613,16 +661,16 @@ export default function App() {
     }
   }
 
-  function joinRoom() {
+  function joinRoomById(targetRoomId) {
     if (!socket || !connected) return;
     const name = nameInput.trim();
     if (!name) {
-      showError('Entrez votre nom pour continuer.');
+      showError('Votre nom est obligatoire.');
       return;
     }
     setAutoReconnectPending(false);
     setPendingReconnectState(null);
-    const normalizedRoomId = joinRoomInput.replace(/\D/g, '').slice(0, 6);
+    const normalizedRoomId = String(targetRoomId || '').replace(/\D/g, '').slice(0, 6);
     if (normalizedRoomId.length !== 6) {
       showError('Le code de salle doit contenir 6 chiffres.');
       return;
@@ -631,6 +679,23 @@ export default function App() {
     localStorage.setItem('sj-player-name', name);
     sessionStorage.setItem('sj-player-name', name);
     socket.emit('joinRoom', { roomId: normalizedRoomId, playerName: name });
+  }
+
+  function joinRoom() {
+    joinRoomById(joinRoomInput);
+  }
+
+  function openPublicRoomsPanel() {
+    const name = nameInput.trim();
+    if (!name) {
+      showError('Votre nom est obligatoire.');
+      return;
+    }
+    clearError();
+    const currentHeight = homeCardRef.current?.getBoundingClientRect?.().height || 0;
+    setHomePanelHeight(Math.round(currentHeight));
+    setHomePanel('public');
+    loadPublicRooms();
   }
 
   function leaveRoom() {
@@ -642,6 +707,7 @@ export default function App() {
     setPlayerId('');
     setState(null);
     setJoinRoomInput('');
+    setHomePanel('home');
     clearError();
     setAutoReconnectPending(false);
     setPendingReconnectState(null);
@@ -665,59 +731,127 @@ export default function App() {
       );
     }
 
-    const hasName = nameInput.trim().length > 0;
-    const canJoinRoom = connected && hasName && joinRoomInput.length === 6;
+    const canJoinRoom = connected && joinRoomInput.length === 6;
+    const canJoinPublicRoom = connected;
 
     return (
       <div className="sj-app-shell sj-lobby-room">
         <GameToast key={errorSerial} message={error} />
-        <section className="sj-lobby-card sj-home-card">
-          <div className="sj-brand-mark"><SkyjoLogo /></div>
+        {homePanel === 'public' ? (
+          <section
+            key="public-rooms"
+            className="sj-lobby-card sj-home-card sj-public-search-card"
+            style={homePanelHeight ? { '--sj-home-panel-height': `${homePanelHeight}px` } : undefined}
+          >
+            <div className="sj-brand-mark">
+              <SkyjoLogo connectionBadge={<ConnectionBadge connected={connected} />} />
+            </div>
 
-          <label htmlFor="player-name">
-            Votre nom <span aria-hidden="true">*</span>
-          </label>
-          <input
-            id="player-name"
-            value={nameInput}
-            onChange={(event) => {
-              setNameInput(event.target.value);
-              if (error === 'Entrez votre nom pour continuer.' && event.target.value.trim()) clearError();
-            }}
-            placeholder="Pseudo"
-            autoComplete="nickname"
-            required
-            aria-required="true"
-          />
-          {!hasName && (
-            <p className="sj-field-hint">Obligatoire pour créer ou rejoindre une salle.</p>
-          )}
+            <section className="sj-public-rooms" aria-label="Parties publiques disponibles">
+              {publicRooms.length > 0 ? (
+                <div className="sj-public-room-list">
+                  {publicRooms.map((publicRoom) => (
+                    <button
+                      key={publicRoom.roomId}
+                      type="button"
+                      className="sj-public-room-card"
+                      disabled={!canJoinPublicRoom}
+                      onClick={() => joinRoomById(publicRoom.roomId)}
+                    >
+                      <span className="sj-public-room-main">
+                        <strong>{publicRoom.gameMode === 'action' ? 'Skyjo Action' : 'Skyjo classique'}</strong>
+                        <small>Créée par {publicRoom.creatorName || 'un joueur'}</small>
+                      </span>
+                      <span className="sj-public-room-meta">
+                        <strong>{publicRoom.playerCount}/{publicRoom.maxPlayers}</strong>
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <p className="sj-public-room-empty">
+                  {publicRoomsLoading ? 'Chargement des parties publiques…' : 'Aucune partie publique disponible.'}
+                </p>
+              )}
+            </section>
 
-          <button className="sj-btn sj-btn-primary" disabled={!connected || !hasName} onClick={createRoom}>
-            Créer une salle
-          </button>
+            <button type="button" className="sj-public-search-trigger sj-public-search-trigger-back" onClick={() => setHomePanel('home')}>
+              Retour à l’accueil
+              <span aria-hidden="true">←</span>
+            </button>
+          </section>
+        ) : (
+          <section key="home" ref={homeCardRef} className="sj-lobby-card sj-home-card">
+            <div className="sj-brand-mark">
+              <SkyjoLogo connectionBadge={<ConnectionBadge connected={connected} />} />
+            </div>
 
-          <div className="sj-divider"><span>ou</span></div>
+            <div className="sj-home-main">
+              <label htmlFor="player-name">
+                Votre nom <span aria-hidden="true">*</span>
+              </label>
+              <input
+                id="player-name"
+                value={nameInput}
+                onChange={(event) => {
+                  setNameInput(event.target.value);
+                  if (error === 'Votre nom est obligatoire.' && event.target.value.trim()) clearError();
+                }}
+                placeholder="Pseudo"
+                autoComplete="nickname"
+                required
+                aria-required="true"
+              />
+              <div
+                className={`sj-room-visibility ${roomVisibilityInput === 'public' ? 'sj-room-visibility-public' : 'sj-room-visibility-private'}`}
+                role="group"
+                aria-label="Visibilité de la salle"
+              >
+                <button
+                  type="button"
+                  className={`sj-room-visibility-option ${roomVisibilityInput === 'private' ? 'sj-room-visibility-option-active' : ''}`}
+                  onClick={() => setRoomVisibilityInput('private')}
+                >
+                  <strong>Privée</strong>
+                </button>
+                <button
+                  type="button"
+                  className={`sj-room-visibility-option ${roomVisibilityInput === 'public' ? 'sj-room-visibility-option-active' : ''}`}
+                  onClick={() => setRoomVisibilityInput('public')}
+                >
+                  <strong>Publique</strong>
+                </button>
+              </div>
 
-          <label htmlFor="room-code">Code de la salle</label>
-          <input
-            id="room-code"
-            value={joinRoomInput}
-            onChange={(event) => setJoinRoomInput(event.target.value.replace(/\D/g, '').slice(0, 6))}
-            placeholder="123456"
-            inputMode="numeric"
-            pattern="[0-9]*"
-            maxLength={6}
-            autoComplete="off"
-          />
-          <button className="sj-btn" disabled={!canJoinRoom} onClick={joinRoom}>
-            Rejoindre
-          </button>
+              <button className="sj-btn sj-btn-primary" disabled={!connected} onClick={createRoom}>
+                Créer une salle {roomVisibilityInput === 'public' ? 'publique' : 'privée'}
+              </button>
 
-          <p className={`sj-connection ${connected ? 'sj-connection-ok' : ''}`}>
-            {connected ? 'Connecté au serveur' : 'Connexion au serveur'}
-          </p>
-        </section>
+              <div className="sj-divider"><span>ou</span></div>
+
+              <label htmlFor="room-code">Code de la salle</label>
+              <input
+                id="room-code"
+                value={joinRoomInput}
+                onChange={(event) => setJoinRoomInput(event.target.value.replace(/\D/g, '').slice(0, 6))}
+                placeholder="123456"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                maxLength={6}
+                autoComplete="off"
+              />
+              <button className="sj-btn" disabled={!canJoinRoom} onClick={joinRoom}>
+                Rejoindre
+              </button>
+
+              <button type="button" className="sj-public-search-trigger" disabled={!connected} onClick={openPublicRoomsPanel}>
+                Chercher une partie publique
+                <span aria-hidden="true">→</span>
+              </button>
+            </div>
+
+          </section>
+        )}
       </div>
     );
   }
@@ -2377,6 +2511,9 @@ function GameScreen({ socket, state, myId, roomId, error, errorSerial, onLeaveRo
                 )}
               </span>
             </div>
+            <p className={`sj-room-visibility-badge ${state.roomVisibility === 'public' ? 'sj-room-visibility-badge-public' : ''}`}>
+              {state.roomVisibility === 'public' ? 'Salle publique' : 'Salle privée'}
+            </p>
             <ul className="sj-player-list">
               {state.players.map((player) => (
                 <li
