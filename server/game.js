@@ -59,6 +59,7 @@ export function createPlayer(id, name) {
 export function newRoomState(roomId) {
   return {
     roomId,
+    roomVisibility: 'private',
     phase: 'lobby',
     order: [],
     playersById: {},
@@ -498,6 +499,7 @@ export function publicState(state, forPlayerId) {
 
   return {
     roomId: state.roomId,
+    roomVisibility: state.roomVisibility === 'public' ? 'public' : 'private',
     gameMode: state.gameMode || 'classic',
     creatorId,
     phase: state.phase,

@@ -11,6 +11,7 @@ import {
   publicState, setGameMode, playOwnedAction, resolveActionInput, claimStarAction,
   discardOwnedAction, resolveDefensePrompt, expireDefensePrompt,
   resolveGroupChoice, addChatMessage,
+  MAX_PLAYERS_PER_ROOM,
 } from './game.js';
 
 const PORT = process.env.PORT || 4000;
@@ -286,7 +287,72 @@ async function getOrLoadRoom(roomId) {
   return null;
 }
 
-async function createRoom() {
+function normalizeRoomVisibility(value) {
+  return value === 'public' ? 'public' : 'private';
+}
+
+function roomPlayerCount(state) {
+  if (!state?.playersById || !Array.isArray(state.order)) return 0;
+  return state.order.filter((id) => state.playersById[id]).length;
+}
+
+function publicRoomSummary(state) {
+  const playerCount = roomPlayerCount(state);
+  const creator = state.playersById?.[state.creatorId] || state.playersById?.[state.order?.[0]];
+  return {
+    roomId: state.roomId,
+    playerCount,
+    maxPlayers: MAX_PLAYERS_PER_ROOM,
+    creatorName: creator?.name || 'Salle publique',
+    gameMode: state.gameMode || 'classic',
+    updatedAt: state.updatedAt || Date.now(),
+  };
+}
+
+function isJoinablePublicRoom(state) {
+  const playerCount = roomPlayerCount(state);
+  return state
+    && state.roomVisibility === 'public'
+    && state.phase === 'lobby'
+    && playerCount > 0
+    && playerCount < MAX_PLAYERS_PER_ROOM;
+}
+
+async function listPublicRooms() {
+  const statesByRoomId = new Map();
+
+  const { data, error } = await supabase
+    .from('rooms')
+    .select('room_id, state_json, updated_at')
+    .order('updated_at', { ascending: false })
+    .limit(100);
+
+  if (error) {
+    throw error;
+  }
+
+  for (const row of data || []) {
+    const state = row.state_json;
+    if (!state || typeof state !== 'object') continue;
+    state.roomId ||= row.room_id;
+    state.updatedAt = Date.parse(row.updated_at) || state.updatedAt || 0;
+    statesByRoomId.set(state.roomId, state);
+  }
+
+  for (const [roomId, state] of rooms.entries()) {
+    statesByRoomId.set(roomId, state);
+  }
+
+  const cutoff = Date.now() - ROOM_TTL_MS;
+  return [...statesByRoomId.values()]
+    .filter((state) => (state.updatedAt || Date.now()) > cutoff)
+    .filter(isJoinablePublicRoom)
+    .map(publicRoomSummary)
+    .sort((a, b) => b.updatedAt - a.updatedAt)
+    .slice(0, 30);
+}
+
+async function createRoom({ roomVisibility = 'private' } = {}) {
   let roomId = '';
 
   for (let attempt = 0; attempt < 20; attempt += 1) {
@@ -305,6 +371,7 @@ async function createRoom() {
   }
 
   const state = newRoomState(roomId);
+  state.roomVisibility = normalizeRoomVisibility(roomVisibility);
   rooms.set(roomId, state);
   await persist(state);
   return state;
@@ -465,11 +532,22 @@ app.get('/health', (req, res) => res.json({ ok: true, clientProtocolVersion: CLI
 
 app.post('/api/rooms', httpRateLimit({ keyPrefix: 'create-room', limit: 20, windowMs: 60_000 }), async (req, res) => {
   try {
-    const state = await createRoom();
+    const payload = objectPayload(req.body);
+    const state = await createRoom({ roomVisibility: normalizeRoomVisibility(payload.roomVisibility) });
     res.json({ roomId: state.roomId });
   } catch (error) {
     console.error('Room creation error:', error);
     res.status(503).json({ error: 'Impossible de créer une salle.' });
+  }
+});
+
+app.get('/api/rooms/public', httpRateLimit({ keyPrefix: 'list-public-rooms', limit: 60, windowMs: 60_000 }), async (req, res) => {
+  try {
+    const publicRooms = await listPublicRooms();
+    res.json({ rooms: publicRooms });
+  } catch (error) {
+    console.error('Public room list error:', error);
+    res.status(503).json({ error: 'Impossible de charger les salles publiques.' });
   }
 });
 
