@@ -18,7 +18,7 @@ export default function PlayerBoard({
   const cardSize = size || 'table';
   const selectableSet = new Set(selectableSlots || []);
   const selectedSet = new Set(selectedSlots || []);
-  const hasVisibleTotalScore = !player.hideTotalScore && Number.isFinite(player.totalScore);
+  const hasVisibleTotalScore = Number.isFinite(player.totalScore);
   const totalValue = hasVisibleTotalScore ? player.totalScore : '-';
   const hasActionCardCount = Number.isInteger(actionCardCount);
   const boardClasses = [

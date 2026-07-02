@@ -230,8 +230,12 @@ export default function Card({
     );
   }
 
-  const palette = paletteFor(value);
-  const centerSize = String(value).length > 1 ? 42 : 50;
+  const numericValue = Number(value);
+  const hasNumberValue = kind !== 'star' && Number.isFinite(numericValue);
+  const displayValue = hasNumberValue ? numericValue : '';
+  const palette = paletteFor(hasNumberValue ? numericValue : 0);
+  const textHalo = palette.ink === '#ffffff' ? 'rgba(0, 0, 0, 0.32)' : 'rgba(255, 255, 255, 0.34)';
+  const centerSize = String(displayValue).length > 1 ? 42 : 50;
 
   return (
     <svg
@@ -242,7 +246,7 @@ export default function Card({
       onKeyDown={handleKeyDown}
       onPointerUp={onClick ? handlePointerUp : undefined}
       role={onClick ? 'button' : 'img'}
-      aria-label={kind === 'star' ? 'Carte Étoile' : `Carte ${value}`}
+      aria-label={kind === 'star' ? 'Carte Étoile' : hasNumberValue ? `Carte ${displayValue}` : 'Carte sans valeur'}
     >
       {kind === 'star' ? (
         <>
@@ -256,9 +260,9 @@ export default function Card({
           <rect {...surface} fill={`url(#sj-star-grad-${uid})`} />
         </>
       ) : (
-        <FacetedBackground value={value} rid={uid} inset={frameInset} />
+        <FacetedBackground value={hasNumberValue ? numericValue : 0} rid={uid} inset={frameInset} />
       )}
-      {kind !== 'star' && <text
+      {hasNumberValue && <text
         x={CORNER_VALUE_INSET}
         y={CORNER_VALUE_INSET}
         textAnchor="start"
@@ -267,15 +271,32 @@ export default function Card({
         fontWeight="900"
         fontSize={CORNER_VALUE_SIZE}
         fill={palette.ink}
+        stroke={textHalo}
+        strokeWidth="2"
+        paintOrder="stroke"
       >
-        {value}
+        {displayValue}
       </text>}
       {kind === 'star' ? (
         <text x={CARD_W / 2} y={CARD_H / 2 + 2} textAnchor="middle" dominantBaseline="central" fontFamily="Arial, sans-serif" fontWeight="900" fontSize="58" fill="#ffffff">★</text>
       ) : (
-        <text x={CARD_W / 2} y={CARD_H / 2 + 1} textAnchor="middle" dominantBaseline="central" fontFamily="Arial, sans-serif" fontWeight="900" fontSize={centerSize} fill={palette.ink}>{value}</text>
+        <text
+          x={CARD_W / 2}
+          y={CARD_H / 2 + 1}
+          textAnchor="middle"
+          dominantBaseline="central"
+          fontFamily="Arial, sans-serif"
+          fontWeight="900"
+          fontSize={centerSize}
+          fill={palette.ink}
+          stroke={textHalo}
+          strokeWidth="4"
+          paintOrder="stroke"
+        >
+          {displayValue}
+        </text>
       )}
-      {kind !== 'star' && <text
+      {hasNumberValue && <text
         x={CARD_W - CORNER_VALUE_INSET}
         y={CARD_H - CORNER_VALUE_INSET + CORNER_VALUE_BOTTOM_OFFSET}
         textAnchor="end"
@@ -284,8 +305,11 @@ export default function Card({
         fontWeight="900"
         fontSize={CORNER_VALUE_SIZE}
         fill={palette.ink}
+        stroke={textHalo}
+        strokeWidth="2"
+        paintOrder="stroke"
       >
-        {value}
+        {displayValue}
       </text>}
       <CardFrame inset={frameInset} />
     </svg>

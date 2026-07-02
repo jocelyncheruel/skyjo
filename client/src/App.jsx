@@ -2718,7 +2718,7 @@ function GameScreen({ socket, state, myId, roomId, error, errorSerial, onLeaveRo
 
       {state.phase === 'roundEnd' && roundScoresVisible && (
         <div className="sj-overlay sj-fade-in">
-          <section className="sj-lobby-card sj-pop-in">
+          <section className="sj-lobby-card sj-round-end-card sj-pop-in">
             <h2>Fin de manche {state.roundNumber}</h2>
             <ScoreTable players={state.players} />
             <div className="sj-round-countdown" aria-live="polite">
