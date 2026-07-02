@@ -17,6 +17,7 @@ import {
 const PORT = process.env.PORT || 4000;
 const HOST = process.env.HOST || '0.0.0.0';
 const CLIENT_PROTOCOL_VERSION = 3;
+const MAX_PLAYER_NAME_LENGTH = 20;
 const generateRoomId = customAlphabet('0123456789', 6);
 const isProduction = process.env.NODE_ENV === 'production';
 const ROOM_TTL_MS = Number.parseInt(process.env.ROOM_TTL_MS || '', 10) || 24 * 60 * 60 * 1000;
@@ -399,7 +400,7 @@ function normalizePlayerId(value) {
 }
 
 function normalizePlayerName(value) {
-  return String(value || '').trim().slice(0, 32);
+  return String(value || '').trim().slice(0, MAX_PLAYER_NAME_LENGTH);
 }
 
 function objectPayload(value) {

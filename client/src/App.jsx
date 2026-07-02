@@ -72,11 +72,16 @@ const SHOW_ALL_ACTION_CARDS_PREVIEW = false;
 const MIN_RECONNECT_SCREEN_MS = 1000;
 const CHAT_GROUP_WINDOW_MS = 2 * 60 * 1000;
 const ACTION_PLAY_POPUP_MS = 3400;
+const MAX_PLAYER_NAME_LENGTH = 20;
 const ACTION_CARD_PREVIEWS = Object.keys(ACTION_LABELS).map((type) => ({
   id: `preview-${type}`,
   type,
   preview: true,
 }));
+
+function normalizePlayerNameInput(value) {
+  return String(value || '').trim().slice(0, MAX_PLAYER_NAME_LENGTH);
+}
 
 function clampNumber(value, min, max) {
   if (!Number.isFinite(value)) return min;
@@ -442,7 +447,7 @@ export default function App() {
   const [socket, setSocket] = useState(null);
   const [connected, setConnected] = useState(false);
   const [roomId, setRoomId] = useState(() => localStorage.getItem('sj-room-id') || sessionStorage.getItem('sj-room-id') || '');
-  const [playerName, setPlayerName] = useState(() => localStorage.getItem('sj-player-name') || sessionStorage.getItem('sj-player-name') || '');
+  const [playerName, setPlayerName] = useState(() => normalizePlayerNameInput(localStorage.getItem('sj-player-name') || sessionStorage.getItem('sj-player-name') || ''));
   const [playerId, setPlayerId] = usePersistentId();
   const [autoReconnectPending, setAutoReconnectPending] = useState(() => {
     const savedRoomId = localStorage.getItem('sj-room-id') || sessionStorage.getItem('sj-room-id') || '';
@@ -573,7 +578,7 @@ export default function App() {
   useEffect(() => {
     const savedRoomId = localStorage.getItem('sj-room-id') || sessionStorage.getItem('sj-room-id') || '';
     const savedPlayerId = localStorage.getItem('sj-player-id') || sessionStorage.getItem('sj-player-id') || '';
-    const savedPlayerName = localStorage.getItem('sj-player-name') || sessionStorage.getItem('sj-player-name') || '';
+    const savedPlayerName = normalizePlayerNameInput(localStorage.getItem('sj-player-name') || sessionStorage.getItem('sj-player-name') || '');
     const savedSessionToken = readPlayerSessionToken();
     const nextSocket = io(SERVER_URL, {
       transports: ['websocket', 'polling'],
@@ -613,7 +618,7 @@ export default function App() {
         roomId: rid,
         playerId: pid,
         sessionToken: sessionToken || readPlayerSessionToken(),
-        playerName: localStorage.getItem('sj-player-name') || sessionStorage.getItem('sj-player-name') || playerName || nameInput,
+        playerName: normalizePlayerNameInput(localStorage.getItem('sj-player-name') || sessionStorage.getItem('sj-player-name') || playerName || nameInput),
       };
     });
     nextSocket.on('state', (nextState) => {
@@ -629,14 +634,15 @@ export default function App() {
   useEffect(() => {
     if (socket && connected && roomId && playerId) {
       const sessionToken = readPlayerSessionToken();
-      socket.auth = { roomId, playerId, sessionToken, playerName: playerName || nameInput };
-      socket.emit('joinRoom', { roomId, playerId, sessionToken, playerName: playerName || nameInput });
+      const cleanPlayerName = normalizePlayerNameInput(playerName || nameInput);
+      socket.auth = { roomId, playerId, sessionToken, playerName: cleanPlayerName };
+      socket.emit('joinRoom', { roomId, playerId, sessionToken, playerName: cleanPlayerName });
     }
   }, [socket, connected, roomId, playerId]);
 
   async function createRoom() {
     if (!socket || !connected) return;
-    const name = nameInput.trim();
+    const name = normalizePlayerNameInput(nameInput);
     if (!name) {
       showError('Votre nom est obligatoire.');
       return;
@@ -663,7 +669,7 @@ export default function App() {
 
   function joinRoomById(targetRoomId) {
     if (!socket || !connected) return;
-    const name = nameInput.trim();
+    const name = normalizePlayerNameInput(nameInput);
     if (!name) {
       showError('Votre nom est obligatoire.');
       return;
@@ -686,7 +692,7 @@ export default function App() {
   }
 
   function openPublicRoomsPanel() {
-    const name = nameInput.trim();
+    const name = normalizePlayerNameInput(nameInput);
     if (!name) {
       showError('Votre nom est obligatoire.');
       return;
@@ -794,11 +800,13 @@ export default function App() {
                 id="player-name"
                 value={nameInput}
                 onChange={(event) => {
-                  setNameInput(event.target.value);
-                  if (error === 'Votre nom est obligatoire.' && event.target.value.trim()) clearError();
+                  const nextName = event.target.value.slice(0, MAX_PLAYER_NAME_LENGTH);
+                  setNameInput(nextName);
+                  if (error === 'Votre nom est obligatoire.' && normalizePlayerNameInput(nextName)) clearError();
                 }}
                 placeholder="Pseudo"
                 autoComplete="nickname"
+                maxLength={MAX_PLAYER_NAME_LENGTH}
                 required
                 aria-required="true"
               />
