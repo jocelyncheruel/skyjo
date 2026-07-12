@@ -2795,10 +2795,11 @@ button.sj-action-count-badge:focus-visible {
 .sj-action-hand-modal-item .sj-action-card,
 .sj-action-hand-modal-item .sj-action-deck {
   --sj-action-card-width: clamp(106px, min(15vw, 24vh), 176px);
+  box-shadow: none;
 }
 
 .sj-action-hand-modal-item-playable {
-  filter: drop-shadow(0 0 10px rgba(240, 189, 87, 0.2));
+  filter: none;
 }
 
 .sj-action-hand-discard {
