@@ -128,11 +128,11 @@ export function removePlayer(state, id) {
 }
 
 function startRoundIfReady(state) {
-  const connectedIds = state.order.filter(id => state.playersById[id].connected);
-  if (connectedIds.length < 2) return false;
-  if (!connectedIds.every(id => state.playersById[id].flippedCount >= 2)) return false;
+  const playerIds = state.order.filter(id => state.playersById[id]);
+  if (playerIds.length < 2) return false;
+  if (!playerIds.every(id => state.playersById[id].flippedCount >= 2)) return false;
 
-  const sums = connectedIds.map((id) => {
+  const sums = playerIds.map((id) => {
     const player = state.playersById[id];
     const sum = player.board
       .filter(slot => slot.faceUp && !slot.removed)

@@ -370,7 +370,7 @@ function revealRemainingCards(player) {
 }
 
 function startRoundIfReady(state) {
-  const ids = connectedIds(state);
+  const ids = state.order.filter((id) => state.playersById[id]);
   if (ids.length < 2 || !ids.every((id) => state.playersById[id].flippedCount >= 2)) return false;
   let starterId = state.actionNextStarterId;
   let starterLogMessage = null;
