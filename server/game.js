@@ -327,6 +327,12 @@ function boardFinished(player) {
   return player.board.every(s => s.removed || s.faceUp);
 }
 
+function revealRemainingCards(player) {
+  for (const slot of player.board) {
+    if (!slot.removed) slot.faceUp = true;
+  }
+}
+
 function refillDeckIfNeeded(state) {
   if (state.deck.length > 0) return;
 
@@ -344,11 +350,14 @@ function refillDeckIfNeeded(state) {
 function advanceTurn(state) {
   const finishingId = currentPlayerId(state);
   const finishingPlayer = state.playersById[finishingId];
+  const isFinalTurn = !!state.roundEnderId && finishingId !== state.roundEnderId;
 
   if (!state.roundEnderId && boardFinished(finishingPlayer)) {
     state.roundEnderId = finishingId;
     log(state, `${finishingPlayer.name} a terminé son tableau ! Dernier tour pour les autres.`);
   }
+
+  if (isFinalTurn) revealRemainingCards(finishingPlayer);
 
   const next = (state.turnIndex + 1) % state.order.length;
 
@@ -442,10 +451,7 @@ function boardScore(player) {
 
 function endRound(state) {
   for (const id of state.order) {
-    const p = state.playersById[id];
-    for (const s of p.board) {
-      if (!s.removed) s.faceUp = true;
-    }
+    revealRemainingCards(state.playersById[id]);
   }
   for (const id of state.order) {
     checkAndClearColumns(state, state.playersById[id]);

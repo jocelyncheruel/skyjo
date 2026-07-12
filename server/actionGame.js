@@ -363,6 +363,12 @@ function boardFinished(player) {
   return player.board.every((slot) => slot.removed || slot.faceUp);
 }
 
+function revealRemainingCards(player) {
+  for (const slot of player.board) {
+    if (!slot.removed) slot.faceUp = true;
+  }
+}
+
 function startRoundIfReady(state) {
   const ids = connectedIds(state);
   if (ids.length < 2 || !ids.every((id) => state.playersById[id].flippedCount >= 2)) return false;
@@ -466,6 +472,7 @@ function finishNormalTurn(state) {
 function advanceTurn(state) {
   const finishingId = currentPlayerId(state);
   const player = state.playersById[finishingId];
+  const isFinalTurn = !!state.roundEnderId && finishingId !== state.roundEnderId;
   if (!state.roundEnderId && boardFinished(player)) {
     state.roundEnderId = finishingId;
     state.actionNextStarterId = finishingId;
@@ -478,6 +485,7 @@ function advanceTurn(state) {
     state.turnSerial += 1;
     return;
   }
+  if (isFinalTurn) revealRemainingCards(player);
   const next = (state.turnIndex + 1) % state.order.length;
   if (state.roundEnderId && state.order[next] === state.roundEnderId) {
     endActionRound(state);
@@ -1143,8 +1151,7 @@ function completeActionRoundEnd(state) {
 
 function endActionRound(state) {
   for (const id of state.order) {
-    const player = state.playersById[id];
-    for (const slot of player.board) if (!slot.removed) slot.faceUp = true;
+    revealRemainingCards(state.playersById[id]);
   }
   continueActionRoundEnd(state, [...state.order]);
 }
