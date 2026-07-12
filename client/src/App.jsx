@@ -581,7 +581,11 @@ export default function App() {
     const savedPlayerName = normalizePlayerNameInput(localStorage.getItem('sj-player-name') || sessionStorage.getItem('sj-player-name') || '');
     const savedSessionToken = readPlayerSessionToken();
     const nextSocket = io(SERVER_URL, {
-      transports: ['websocket', 'polling'],
+      transports: ['polling', 'websocket'],
+      upgrade: true,
+      reconnectionDelay: 300,
+      reconnectionDelayMax: 1500,
+      timeout: 8000,
       auth: {
         roomId: savedRoomId,
         playerId: savedPlayerId,
