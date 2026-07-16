@@ -34,8 +34,7 @@ export default function PlayerBoard({
         <div key={actionPopup.id} className="sj-board-action-popup" aria-live="polite">
           <div className="sj-board-action-popup-card">
             <span
-              className="sj-board-action-popup-art"
-              style={{ backgroundImage: `url(${actionPopup.artUrl})` }}
+              className={`sj-board-action-popup-art sj-action-art-${actionPopup.artType || 'drawThree'}`}
               aria-hidden="true"
             />
             <span className="sj-board-action-popup-copy">

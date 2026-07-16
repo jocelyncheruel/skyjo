@@ -4,21 +4,31 @@
   "version": "1.0.0",
   "type": "module",
   "engines": {
-    "node": ">=20"
+    "node": "24.18.x"
   },
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview"
+    "build": "vite build && node scripts/generate-headers.mjs",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "lint": "eslint . --max-warnings=0"
   },
   "dependencies": {
-    "lucide-react": "^1.21.0",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "socket.io-client": "^4.7.5"
+    "lucide-react": "1.23.0",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "socket.io-client": "4.8.3"
   },
   "devDependencies": {
-    "@vitejs/plugin-react": "^4.3.1",
-    "vite": "^7.3.6"
+    "@testing-library/react": "16.3.2",
+    "@vitejs/plugin-react": "4.7.0",
+    "eslint": "9.39.2",
+    "eslint-plugin-react": "7.37.5",
+    "eslint-plugin-react-hooks": "7.1.1",
+    "eslint-plugin-security": "4.0.1",
+    "globals": "17.7.0",
+    "jsdom": "29.1.1",
+    "vite": "7.3.6",
+    "vitest": "4.1.10"
   }
 }

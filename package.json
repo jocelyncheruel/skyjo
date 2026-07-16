@@ -3,12 +3,15 @@
   "private": true,
   "type": "module",
   "engines": {
-    "node": ">=20"
+    "node": "24.18.x"
   },
   "scripts": {
     "dev": "node scripts/dev.mjs",
-    "install:all": "npm install --prefix server && npm install --prefix client",
+    "install:all": "npm ci --prefix server && npm ci --prefix client",
     "build": "npm run build --prefix client",
-    "check": "node --check server/index.js && node --check server/game.js && node --check server/actionGame.js && node --check server/actionDeck.js && node --check server/deck.js && node --check scripts/dev.mjs && npm run build --prefix client"
+    "lint": "npm run lint --prefix server && npm run lint --prefix client",
+    "test": "npm test --prefix server && npm test --prefix client",
+    "audit": "npm audit --prefix server --audit-level=high && npm audit --prefix client --audit-level=high",
+    "check": "npm run lint && npm test && npm run build"
   }
 }

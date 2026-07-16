@@ -4,18 +4,25 @@
   "type": "module",
   "main": "index.js",
   "engines": {
-    "node": ">=20"
+    "node": "24.18.x"
   },
   "scripts": {
     "start": "node index.js",
     "start:local": "node --env-file=.env index.js",
-    "dev": "node --watch --env-file=.env index.js"
+    "dev": "node --watch --env-file=.env index.js",
+    "test": "node --test",
+    "lint": "eslint . --max-warnings=0 && node --check index.js && node --check bootstrap.js"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.45.0",
-    "cors": "^2.8.5",
-    "express": "^4.19.2",
-    "nanoid": "^5.0.7",
-    "socket.io": "^4.7.5"
+    "@supabase/supabase-js": "2.110.6",
+    "cors": "2.8.6",
+    "express": "4.22.2",
+    "nanoid": "5.1.16",
+    "socket.io": "4.8.3"
+  },
+  "devDependencies": {
+    "eslint": "9.39.2",
+    "eslint-plugin-security": "4.0.1",
+    "globals": "17.7.0"
   }
 }

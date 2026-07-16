@@ -4,34 +4,40 @@ import net from 'node:net';
 
 const clientArgs = process.argv.slice(2);
 const isWindows = process.platform === 'win32';
+const npmCommand = isWindows ? 'npm.cmd' : 'npm';
 const serverEnv = readEnvFile(new URL('../server/.env', import.meta.url));
 const serverPort = Number(process.env.PORT || serverEnv.PORT || 4000);
 const serverHost = process.env.HOST || serverEnv.HOST || '0.0.0.0';
-const expectedProtocolVersion = 3;
+const expectedProtocolVersion = 6;
 const shouldStartServer = await getShouldStartServer(serverPort, serverHost);
 
 const commands = [
   ...(shouldStartServer
     ? [{
         name: 'server',
-        command: 'npm',
+        command: npmCommand,
         args: ['--prefix', 'server', 'run', 'dev'],
       }]
     : []),
   {
     name: 'client',
-    command: 'npm',
+    command: npmCommand,
     args: ['--prefix', 'client', 'run', 'dev', '--', ...clientArgs],
+    env: {
+      ...process.env,
+      VITE_DEV_SERVER_URL: `http://localhost:${serverPort}`,
+    },
   },
 ];
 
 let shuttingDown = false;
 let children = [];
 
-children = commands.map(({ name, command, args }) => {
+children = commands.map(({ name, command, args, env = process.env }) => {
   const child = spawn(command, args, {
     stdio: ['inherit', 'pipe', 'pipe'],
-    shell: isWindows,
+    shell: false,
+    env,
   });
 
   pipeWithPrefix(child.stdout, process.stdout, name);

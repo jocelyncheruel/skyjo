@@ -26,7 +26,6 @@ const COLUMNS = [
 ];
 const ROUND_BREAK_MS = 10_000;
 const ROUND_SCORE_PREVIEW_MS = 3_000;
-const MAX_CHAT_MESSAGES = 80;
 const BOARD_SLOT_COUNT = 12;
 export const MAX_PLAYERS_PER_ROOM = 8;
 
@@ -77,8 +76,6 @@ export function newRoomState(roomId) {
     roundScoresAt: null,
     starterTieNotice: null,
     log: [],
-    chatMessages: [],
-    chatSerial: 0,
     winnerId: null,
   };
 }
@@ -86,27 +83,6 @@ export function newRoomState(roomId) {
 function log(state, msg) {
   state.log.push({ t: Date.now(), msg });
   if (state.log.length > 100) state.log.shift();
-}
-
-export function addChatMessage(state, playerId, text) {
-  const player = state.playersById[playerId];
-  if (!player) throw new Error('Joueur introuvable.');
-
-  const cleanText = String(text || '').replace(/\s+/g, ' ').trim().slice(0, 280);
-  if (!cleanText) throw new Error('Message vide.');
-
-  state.chatMessages ||= [];
-  state.chatSerial = (state.chatSerial || 0) + 1;
-  state.chatMessages.push({
-    id: `${Date.now()}-${state.chatSerial}`,
-    t: Date.now(),
-    playerId,
-    playerName: player.name,
-    text: cleanText,
-  });
-  if (state.chatMessages.length > MAX_CHAT_MESSAGES) {
-    state.chatMessages.splice(0, state.chatMessages.length - MAX_CHAT_MESSAGES);
-  }
 }
 
 export function addPlayer(state, id, name) {
@@ -524,12 +500,14 @@ export function publicState(state, forPlayerId) {
     drawnCard: state.drawnCard
       ? {
         from: state.drawnCard.from,
-        card: state.drawnCard.card,
+        card: state.drawnCard.from === 'discard'
+          || state.order[state.turnIndex] === forPlayerId
+          ? state.drawnCard.card
+          : null,
       }
       : null,
     winnerId: state.winnerId,
     log: state.log.slice(-20),
-    chatMessages: (state.chatMessages || []).slice(-MAX_CHAT_MESSAGES),
     players: state.order.map(id => {
       const p = state.playersById[id];
       return {

@@ -1,37 +1,34 @@
-import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { io } from 'socket.io-client';
 import { LogOut, MessageCircle, Send, X } from 'lucide-react';
 import Card from './components/Card.jsx';
 import PlayerBoard from './components/PlayerBoard.jsx';
+import { AuthView, ConsentGate, ResetPasswordView } from './Auth.jsx';
+import { useAuth } from './authContext.js';
+import { apiFetch, AUTH_REMEMBER_KEY, SERVER_URL } from './apiClient.js';
+const AUTO_RECONNECT_TIMEOUT_MS = 5000;
 
-function getServerUrl() {
-  const configuredUrl = import.meta.env.VITE_SERVER_URL?.trim();
-  const fallbackPort = '4000';
-
-  if (typeof window === 'undefined') {
-    return configuredUrl || `http://localhost:${fallbackPort}`;
+async function serverErrorMessage(response, fallback) {
+  try {
+    const payload = await response.json();
+    const message = typeof payload?.error?.message === 'string'
+      ? [...payload.error.message].slice(0, 200).join('')
+      : fallback;
+    const requestId = /^[0-9a-f-]{36}$/i.test(payload?.requestId || '') ? payload.requestId : '';
+    return requestId ? `${message} Référence : ${requestId}` : message;
+  } catch {
+    return fallback;
   }
-
-  const { protocol, hostname } = window.location;
-  if (!configuredUrl) {
-    return `${protocol}//${hostname}:${fallbackPort}`;
-  }
-
-  const url = new URL(configuredUrl);
-  const localHosts = new Set(['localhost', '127.0.0.1', '::1']);
-  const pageIsLocal = localHosts.has(hostname);
-
-  if (localHosts.has(url.hostname) && !pageIsLocal) {
-    url.hostname = hostname;
-    url.protocol = protocol;
-  }
-
-  return url.toString().replace(/\/$/, '');
 }
 
-const SERVER_URL = getServerUrl();
-const CARD_HEIGHT_RATIO = 122 / 88;
-const OPPONENT_BOARD_GAP = 8;
+function takeRoomInviteFromFragment() {
+  if (typeof window === 'undefined') return '';
+  const params = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+  const candidate = params.get('room') || '';
+  const room = /^[A-Za-z0-9_-]{16}$/.test(candidate) ? candidate : '';
+  if (window.location.hash) window.history.replaceState({}, document.title, `${window.location.pathname}${window.location.search}`);
+  return room;
+}
 const BOARD_COLUMNS = 4;
 const BOARD_ROWS = [
   [0, 1, 2, 3],
@@ -83,31 +80,6 @@ function normalizePlayerNameInput(value) {
   return String(value || '').trim().slice(0, MAX_PLAYER_NAME_LENGTH);
 }
 
-function clampNumber(value, min, max) {
-  if (!Number.isFinite(value)) return min;
-  return Math.min(max, Math.max(min, value));
-}
-
-function readPx(value, fallback = 0) {
-  const parsed = Number.parseFloat(value);
-  return Number.isFinite(parsed) ? parsed : fallback;
-}
-
-function setPxVar(element, name, value) {
-  const nextValue = `${Math.round(value)}px`;
-  const currentValue = element.style.getPropertyValue(name);
-  const currentNumber = Number.parseFloat(currentValue);
-  const nextNumber = Number.parseFloat(nextValue);
-
-  if (Number.isFinite(currentNumber) && Math.abs(currentNumber - nextNumber) <= 1) {
-    return;
-  }
-
-  if (currentValue !== nextValue) {
-    element.style.setProperty(name, nextValue);
-  }
-}
-
 function GameToast({ message, tone = 'error' }) {
   if (!message) return null;
 
@@ -151,57 +123,7 @@ function SkyjoLogo({ label = 'Skyjo', connectionBadge = null }) {
   );
 }
 
-function boardMetrics(cardWidth, {
-  topMargin = true,
-  bottomMargin = false,
-  opponent = false,
-  compactOpponent = false,
-} = {}) {
-  const cardWidthPx = Math.round(cardWidth);
-  const cardHeight = Math.round(cardWidthPx * CARD_HEIGHT_RATIO);
-  const gridGap = Math.round(clampNumber(cardWidthPx * 0.085, 2, 8));
-  const pad = Math.round(clampNumber(cardWidthPx * 0.16, 5, 16));
-  const blockGap = Math.round(clampNumber(cardWidthPx * 0.1, 4, 8));
-  const header = compactOpponent
-    ? Math.round(clampNumber(cardWidthPx * 0.56, 22, 28))
-    : opponent
-    ? Math.round(clampNumber(cardWidthPx * 0.62, 30, 38))
-    : Math.round(clampNumber(cardWidthPx * 0.4, 26, 34));
-  const scoreBadgeHeight = Math.round(clampNumber(cardWidthPx * 0.54, 30, 50));
-  const flowGap = Math.round(clampNumber(cardWidthPx * 0.14, 6, 14));
-  const externalTop = topMargin ? scoreBadgeHeight / 2 + flowGap : 0;
-  const externalBottom = bottomMargin ? flowGap : 0;
-
-  return {
-    cardWidth: cardWidthPx,
-    cardHeight,
-    gridGap,
-    pad,
-    blockGap,
-    header,
-    width: cardWidthPx * 4 + gridGap * 3 + pad * 2 + 2,
-    height: cardHeight * 3 + gridGap * 2 + header + blockGap + pad * 2 + 2 + externalTop + externalBottom,
-  };
-}
-
-function fitBoardCardWidth(widthBudget, heightBudget, min, max, options) {
-  let low = min;
-  let high = max;
-
-  for (let index = 0; index < 14; index += 1) {
-    const middle = (low + high) / 2;
-    const metrics = boardMetrics(middle, options);
-    if (metrics.width <= widthBudget && metrics.height <= heightBudget) {
-      low = middle;
-    } else {
-      high = middle;
-    }
-  }
-
-  return low;
-}
-
-function useAdaptiveBoardSizing(playerCount, layoutKey) {
+function useAdaptiveBoardSizing() {
   const shellRef = useRef(null);
   const boardAreaRef = useRef(null);
   const opponentsRef = useRef(null);
@@ -209,198 +131,6 @@ function useAdaptiveBoardSizing(playerCount, layoutKey) {
   const meWrapRef = useRef(null);
   const centerRef = useRef(null);
   const actionPanelRef = useRef(null);
-  const [layoutReady, setLayoutReady] = useState(false);
-  const layoutReadyRef = useRef(false);
-  const measuredViewportRef = useRef({ width: 0, height: 0 });
-
-  useLayoutEffect(() => {
-    const frames = new Set();
-    let disposed = false;
-
-    const measure = ({ reveal = true, force = false } = {}) => {
-        const shell = shellRef.current;
-        const boardArea = boardAreaRef.current;
-        const playColumn = playColumnRef.current;
-        if (!shell || !boardArea || !playColumn) return;
-
-        const shellRect = shell.getBoundingClientRect();
-        const viewportWidth = Math.round(shellRect.width || window.innerWidth);
-        const viewportHeight = Math.round(shellRect.height || window.innerHeight);
-        const lastViewport = measuredViewportRef.current;
-        const mobileLayout = viewportWidth < 900;
-        const viewportWidthDelta = Math.abs(viewportWidth - lastViewport.width);
-        const viewportHeightDelta = Math.abs(viewportHeight - lastViewport.height);
-        const widthChanged = viewportWidthDelta > (mobileLayout ? 8 : 2);
-        const heightChanged = viewportHeightDelta > (mobileLayout ? 16 : 2);
-
-        if (
-          !force
-          && layoutReadyRef.current
-          && mobileLayout
-          && !widthChanged
-          && !heightChanged
-        ) {
-          return;
-        }
-
-        measuredViewportRef.current = { width: viewportWidth, height: viewportHeight };
-        const desktopPiles = viewportWidth >= 900 && viewportHeight >= 620;
-        const opponentCount = Math.max(0, playerCount - 1);
-        const compactMe = viewportWidth <= 640;
-        const compactOpponents = viewportWidth <= 640;
-        const compactTwoPlayer = compactOpponents && opponentCount === 1 && !desktopPiles;
-
-        const playRect = playColumn.getBoundingClientRect();
-        const boardAreaRect = boardArea.getBoundingClientRect();
-        const meWrapRect = meWrapRef.current?.getBoundingClientRect();
-        const centerRect = centerRef.current?.getBoundingClientRect();
-        const actionPanelRect = actionPanelRef.current?.getBoundingClientRect();
-        const playStyles = getComputedStyle(playColumn);
-        const playGap = readPx(playStyles.rowGap || playStyles.gap);
-        const pileCardWidth = desktopPiles
-          ? clampNumber(Math.min(viewportWidth * 0.075, viewportHeight * 0.13), 62, 96)
-          : clampNumber(Math.min((viewportWidth - 56) / 2.6, viewportHeight * 0.115), 46, 70);
-        const estimatedPileHeight = Math.round(pileCardWidth * CARD_HEIGHT_RATIO + 20);
-        const centerFlowHeight = desktopPiles
-          ? 0
-          : Math.max(centerRect?.height || 0, compactTwoPlayer ? estimatedPileHeight : 0);
-        const pilesFlowHeight = desktopPiles ? 0 : centerFlowHeight + playGap;
-        const meAvailableHeight = desktopPiles
-          ? (meWrapRect?.height || playRect.height)
-          : Math.max(
-            meWrapRect?.height || 0,
-            playRect.height - pilesFlowHeight
-          );
-        const meHeightBudget = Math.round(Math.max(
-          96,
-          meAvailableHeight - (desktopPiles ? 2 : 0)
-        ));
-        const sideReserve = desktopPiles
-          ? (actionPanelRect?.width || 120) + clampNumber(viewportWidth * 0.05, 44, 96)
-          : 0;
-        const meWidthBudget = Math.round(desktopPiles
-          ? viewportWidth - sideReserve
-          : Math.min(boardAreaRect.width || viewportWidth, viewportWidth - sideReserve));
-        const meMin = compactMe ? (viewportHeight < 560 ? 24 : 28) : viewportHeight < 560 ? 32 : viewportHeight < 700 ? 38 : 44;
-        const meMax = compactMe ? 88 : desktopPiles ? 120 : 82;
-        const meCardWidth = fitBoardCardWidth(meWidthBudget, meHeightBudget, meMin, meMax, {
-          topMargin: false,
-          bottomMargin: false,
-        });
-        let meMetrics = boardMetrics(meCardWidth, {
-          topMargin: false,
-          bottomMargin: false,
-        });
-
-        const opponentMin = compactOpponents ? (viewportHeight < 620 ? 22 : 24) : 12;
-        const opponentMax = compactOpponents ? (opponentCount <= 1 ? 46 : 42) : desktopPiles ? 44 : 38;
-        let opponentCardWidth = clampNumber(
-          viewportHeight * (compactOpponents ? 0.052 : 0.046),
-          opponentMin,
-          opponentMax
-        );
-        const opponents = opponentsRef.current;
-        if (opponents && opponentCount > 0) {
-          const opponentsRect = opponents.getBoundingClientRect();
-          const opponentsScrollRail = compactOpponents;
-          const perRow = opponentsScrollRail ? 1 : opponentCount;
-          const rowCount = 1;
-          const totalOpponentsBudget = Math.min(
-            boardAreaRect.height * (compactOpponents ? 0.33 : desktopPiles ? 0.4 : 0.34),
-            viewportHeight * (compactOpponents ? 0.3 : desktopPiles ? 0.31 : 0.27)
-          );
-          const rowBudget = Math.floor(totalOpponentsBudget / rowCount);
-          const boardWidthBudget = opponentsScrollRail
-            ? Math.floor(Math.min(
-              opponentsRect.width * (opponentCount <= 1 ? 0.9 : 0.62),
-              viewportWidth * (opponentCount <= 1 ? 0.9 : 0.62),
-              opponentCount <= 1 ? 260 : 230
-            ))
-            : Math.floor((
-              opponentsRect.width - (perRow - 1) * OPPONENT_BOARD_GAP
-            ) / perRow);
-          opponentCardWidth = fitBoardCardWidth(
-            boardWidthBudget,
-            rowBudget,
-            opponentMin,
-            opponentMax,
-            { topMargin: false, opponent: true, compactOpponent: compactOpponents }
-          );
-        }
-        let opponentMetrics = boardMetrics(opponentCardWidth, {
-          topMargin: false,
-          opponent: true,
-          compactOpponent: compactOpponents,
-        });
-        if (compactTwoPlayer) {
-          const sharedHeightBudget = Math.round(Math.max(
-            96,
-            (boardAreaRect.height - centerFlowHeight - playGap * 2) / 2
-          ));
-          const sharedWidthBudget = Math.round(Math.min(
-            boardAreaRect.width || viewportWidth,
-            viewportWidth
-          ));
-          const sharedCardWidth = fitBoardCardWidth(
-            sharedWidthBudget,
-            sharedHeightBudget,
-            meMin,
-            meMax,
-            { topMargin: false, bottomMargin: false }
-          );
-          const sharedMetrics = boardMetrics(sharedCardWidth, {
-            topMargin: false,
-            bottomMargin: false,
-          });
-          meMetrics = sharedMetrics;
-          opponentMetrics = sharedMetrics;
-        }
-
-        setPxVar(shell, '--sj-me-card-width', meMetrics.cardWidth);
-        setPxVar(shell, '--sj-me-card-height', meMetrics.cardHeight);
-        setPxVar(shell, '--sj-me-grid-gap', meMetrics.gridGap);
-        setPxVar(shell, '--sj-me-board-pad', meMetrics.pad);
-        setPxVar(shell, '--sj-me-board-block-gap', meMetrics.blockGap);
-        setPxVar(shell, '--sj-me-board-header-height', meMetrics.header);
-        setPxVar(shell, '--sj-two-player-board-header-height', meMetrics.header);
-        setPxVar(shell, '--sj-opp-card-width', opponentMetrics.cardWidth);
-        setPxVar(shell, '--sj-opp-card-height', opponentMetrics.cardHeight);
-        setPxVar(shell, '--sj-opp-grid-gap', opponentMetrics.gridGap);
-        setPxVar(shell, '--sj-opp-board-pad', opponentMetrics.pad);
-        setPxVar(shell, '--sj-opp-board-block-gap', opponentMetrics.blockGap);
-        setPxVar(shell, '--sj-opp-board-header-height', opponentMetrics.header);
-        setPxVar(shell, '--sj-pile-card-width', pileCardWidth);
-        setPxVar(shell, '--sj-app-height', viewportHeight);
-        if (reveal && !disposed && !layoutReadyRef.current) {
-          layoutReadyRef.current = true;
-          setLayoutReady(true);
-        }
-    };
-
-    const update = ({ reveal = true, force = false } = {}) => {
-      const frame = requestAnimationFrame(() => {
-        frames.delete(frame);
-        measure({ reveal, force });
-      });
-      frames.add(frame);
-    };
-
-    measure({ reveal: layoutReadyRef.current, force: true });
-    update({ reveal: true, force: true });
-
-    const handleResize = () => update({ reveal: true });
-    const handleOrientationChange = () => update({ reveal: true, force: true });
-
-    window.addEventListener('resize', handleResize);
-    window.addEventListener('orientationchange', handleOrientationChange);
-
-    return () => {
-      disposed = true;
-      frames.forEach((frame) => cancelAnimationFrame(frame));
-      window.removeEventListener('resize', handleResize);
-      window.removeEventListener('orientationchange', handleOrientationChange);
-    };
-  }, [playerCount, layoutKey]);
 
   return {
     shellRef,
@@ -410,66 +140,102 @@ function useAdaptiveBoardSizing(playerCount, layoutKey) {
     meWrapRef,
     centerRef,
     actionPanelRef,
-    layoutReady,
+    layoutReady: true,
   };
 }
 
-function usePersistentId() {
-  const [id, setId] = useState(() => localStorage.getItem('sj-player-id') || sessionStorage.getItem('sj-player-id') || '');
-  const save = (value) => {
-    if (value) {
-      localStorage.setItem('sj-player-id', value);
-      sessionStorage.setItem('sj-player-id', value);
-    } else {
-      localStorage.removeItem('sj-player-id');
-      sessionStorage.removeItem('sj-player-id');
-    }
-    setId(value);
-  };
-  return [id, save];
+function readGameValue(key) {
+  return localStorage.getItem(key) || sessionStorage.getItem(key) || '';
 }
 
-function readPlayerSessionToken() {
-  return localStorage.getItem('sj-player-token') || sessionStorage.getItem('sj-player-token') || '';
-}
-
-function savePlayerSessionToken(value) {
-  if (value) {
-    localStorage.setItem('sj-player-token', value);
-    sessionStorage.setItem('sj-player-token', value);
-  } else {
-    localStorage.removeItem('sj-player-token');
-    sessionStorage.removeItem('sj-player-token');
-  }
+function saveGameValue(key, value) {
+  localStorage.removeItem(key);
+  sessionStorage.removeItem(key);
+  if (!value) return;
+  const target = localStorage.getItem(AUTH_REMEMBER_KEY) === 'true' ? localStorage : sessionStorage;
+  target.setItem(key, value);
 }
 
 export default function App() {
+  const { user, ready, recoveryMode, logout } = useAuth();
+  const [consent, setConsent] = useState(null);
+  const [consentBusy, setConsentBusy] = useState(false);
+  const [consentError, setConsentError] = useState('');
+
+  useEffect(() => {
+    if (!user || recoveryMode) {
+      setConsent(null);
+      return;
+    }
+    if (!SERVER_URL) {
+      setConsent(false);
+      setConsentError('Le serveur de jeu n\'est pas configuré correctement.');
+      return;
+    }
+    let cancelled = false;
+    apiFetch('/api/account/consent').then(async (response) => {
+      if (!response.ok) throw new Error(await serverErrorMessage(response, 'Impossible de vérifier le consentement.'));
+      const data = await response.json();
+      if (!cancelled) setConsent(data.accepted === true);
+    }).catch(() => {
+      if (!cancelled) setConsent(false);
+    });
+    return () => { cancelled = true; };
+  }, [recoveryMode, user]);
+
+  if (!ready) return <div className="sj-auth-loading" aria-label="Chargement" />;
+  if (recoveryMode) return <ResetPasswordView />;
+  if (!user) return <AuthView />;
+  if (consent === null) return <div className="sj-auth-loading" aria-label="Vérification du consentement" />;
+  if (!consent) return <ConsentGate busy={consentBusy} error={consentError} onLogout={logout} onAccept={async () => {
+    setConsentBusy(true);
+    setConsentError('');
+    try {
+      const response = await apiFetch('/api/account/consent', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ termsVersion: '2026-07-15-bff', privacyVersion: '2026-07-15-bff' }),
+      });
+      if (!response.ok) throw new Error(await serverErrorMessage(response, 'Impossible d\'enregistrer le consentement.'));
+      setConsent(true);
+    } catch (error) {
+      setConsentError(error.message || 'Impossible d\'enregistrer le consentement.');
+    } finally {
+      setConsentBusy(false);
+    }
+  }} />;
+  return <GameApp />;
+}
+
+function GameApp() {
+  const { user, logout } = useAuth();
+  const accountPlayerName = normalizePlayerNameInput(user?.firstName || user?.displayName || '');
   const [socket, setSocket] = useState(null);
   const [connected, setConnected] = useState(false);
-  const [roomId, setRoomId] = useState(() => localStorage.getItem('sj-room-id') || sessionStorage.getItem('sj-room-id') || '');
-  const [playerName, setPlayerName] = useState(() => normalizePlayerNameInput(localStorage.getItem('sj-player-name') || sessionStorage.getItem('sj-player-name') || ''));
-  const [playerId, setPlayerId] = usePersistentId();
+  const [roomId, setRoomId] = useState(() => readGameValue('sj-room-id'));
+  const [playerName, setPlayerName] = useState(() => normalizePlayerNameInput(readGameValue('sj-player-name') || accountPlayerName));
+  const [playerId, setPlayerId] = useState('');
   const [autoReconnectPending, setAutoReconnectPending] = useState(() => {
-    const savedRoomId = localStorage.getItem('sj-room-id') || sessionStorage.getItem('sj-room-id') || '';
-    const savedPlayerId = localStorage.getItem('sj-player-id') || sessionStorage.getItem('sj-player-id') || '';
-    return !!savedRoomId && !!savedPlayerId;
+    const savedRoomId = readGameValue('sj-room-id');
+    return !!savedRoomId;
   });
-  const [joinRoomInput, setJoinRoomInput] = useState('');
-  const [nameInput, setNameInput] = useState(playerName);
+  const [joinRoomInput, setJoinRoomInput] = useState(() => takeRoomInviteFromFragment());
+  const [nameInput, setNameInput] = useState(accountPlayerName || playerName);
   const [roomVisibilityInput, setRoomVisibilityInput] = useState('private');
   const [publicRooms, setPublicRooms] = useState([]);
   const [publicRoomsLoading, setPublicRoomsLoading] = useState(false);
   const [homePanel, setHomePanel] = useState('home');
-  const [homePanelHeight, setHomePanelHeight] = useState(0);
   const [state, setState] = useState(null);
+  const [chatMessages, setChatMessages] = useState([]);
+  const [chatHasMore, setChatHasMore] = useState(false);
+  const [chatBefore, setChatBefore] = useState(null);
   const [pendingReconnectState, setPendingReconnectState] = useState(null);
   const [error, setError] = useState('');
   const [errorSerial, setErrorSerial] = useState(0);
   const autoReconnectPendingRef = useRef(autoReconnectPending);
-  const autoReconnectStartedAtRef = useRef(autoReconnectPending ? Date.now() : 0);
+  const autoReconnectStartedAtRef = useRef(0);
   const errorTimerRef = useRef(null);
   const publicRoomsRequestRef = useRef(0);
-  const homeCardRef = useRef(null);
 
   const clearError = useCallback(() => {
     if (errorTimerRef.current) {
@@ -503,8 +269,8 @@ export default function App() {
     publicRoomsRequestRef.current = requestId;
     if (!silent) setPublicRoomsLoading(true);
     try {
-      const res = await fetch(`${SERVER_URL}/api/rooms/public`);
-      if (!res.ok) throw new Error('Impossible de charger les salles publiques.');
+      const res = await apiFetch('/api/rooms/public');
+      if (!res.ok) throw new Error(await serverErrorMessage(res, 'Impossible de charger les salles publiques.'));
       const data = await res.json();
       if (publicRoomsRequestRef.current !== requestId) return;
       setPublicRooms(Array.isArray(data.rooms) ? data.rooms : []);
@@ -516,28 +282,6 @@ export default function App() {
         setPublicRoomsLoading(false);
       }
     }
-  }, []);
-
-  useEffect(() => {
-    const handleKeyDown = (event) => {
-      if (event.key !== 'Tab') return;
-      event.preventDefault();
-      document.activeElement?.blur?.();
-    };
-
-    const handlePointerUp = (event) => {
-      if (!(event.target instanceof Element)) return;
-      const focusableControl = event.target.closest('button, [role="button"], a[href], summary');
-      if (!focusableControl) return;
-      window.requestAnimationFrame(() => focusableControl.blur?.());
-    };
-
-    window.addEventListener('keydown', handleKeyDown, true);
-    document.addEventListener('pointerup', handlePointerUp, true);
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown, true);
-      document.removeEventListener('pointerup', handlePointerUp, true);
-    };
   }, []);
 
   useEffect(() => () => {
@@ -576,53 +320,78 @@ export default function App() {
   }, [pendingReconnectState]);
 
   useEffect(() => {
-    const savedRoomId = localStorage.getItem('sj-room-id') || sessionStorage.getItem('sj-room-id') || '';
-    const savedPlayerId = localStorage.getItem('sj-player-id') || sessionStorage.getItem('sj-player-id') || '';
-    const savedPlayerName = normalizePlayerNameInput(localStorage.getItem('sj-player-name') || sessionStorage.getItem('sj-player-name') || '');
-    const savedSessionToken = readPlayerSessionToken();
-    const nextSocket = io(SERVER_URL, {
+    const savedRoomId = readGameValue('sj-room-id');
+    const savedPlayerName = normalizePlayerNameInput(readGameValue('sj-player-name'));
+    let nextSocket;
+    let reconnectTimeout;
+
+    const stopReconnectScreen = ({ clearSavedRoom = false } = {}) => {
+      if (!autoReconnectPendingRef.current) return;
+      if (clearSavedRoom) saveGameValue('sj-room-id', '');
+      setRoomId('');
+      setPlayerId('');
+      setPendingReconnectState(null);
+      setAutoReconnectPending(false);
+    };
+
+    if (savedRoomId) {
+      reconnectTimeout = window.setTimeout(() => {
+        if (!autoReconnectPendingRef.current) return;
+        stopReconnectScreen();
+        showError('Impossible de retrouver cette salle pour le moment.');
+      }, AUTO_RECONNECT_TIMEOUT_MS);
+    }
+
+    nextSocket = io(SERVER_URL, {
       transports: ['polling', 'websocket'],
       upgrade: true,
       reconnectionDelay: 300,
       reconnectionDelayMax: 1500,
       timeout: 8000,
+      withCredentials: true,
       auth: {
+        protocolVersion: 6,
         roomId: savedRoomId,
-        playerId: savedPlayerId,
         playerName: savedPlayerName,
-        sessionToken: savedSessionToken,
       },
     });
     setSocket(nextSocket);
     nextSocket.on('connect', () => setConnected(true));
     nextSocket.on('disconnect', () => setConnected(false));
-    nextSocket.on('errorMsg', (message) => {
+    nextSocket.on('connect_error', (connectError) => {
+      const message = connectError.message || 'Connexion refusée.';
       showError(message);
+      if (/session invalide|session expirée/iu.test(message)) void logout();
+    });
+    nextSocket.on('errorMsg', (payload) => {
+      const rawMessage = typeof payload === 'string' ? payload : payload?.message;
+      const baseMessage = typeof rawMessage === 'string' ? [...rawMessage].slice(0, 200).join('') : 'Action impossible.';
+      const requestId = /^[0-9a-f-]{36}$/i.test(payload?.requestId || '') ? payload.requestId : '';
+      const message = requestId ? `${baseMessage} Référence : ${requestId}` : baseMessage;
+      const code = typeof payload === 'object' ? payload?.code : '';
+      showError(message);
+      if (code === 'invalid_session') {
+        void logout();
+        return;
+      }
       if (autoReconnectPendingRef.current && (
-        message === "Cette salle n'existe pas."
-        || message === 'La partie a déjà commencé.'
-        || message === 'Session invalide. Rejoignez à nouveau la salle.'
+        code === 'room_unavailable'
+        || code === 'seat_unavailable'
+        || message === "Impossible de rejoindre cette salle."
       )) {
-        localStorage.removeItem('sj-room-id');
-        sessionStorage.removeItem('sj-room-id');
-        savePlayerSessionToken('');
-        setRoomId('');
-        setPlayerId('');
-        setAutoReconnectPending(false);
-        setPendingReconnectState(null);
+        stopReconnectScreen({ clearSavedRoom: true });
+      } else if (autoReconnectPendingRef.current && code === 'reconnect_failed') {
+        stopReconnectScreen();
       }
     });
-    nextSocket.on('joined', ({ roomId: rid, playerId: pid, sessionToken }) => {
+    nextSocket.on('joined', ({ roomId: rid, playerId: pid }) => {
       setRoomId(rid);
       setPlayerId(pid);
-      if (sessionToken) savePlayerSessionToken(sessionToken);
-      localStorage.setItem('sj-room-id', rid);
-      sessionStorage.setItem('sj-room-id', rid);
+      saveGameValue('sj-room-id', rid);
       nextSocket.auth = {
+        protocolVersion: 6,
         roomId: rid,
-        playerId: pid,
-        sessionToken: sessionToken || readPlayerSessionToken(),
-        playerName: normalizePlayerNameInput(localStorage.getItem('sj-player-name') || sessionStorage.getItem('sj-player-name') || playerName || nameInput),
+        playerName: normalizePlayerNameInput(readGameValue('sj-player-name')),
       };
     });
     nextSocket.on('state', (nextState) => {
@@ -632,17 +401,32 @@ export default function App() {
         setState(nextState);
       }
     });
-    return () => nextSocket.disconnect();
-  }, []);
-
-  useEffect(() => {
-    if (socket && connected && roomId && playerId) {
-      const sessionToken = readPlayerSessionToken();
-      const cleanPlayerName = normalizePlayerNameInput(playerName || nameInput);
-      socket.auth = { roomId, playerId, sessionToken, playerName: cleanPlayerName };
-      socket.emit('joinRoom', { roomId, playerId, sessionToken, playerName: cleanPlayerName });
-    }
-  }, [socket, connected, roomId, playerId]);
+    nextSocket.on('chatHistory', ({ messages, hasMore, before }) => {
+      const page = Array.isArray(messages) ? messages : [];
+      setChatMessages((current) => {
+        const byId = new Map([...page, ...current].map((message) => [message.id, message]));
+        return [...byId.values()].sort((a, b) => (a.t || 0) - (b.t || 0));
+      });
+      setChatHasMore(Boolean(hasMore));
+      setChatBefore(before || null);
+    });
+    nextSocket.on('chatMessage', (message) => {
+      if (!message?.id) return;
+      setChatMessages((current) => current.some((item) => item.id === message.id) ? current : [...current, message]);
+    });
+    nextSocket.on('roomExpired', () => {
+      saveGameValue('sj-room-id', '');
+      setRoomId('');
+      setPlayerId('');
+      setState(null);
+      setChatMessages([]);
+      showError('Cette salle a expiré après 24 heures d\'inactivité.');
+    });
+    return () => {
+      if (reconnectTimeout) window.clearTimeout(reconnectTimeout);
+      nextSocket?.disconnect();
+    };
+  }, [logout, showError]);
 
   async function createRoom() {
     if (!socket || !connected) return;
@@ -655,16 +439,15 @@ export default function App() {
     setAutoReconnectPending(false);
     setPendingReconnectState(null);
     try {
-      const res = await fetch(`${SERVER_URL}/api/rooms`, {
+      const res = await apiFetch('/api/rooms', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ roomVisibility: roomVisibilityInput }),
+        body: JSON.stringify({ roomVisibility: roomVisibilityInput, playerName: name }),
       });
-      if (!res.ok) throw new Error('Impossible de créer la salle.');
+      if (!res.ok) throw new Error(await serverErrorMessage(res, 'Impossible de créer la salle.'));
       const data = await res.json();
       setPlayerName(name);
-      localStorage.setItem('sj-player-name', name);
-      sessionStorage.setItem('sj-player-name', name);
+      saveGameValue('sj-player-name', name);
       socket.emit('joinRoom', { roomId: data.roomId, playerName: name });
     } catch (err) {
       showError(err.message || 'Serveur indisponible.');
@@ -680,14 +463,14 @@ export default function App() {
     }
     setAutoReconnectPending(false);
     setPendingReconnectState(null);
-    const normalizedRoomId = String(targetRoomId || '').replace(/\D/g, '').slice(0, 6);
-    if (normalizedRoomId.length !== 6) {
-      showError('Le code de salle doit contenir 6 chiffres.');
+    const candidate = String(targetRoomId || '').trim();
+    const normalizedRoomId = /^[A-Za-z0-9_-]{16}$/.test(candidate) ? candidate : '';
+    if (!normalizedRoomId) {
+      showError('Le code de salle est invalide.');
       return;
     }
     setPlayerName(name);
-    localStorage.setItem('sj-player-name', name);
-    sessionStorage.setItem('sj-player-name', name);
+    saveGameValue('sj-player-name', name);
     socket.emit('joinRoom', { roomId: normalizedRoomId, playerName: name });
   }
 
@@ -702,20 +485,17 @@ export default function App() {
       return;
     }
     clearError();
-    const currentHeight = homeCardRef.current?.getBoundingClientRect?.().height || 0;
-    setHomePanelHeight(Math.round(currentHeight));
     setHomePanel('public');
     loadPublicRooms();
   }
 
   function leaveRoom() {
     socket?.emit('leaveRoom');
-    localStorage.removeItem('sj-room-id');
-    sessionStorage.removeItem('sj-room-id');
-    savePlayerSessionToken('');
+    saveGameValue('sj-room-id', '');
     setRoomId('');
     setPlayerId('');
     setState(null);
+    setChatMessages([]);
     setJoinRoomInput('');
     setHomePanel('home');
     clearError();
@@ -723,17 +503,26 @@ export default function App() {
     setPendingReconnectState(null);
   }
 
+  async function logoutFromHome() {
+    socket?.disconnect();
+    saveGameValue('sj-room-id', '');
+    saveGameValue('sj-player-name', '');
+    await logout();
+  }
+
   if (!state) {
-    if (autoReconnectPending && roomId && playerId) {
+    if (autoReconnectPending && roomId) {
       return (
         <div className="sj-lobby">
           <GameToast key={errorSerial} message={error} />
           <section className="sj-lobby-card sj-reconnect-card sj-pop-in">
-            <div className="sj-brand-mark"><SkyjoLogo /></div>
+            <div className="sj-brand-mark">
+              <SkyjoLogo connectionBadge={<ConnectionBadge connected={connected} />} />
+            </div>
             <div className="sj-reconnect-spinner" aria-hidden="true" />
             <h1>Reconnexion</h1>
             <p className="sj-lobby-copy">Retour dans la salle {roomId}…</p>
-            <p className={`sj-connection ${connected ? 'sj-connection-ok' : ''}`}>
+            <p className="sj-reconnect-status">
               {connected ? 'Synchronisation de la partie' : 'Connexion au serveur'}
             </p>
           </section>
@@ -741,18 +530,27 @@ export default function App() {
       );
     }
 
-    const canJoinRoom = connected && joinRoomInput.length === 6;
+    const canJoinRoom = connected && /^[A-Za-z0-9_-]{16}$/.test(joinRoomInput);
     const canJoinPublicRoom = connected;
 
     return (
       <div className="sj-app-shell sj-lobby-room">
         <GameToast key={errorSerial} message={error} />
-        {homePanel === 'public' ? (
+        <div className="sj-home-panel-stack">
+        {homePanel === 'public' && (
           <section
             key="public-rooms"
             className="sj-lobby-card sj-home-card sj-public-search-card"
-            style={homePanelHeight ? { '--sj-home-panel-height': `${homePanelHeight}px` } : undefined}
           >
+            <button
+              type="button"
+              className="sj-account-logout"
+              onClick={logoutFromHome}
+              aria-label="Se déconnecter du compte"
+              title="Se déconnecter"
+            >
+              <LogOut aria-hidden="true" size={16} />
+            </button>
             <div className="sj-brand-mark">
               <SkyjoLogo connectionBadge={<ConnectionBadge connected={connected} />} />
             </div>
@@ -790,8 +588,22 @@ export default function App() {
               <span aria-hidden="true">←</span>
             </button>
           </section>
-        ) : (
-          <section key="home" ref={homeCardRef} className="sj-lobby-card sj-home-card">
+        )}
+          <section
+            key="home"
+            className={`sj-lobby-card sj-home-card ${homePanel === 'public' ? 'sj-home-card-measure' : ''}`}
+            aria-hidden={homePanel === 'public' || undefined}
+            inert={homePanel === 'public' ? '' : undefined}
+          >
+            <button
+              type="button"
+              className="sj-account-logout"
+              onClick={logoutFromHome}
+              aria-label="Se déconnecter du compte"
+              title="Se déconnecter"
+            >
+              <LogOut aria-hidden="true" size={16} />
+            </button>
             <div className="sj-brand-mark">
               <SkyjoLogo connectionBadge={<ConnectionBadge connected={connected} />} />
             </div>
@@ -845,11 +657,11 @@ export default function App() {
               <input
                 id="room-code"
                 value={joinRoomInput}
-                onChange={(event) => setJoinRoomInput(event.target.value.replace(/\D/g, '').slice(0, 6))}
-                placeholder="123456"
-                inputMode="numeric"
-                pattern="[0-9]*"
-                maxLength={6}
+                onChange={(event) => setJoinRoomInput(event.target.value.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 16))}
+                placeholder="Code d'invitation"
+                inputMode="text"
+                pattern="[A-Za-z0-9_-]{16}"
+                maxLength={16}
                 autoComplete="off"
               />
               <button className="sj-btn" disabled={!canJoinRoom} onClick={joinRoom}>
@@ -863,7 +675,7 @@ export default function App() {
             </div>
 
           </section>
-        )}
+        </div>
       </div>
     );
   }
@@ -877,6 +689,11 @@ export default function App() {
       error={error}
       errorSerial={errorSerial}
       onLeaveRoom={leaveRoom}
+      chatMessages={chatMessages}
+      chatHasMore={chatHasMore}
+      onLoadOlderChat={() => {
+        if (chatHasMore && chatBefore) socket?.emit('loadChatHistory', { before: chatBefore });
+      }}
     />
   );
 }
@@ -1020,9 +837,11 @@ function chatMessageTime(timestamp) {
 function ChatModal({
   open,
   messages = [],
+  hasMore = false,
   myId,
   onClose,
   onSend,
+  onLoadMore,
 }) {
   const [draft, setDraft] = useState('');
   const modalRef = useRef(null);
@@ -1092,6 +911,11 @@ function ChatModal({
         </header>
 
         <div ref={scrollRef} className="sj-chat-messages" aria-live="polite">
+          {hasMore && (
+            <button type="button" className="sj-chat-load-more" onClick={onLoadMore}>
+              Charger les 80 messages précédents
+            </button>
+          )}
           {messages.length === 0 ? (
             <div className="sj-chat-empty">
               <strong>Aucun message</strong>
@@ -1381,8 +1205,7 @@ function ActionHandDock({ cards, onClick }) {
   return (
     <button
       type="button"
-      className="sj-action-hand-dock"
-      style={{ '--sj-action-tab-stack': `${Math.max(0, visibleCards.length - 1) * 12}px` }}
+      className={`sj-action-hand-dock sj-action-hand-dock-${visibleCards.length}`}
       aria-label={`Ouvrir vos ${cards.length} carte${cards.length > 1 ? 's' : ''} Action`}
       aria-haspopup="dialog"
       onClick={onClick}
@@ -1390,8 +1213,7 @@ function ActionHandDock({ cards, onClick }) {
       {visibleCards.map((card, index) => (
         <span
           key={card.id}
-          className="sj-action-hand-tab"
-          style={{ '--sj-action-tab-top': `${index * 12}px` }}
+          className={`sj-action-hand-tab sj-action-hand-tab-${index}`}
           aria-hidden="true"
         />
       ))}
@@ -1838,13 +1660,12 @@ function PlayDiscardActionModal({
 }
 
 function ActionTile({ card, onClick, disabled = false, compact = false, interactive = true }) {
-  const artUrl = ACTION_ART_URLS[card.type] || ACTION_ART_URLS.drawThree;
+  const artType = Object.hasOwn(ACTION_ART_URLS, card.type) ? card.type : 'drawThree';
   const className = `sj-action-card ${compact ? 'sj-action-card-compact' : ''} ${!interactive ? 'sj-action-card-static' : ''}`.trim();
   const content = (
     <>
       <span
-        className="sj-action-card-art"
-        style={{ backgroundImage: `url('${artUrl}')` }}
+        className={`sj-action-card-art sj-action-art-${artType}`}
         aria-hidden="true"
       />
       <span className="sj-action-card-copy">
@@ -1878,7 +1699,10 @@ function ActionTile({ card, onClick, disabled = false, compact = false, interact
   );
 }
 
-function GameScreen({ socket, state, myId, roomId, error, errorSerial, onLeaveRoom }) {
+function GameScreen({
+  socket, state, myId, roomId, error, errorSerial, onLeaveRoom,
+  chatMessages = [], chatHasMore = false, onLoadOlderChat,
+}) {
   const [copied, setCopied] = useState(false);
   const [leaveModalOpen, setLeaveModalOpen] = useState(false);
   const [actionHandModalOpen, setActionHandModalOpen] = useState(false);
@@ -1886,7 +1710,7 @@ function GameScreen({ socket, state, myId, roomId, error, errorSerial, onLeaveRo
   const [chatModalOpen, setChatModalOpen] = useState(false);
   const [visibleActionPlayId, setVisibleActionPlayId] = useState(null);
   const [roundScoresReady, setRoundScoresReady] = useState(true);
-  const [peekNow, setPeekNow] = useState(Date.now());
+  const [peekNow, setPeekNow] = useState(() => Date.now());
   const [dismissedPeekId, setDismissedPeekId] = useState(null);
   const [lastSeenChatMessageId, setLastSeenChatMessageId] = useState(null);
   const [visibleLastTurnNoticeId, setVisibleLastTurnNoticeId] = useState(null);
@@ -1895,9 +1719,7 @@ function GameScreen({ socket, state, myId, roomId, error, errorSerial, onLeaveRo
   const closeChatModal = useCallback(() => setChatModalOpen(false), []);
 
   const roundScorePhase = ['roundEnd', 'gameEnd'].includes(state.phase);
-  const roundScoresVisible = !roundScorePhase
-    || !state.roundScoresAt
-    || (roundScoresReady && Date.now() >= state.roundScoresAt);
+  const roundScoresVisible = !roundScorePhase || !state.roundScoresAt || roundScoresReady;
   const roundScorePreviewActive = roundScorePhase && !roundScoresVisible;
   const boardPlayers = roundScorePreviewActive
     ? state.players.map((player) => ({
@@ -1926,7 +1748,6 @@ function GameScreen({ socket, state, myId, roomId, error, errorSerial, onLeaveRo
   const showLastTurnNotice = state.phase === 'playing'
     && !!roundEnder
     && visibleLastTurnNoticeId === lastTurnNoticeId;
-  const chatMessages = state.chatMessages || [];
   const latestChatMessageId = chatMessages.at(-1)?.id || null;
   const chatRoomInitialized = initializedChatRoomRef.current === roomId;
   const unreadChatCount = chatModalOpen || !chatRoomInitialized
@@ -2136,7 +1957,7 @@ function GameScreen({ socket, state, myId, roomId, error, errorSerial, onLeaveRo
     });
 
     return () => window.cancelAnimationFrame(frame);
-  }, [myId, state.currentPlayerId, state.phase, state.players.length]);
+  }, [myId, opponentsRef, state.currentPlayerId, state.phase, state.players.length]);
 
   useEffect(() => {
     if (
@@ -2191,7 +2012,7 @@ function GameScreen({ socket, state, myId, roomId, error, errorSerial, onLeaveRo
   }, [chatModalOpen, latestChatMessageId]);
 
   async function copyRoomCode() {
-    const text = String(roomId || '');
+    const text = roomId ? `${window.location.origin}/#room=${encodeURIComponent(roomId)}` : '';
     if (!text) return;
 
     let copiedSuccessfully = false;
@@ -2209,12 +2030,7 @@ function GameScreen({ socket, state, myId, roomId, error, errorSerial, onLeaveRo
       const textarea = document.createElement('textarea');
       textarea.value = text;
       textarea.setAttribute('readonly', '');
-      textarea.style.position = 'fixed';
-      textarea.style.left = '-9999px';
-      textarea.style.top = '0';
-      textarea.style.opacity = '0';
-      textarea.style.userSelect = 'text';
-      textarea.style.webkitUserSelect = 'text';
+      textarea.className = 'sj-clipboard-fallback';
       document.body.appendChild(textarea);
 
       const selection = document.getSelection();
@@ -2392,7 +2208,7 @@ function GameScreen({ socket, state, myId, roomId, error, errorSerial, onLeaveRo
     return {
       id: lastPlayedAction.id,
       title: ACTION_LABELS[type] || 'Carte Action',
-      artUrl: ACTION_ART_URLS[type] || ACTION_ART_URLS.drawThree,
+      artType: Object.hasOwn(ACTION_ART_URLS, type) ? type : 'drawThree',
     };
   }
 
@@ -2413,9 +2229,11 @@ function GameScreen({ socket, state, myId, roomId, error, errorSerial, onLeaveRo
     <ChatModal
       open={chatModalOpen}
       messages={chatMessages}
+      hasMore={chatHasMore}
       myId={myId}
       onClose={closeChatModal}
       onSend={handleSendChatMessage}
+      onLoadMore={onLoadOlderChat}
     />
   );
   const actionDrawModal = (

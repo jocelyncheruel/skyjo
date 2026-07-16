@@ -464,11 +464,6 @@ export function flipInitialActionCard(state, playerId, slotIndex) {
   else startRoundIfReady(state);
 }
 
-function finishNormalTurn(state) {
-  if (clearCompletedGroups(state, state.playersById[currentPlayerId(state)], { type: 'advance' })) return;
-  advanceTurn(state);
-}
-
 function advanceTurn(state) {
   const finishingId = currentPlayerId(state);
   const player = state.playersById[finishingId];
@@ -756,7 +751,6 @@ function recordPlayedAction(state, playerId, card) {
 
 function beginActionEffect(state, playerId, card) {
   recordPlayedAction(state, playerId, card);
-  const player = state.playersById[playerId];
   if (card.type === 'extraTurns') {
     state.extraTurns[playerId] = (state.extraTurns[playerId] || 0) + 2;
     discardPlayedAction(state, card);
@@ -1272,6 +1266,13 @@ export function publicActionState(state, forPlayerId) {
   const actionPausedForDefense = !!defensePrompt;
   const canSeeDefensePrompt = defensePrompt
     && (defensePrompt.actorId === forPlayerId || defensePrompt.targetId === forPlayerId);
+  const inspectableTargetId = pending?.playerId === forPlayerId
+    ? pending.type === 'removeEach'
+      ? pending.remaining?.[0]
+      : pending.type === 'stealAction'
+        ? pending.selection?.stealTargetId
+        : null
+    : null;
   return {
     actionMarket: state.actionMarket,
     actionDiscard: state.actionDiscard,
@@ -1316,10 +1317,11 @@ export function publicActionState(state, forPlayerId) {
     turnSerial: state.turnSerial,
     playersAction: Object.fromEntries(state.order.map((id) => {
       const player = state.playersById[id];
+      const canSeeActionCards = id === forPlayerId || id === inspectableTargetId;
       return [id, {
-        actionCards: id === forPlayerId
+        actionCards: canSeeActionCards
           ? player.actionCards
-          : player.actionCards.map(({ id: cardId, type }) => ({ id: cardId, type })),
+          : player.actionCards.map((_, index) => ({ id: `hidden-${index}`, type: 'hidden', hidden: true })),
         peek: id === forPlayerId ? visibleOwnPeek : null,
       }];
     })),
