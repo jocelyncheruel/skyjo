@@ -432,6 +432,17 @@ function loadTurnstile() {
 function TurnstileWidget({ onToken, resetSignal }) {
   const containerRef = useRef(null);
   const widgetIdRef = useRef(null);
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container || typeof ResizeObserver === "undefined") return undefined;
+    const observer = new ResizeObserver(() => {
+      setVisible(container.getBoundingClientRect().height > 0);
+    });
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     if (!TURNSTILE_SITE_KEY || !containerRef.current) return undefined;
@@ -446,6 +457,7 @@ function TurnstileWidget({ onToken, resetSignal }) {
         callback: (token) => onToken(token),
         "expired-callback": () => onToken(""),
         "error-callback": () => onToken(""),
+        "timeout-callback": () => onToken(""),
       });
     }).catch(() => onToken(""));
     return () => {
@@ -464,7 +476,7 @@ function TurnstileWidget({ onToken, resetSignal }) {
   }, [resetSignal, onToken]);
 
   if (!TURNSTILE_SITE_KEY) return null;
-  return <div className="auth-turnstile" ref={containerRef} aria-label="Vérification anti-robot" />;
+  return <div className={`auth-turnstile${visible ? " is-visible" : ""}`} ref={containerRef} aria-label="Vérification anti-robot" />;
 }
 
 function GoogleIcon() {
@@ -801,13 +813,38 @@ function AuthStoryPanel() {
         <h1>Skyjo en ligne</h1>
         <p>
           Skyjo en ligne permet de créer une salle privée ou publique,
-          d&apos;inviter ses proches et de jouer ensemble à distance.
+          d'inviter ses proches et de jouer ensemble à distance.
         </p>
       </div>
       <p className="auth-quote">
         « Le 12 est quand même plus joli chez l’adversaire. »
       </p>
     </aside>
+  );
+}
+
+export function AuthLoadingView({ label = "Chargement" }) {
+  return (
+    <main className="auth-page" aria-label={label} aria-busy="true">
+      <div className="auth-orb auth-orb-one" />
+      <div className="auth-orb auth-orb-two" />
+      <section className="auth-shell" aria-label="Authentification Skyjo">
+        <AuthStoryPanel />
+        <div className="auth-form-panel auth-loading-form-panel">
+          <div className="auth-form-inner">
+            <AuthMobileBrand heading />
+            <p className="auth-loading-description">
+              Skyjo en ligne permet de créer une salle privée ou publique,
+              d'inviter ses proches et de jouer ensemble à distance.
+            </p>
+            <div className="auth-loading-status" role="status">
+              <span aria-hidden="true" />
+              <p>Chargement...</p>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
   );
 }
 
@@ -863,7 +900,7 @@ export function ConsentGate({ onAccept, onLogout, error = "", busy = false }) {
               </div>
             </div>
             <button className="auth-submit auth-consent-submit" type="button" disabled={!ready || busy} onClick={onAccept}>
-              {busy ? "Enregistrement…" : "J'accepte et j'accède au jeu"}
+              {busy ? "Enregistrement..." : "J'accepte et j'accède au jeu"}
               {!busy && <ArrowRight size={17} aria-hidden="true" />}
             </button>
             <button className="auth-consent-logout" type="button" disabled={busy} onClick={onLogout}>
@@ -1093,7 +1130,7 @@ export function AuthView() {
             try { await confirmEmailAction(); } catch { return; }
             finally { setBusy(false); }
           }}>
-            {busy ? "Vérification…" : pendingEmailAction.type === "recovery" ? "Continuer" : "Confirmer mon adresse"}
+            {busy ? "Vérification..." : pendingEmailAction.type === "recovery" ? "Continuer" : "Confirmer mon adresse"}
           </button>
           {pendingEmailAction.invalid && <p className="auth-switch">Ce lien est invalide ou incomplet.</p>}
         </section>
@@ -1150,7 +1187,7 @@ export function AuthView() {
                   >
                     <GoogleIcon />
                     <span>
-                      {googleBusy ? "Redirection…" : "Continuer avec Google"}
+                      {googleBusy ? "Redirection..." : "Continuer avec Google"}
                     </span>
                   </button>
                   <div className="auth-divider" aria-hidden="true">
@@ -1372,7 +1409,7 @@ export function AuthView() {
                           type="submit"
                           disabled={busy || googleBusy || !securityReady}
                         >
-                          {busy ? "Un instant…" : "Créer mon compte"}
+                          {busy ? "Un instant..." : "Créer mon compte"}
                         </button>
                       </div>
                     ) : (
@@ -1381,7 +1418,7 @@ export function AuthView() {
                         type="submit"
                         disabled={busy || googleBusy || !securityReady}
                       >
-                        {busy ? "Un instant…" : "Se connecter"}
+                        {busy ? "Un instant..." : "Se connecter"}
                         {!busy && <ArrowRight size={17} />}
                       </button>
                     )}
@@ -1404,7 +1441,7 @@ export function AuthView() {
             </form>
             <nav className="auth-public-links" aria-label="Informations légales">
               <a href="/privacy">Politique de confidentialité</a>
-              <a href="/terms">Conditions d&apos;utilisation</a>
+              <a href="/terms">Conditions d'utilisation</a>
             </nav>
           </div>
         </div>
@@ -1500,7 +1537,7 @@ export function ResetPasswordView() {
             required
           />
           <button className="auth-submit" disabled={busy}>
-            {busy ? "Mise à jour…" : "Enregistrer le mot de passe"}
+            {busy ? "Mise à jour..." : "Enregistrer le mot de passe"}
           </button>
         </form>
       </section>

@@ -3,7 +3,7 @@ import { io } from 'socket.io-client';
 import { LogOut, MessageCircle, Send, X } from 'lucide-react';
 import Card from './components/Card.jsx';
 import PlayerBoard from './components/PlayerBoard.jsx';
-import { AuthView, ConsentGate, LegalPage, ResetPasswordView } from './Auth.jsx';
+import { AuthLoadingView, AuthView, ConsentGate, LegalPage, ResetPasswordView } from './Auth.jsx';
 import { useAuth } from './authContext.js';
 import { apiFetch, AUTH_REMEMBER_KEY, SERVER_URL } from './apiClient.js';
 const AUTO_RECONNECT_TIMEOUT_MS = 5000;
@@ -197,10 +197,10 @@ function SkyjoApp() {
     return () => { cancelled = true; };
   }, [recoveryMode, user]);
 
-  if (!ready) return <div className="sj-auth-loading" aria-label="Chargement" />;
+  if (!ready) return <AuthLoadingView />;
   if (recoveryMode) return <ResetPasswordView />;
   if (!user) return <AuthView />;
-  if (consent === null) return <div className="sj-auth-loading" aria-label="Vérification du consentement" />;
+  if (consent === null) return <AuthLoadingView label="Vérification du consentement" />;
   if (!consent) return <ConsentGate busy={consentBusy} error={consentError} onLogout={logout} onAccept={async () => {
     setConsentBusy(true);
     setConsentError('');
@@ -535,7 +535,7 @@ function GameApp() {
             </div>
             <div className="sj-reconnect-spinner" aria-hidden="true" />
             <h1>Reconnexion</h1>
-            <p className="sj-lobby-copy">Retour dans la salle {roomId}…</p>
+            <p className="sj-lobby-copy">Retour dans la salle {roomId}...</p>
             <p className="sj-reconnect-status">
               {connected ? 'Synchronisation de la partie' : 'Connexion au serveur'}
             </p>
@@ -592,7 +592,7 @@ function GameApp() {
                 </div>
               ) : (
                 <p className="sj-public-room-empty">
-                  {publicRoomsLoading ? 'Chargement des parties publiques…' : 'Aucune partie publique disponible.'}
+                  {publicRoomsLoading ? 'Chargement des parties publiques...' : 'Aucune partie publique disponible.'}
                 </p>
               )}
             </section>

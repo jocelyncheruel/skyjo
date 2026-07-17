@@ -12,10 +12,48 @@
     <meta property="og:url" content="https://skyjo.jocelyncheruel.dev/" />
     <link rel="canonical" href="https://skyjo.jocelyncheruel.dev/" />
     <link rel="icon" type="image/svg+xml" href="/skyjo-logo.svg" />
+    <link rel="stylesheet" href="/src/styles.css" />
     <title>Skyjo en ligne</title>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <main class="auth-page" aria-label="Chargement" aria-busy="true">
+        <div class="auth-orb auth-orb-one"></div>
+        <div class="auth-orb auth-orb-two"></div>
+        <section class="auth-shell" aria-label="Authentification Skyjo">
+          <aside class="auth-story">
+            <div class="auth-grain"></div>
+            <div class="auth-brand">
+              <div class="auth-logo-frame" aria-hidden="true">
+                <img class="auth-logo-image" src="/skyjo-logo.svg" alt="" width="116" height="116" />
+              </div>
+              Skyjo en ligne
+            </div>
+            <div class="auth-copy">
+              <p class="auth-kicker">Jeu de cartes multijoueur</p>
+              <h1>Skyjo en ligne</h1>
+              <p>Skyjo en ligne permet de créer une salle privée ou publique, d'inviter ses proches et de jouer ensemble à distance.</p>
+            </div>
+            <p class="auth-quote">« Le 12 est quand même plus joli chez l’adversaire. »</p>
+          </aside>
+          <div class="auth-form-panel auth-loading-form-panel">
+            <div class="auth-form-inner">
+              <div class="auth-mobile-brand auth-home-brand">
+                <div class="auth-logo-frame" aria-hidden="true">
+                  <img class="auth-logo-image" src="/skyjo-logo.svg" alt="" width="116" height="116" />
+                </div>
+                <h1>Skyjo en ligne</h1>
+              </div>
+              <p class="auth-loading-description">Skyjo en ligne permet de créer une salle privée ou publique, d'inviter ses proches et de jouer ensemble à distance.</p>
+              <div class="auth-loading-status" role="status">
+                <span aria-hidden="true"></span>
+                <p>Chargement...</p>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
