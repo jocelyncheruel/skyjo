@@ -478,11 +478,11 @@ function GoogleIcon() {
   );
 }
 
-function AuthMobileBrand() {
+function AuthMobileBrand({ heading = false }) {
   return (
-    <div className="auth-mobile-brand">
+    <div className={`auth-mobile-brand${heading ? " auth-home-brand" : ""}`}>
       <img src="/skyjo-logo.svg" alt="" aria-hidden="true" />
-      <span>Skyjo en ligne</span>
+      {heading ? <h1>Skyjo en ligne</h1> : <span>Skyjo en ligne</span>}
     </div>
   );
 }
@@ -662,6 +662,52 @@ const LEGAL_DOCUMENTS = {
   },
 };
 
+export function LegalPage({ documentId }) {
+  const document = LEGAL_DOCUMENTS[documentId];
+
+  useEffect(() => {
+    if (!document) return undefined;
+    const previousTitle = window.document.title;
+    window.document.title = `${document.title} | Skyjo en ligne`;
+    return () => {
+      window.document.title = previousTitle;
+    };
+  }, [document]);
+
+  if (!document) return null;
+
+  return (
+    <main className="legal-page">
+      <article className="legal-page-card">
+        <header className="legal-page-header">
+          <a className="legal-page-brand" href="/" aria-label="Retour à Skyjo">
+            <AuthMobileBrand />
+          </a>
+          <p>{document.eyebrow}</p>
+          <h1>{document.title}</h1>
+          <p className="legal-page-date">Dernière mise à jour : 15 juillet 2026</p>
+        </header>
+        <div className="legal-page-content">
+          {document.sections.map(([title, content]) => (
+            <section key={title}>
+              <h2>{title}</h2>
+              <p>{content}</p>
+            </section>
+          ))}
+        </div>
+        <footer className="legal-page-footer">
+          <a href={documentId === "privacy" ? "/terms" : "/privacy"}>
+            {documentId === "privacy"
+              ? "Consulter les conditions d'utilisation"
+              : "Consulter la politique de confidentialité"}
+          </a>
+          <a href="/">Retour à Skyjo</a>
+        </footer>
+      </article>
+    </main>
+  );
+}
+
 function LegalModal({ documentId, onClose, onAcknowledge }) {
   const document = LEGAL_DOCUMENTS[documentId];
   const contentRef = useRef(null);
@@ -737,11 +783,11 @@ function AuthStoryPanel() {
         <span aria-hidden="true" /> Skyjo en ligne
       </div>
       <div className="auth-copy">
-        <p className="auth-kicker">Les cartes sont prêtes</p>
-        <h1>Retrouve tes amis autour de la table.</h1>
+        <p className="auth-kicker">Jeu de cartes multijoueur</p>
+        <h1>Skyjo en ligne</h1>
         <p>
-          Crée une salle, invite tes proches et joue une partie de Skyjo avec
-          eux.
+          Skyjo en ligne permet de créer une salle privée ou publique,
+          d&apos;inviter ses proches et de jouer ensemble à distance.
         </p>
       </div>
       <p className="auth-quote">
@@ -1065,7 +1111,7 @@ export function AuthView() {
         <AuthStoryPanel />
         <div className="auth-form-panel">
           <div className="auth-form-inner">
-            <AuthMobileBrand />
+            <AuthMobileBrand heading />
             <div className="auth-heading">
               <p className="auth-eyebrow">
                 {mode === "register"
@@ -1342,10 +1388,10 @@ export function AuthView() {
                 </button>
               </p>
             </form>
-            <p className="auth-security">
-              <LockKeyhole size={13} /> Tes données restent privées et
-              sécurisées.
-            </p>
+            <nav className="auth-public-links" aria-label="Informations légales">
+              <a href="/privacy">Politique de confidentialité</a>
+              <a href="/terms">Conditions d&apos;utilisation</a>
+            </nav>
           </div>
         </div>
       </section>

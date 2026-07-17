@@ -3,7 +3,7 @@ import { io } from 'socket.io-client';
 import { LogOut, MessageCircle, Send, X } from 'lucide-react';
 import Card from './components/Card.jsx';
 import PlayerBoard from './components/PlayerBoard.jsx';
-import { AuthView, ConsentGate, ResetPasswordView } from './Auth.jsx';
+import { AuthView, ConsentGate, LegalPage, ResetPasswordView } from './Auth.jsx';
 import { useAuth } from './authContext.js';
 import { apiFetch, AUTH_REMEMBER_KEY, SERVER_URL } from './apiClient.js';
 const AUTO_RECONNECT_TIMEOUT_MS = 5000;
@@ -156,7 +156,21 @@ function saveGameValue(key, value) {
   target.setItem(key, value);
 }
 
+const PUBLIC_LEGAL_ROUTES = {
+  '/privacy': 'privacy',
+  '/terms': 'terms',
+};
+
 export default function App() {
+  const pathname = typeof window === 'undefined'
+    ? '/'
+    : window.location.pathname.replace(/\/$/, '') || '/';
+  const legalDocumentId = PUBLIC_LEGAL_ROUTES[pathname];
+  if (legalDocumentId) return <LegalPage documentId={legalDocumentId} />;
+  return <SkyjoApp />;
+}
+
+function SkyjoApp() {
   const { user, ready, recoveryMode, logout } = useAuth();
   const [consent, setConsent] = useState(null);
   const [consentBusy, setConsentBusy] = useState(false);
