@@ -478,10 +478,24 @@ function GoogleIcon() {
   );
 }
 
+function AuthLogoMark() {
+  return (
+    <div className="auth-logo-frame" aria-hidden="true">
+      <img
+        className="auth-logo-image"
+        src="/skyjo-logo.svg"
+        alt=""
+        width="116"
+        height="116"
+      />
+    </div>
+  );
+}
+
 function AuthMobileBrand({ heading = false }) {
   return (
     <div className={`auth-mobile-brand${heading ? " auth-home-brand" : ""}`}>
-      <img src="/skyjo-logo.svg" alt="" aria-hidden="true" />
+      <AuthLogoMark />
       {heading ? <h1>Skyjo en ligne</h1> : <span>Skyjo en ligne</span>}
     </div>
   );
@@ -780,7 +794,7 @@ function AuthStoryPanel() {
     <aside className="auth-story">
       <div className="auth-grain" />
       <div className="auth-brand">
-        <span aria-hidden="true" /> Skyjo en ligne
+        <AuthLogoMark /> Skyjo en ligne
       </div>
       <div className="auth-copy">
         <p className="auth-kicker">Jeu de cartes multijoueur</p>
