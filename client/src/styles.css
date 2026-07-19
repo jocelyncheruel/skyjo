@@ -4507,6 +4507,14 @@ button.sj-action-count-badge:focus-visible {
     gap: clamp(18px, 3vw, 30px);
   }
 
+  .sj-action-hand-modal-grid.sj-action-hand-modal-grid-1 {
+    grid-template-columns: max-content;
+  }
+
+  .sj-action-hand-modal-grid.sj-action-hand-modal-grid-2 {
+    grid-template-columns: repeat(2, max-content);
+  }
+
   .sj-action-hand-dock {
     right: 0;
     bottom: clamp(18px, 3vh, 32px);

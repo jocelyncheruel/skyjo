@@ -1434,7 +1434,9 @@ function ActionHandModal({
             setShowScrollIndicator(scrollArea.scrollHeight > scrollArea.clientHeight + 2 && !isAtBottom);
           }}
         >
-          <div className="sj-action-hand-modal-grid">
+          <div
+            className={`sj-action-hand-modal-grid sj-action-hand-modal-grid-${Math.min(cards.length, 3)}`}
+          >
             {cards.map((card) => {
               const playable = !card.preview
                 && isMyTurn
@@ -1532,7 +1534,9 @@ function PlayerActionCardsModal({
         </div>
         {cards.length > 0 ? (
           <div className="sj-action-hand-modal-scroll">
-            <div className="sj-action-hand-modal-grid sj-action-player-cards-grid">
+            <div
+              className={`sj-action-hand-modal-grid sj-action-player-cards-grid sj-action-hand-modal-grid-${Math.min(cards.length, 3)}`}
+            >
               {cards.map((card) => (
                 <div key={card.id} className="sj-action-hand-modal-item">
                   <ActionTile
@@ -1658,7 +1662,9 @@ function StealActionCardModal({
           )}
         </div>
         <div className="sj-action-hand-modal-scroll">
-          <div className="sj-action-hand-modal-grid sj-action-steal-card-grid">
+          <div
+            className={`sj-action-hand-modal-grid sj-action-steal-card-grid sj-action-hand-modal-grid-${Math.min(cards.length, 3)}`}
+          >
             {cards.map((card) => (
               <div key={card.id} className="sj-action-hand-modal-item">
                 <ActionTile
@@ -1763,7 +1769,9 @@ function PlayDiscardActionModal({
         </div>
         {cards.length > 0 ? (
           <div className="sj-action-hand-modal-scroll">
-            <div className="sj-action-hand-modal-grid sj-action-steal-card-grid">
+            <div
+              className={`sj-action-hand-modal-grid sj-action-steal-card-grid sj-action-hand-modal-grid-${Math.min(cards.length, 3)}`}
+            >
               {cards.map((card) => (
                 <div key={card.id} className="sj-action-hand-modal-item">
                   <ActionTile
