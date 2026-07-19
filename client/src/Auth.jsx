@@ -453,6 +453,7 @@ function TurnstileWidget({ onToken, resetSignal }) {
         sitekey: TURNSTILE_SITE_KEY,
         theme: "light",
         language: "fr",
+        size: containerRef.current.getBoundingClientRect().width < 300 ? "compact" : "flexible",
         appearance: "interaction-only",
         callback: (token) => onToken(token),
         "expired-callback": () => onToken(""),

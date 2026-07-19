@@ -6,6 +6,8 @@ import PlayerBoard from './components/PlayerBoard.jsx';
 import { AuthLoadingView, AuthView, ConsentGate, LegalPage, ResetPasswordView } from './Auth.jsx';
 import { useAuth } from './authContext.js';
 import { apiFetch, AUTH_REMEMBER_KEY, SERVER_URL } from './apiClient.js';
+import { useAdaptiveBoardSizing } from './useAdaptiveBoardSizing.js';
+
 const AUTO_RECONNECT_TIMEOUT_MS = 5000;
 
 async function serverErrorMessage(response, fallback) {
@@ -121,27 +123,6 @@ function SkyjoLogo({ label = 'Skyjo', connectionBadge = null }) {
       </span>
     </div>
   );
-}
-
-function useAdaptiveBoardSizing() {
-  const shellRef = useRef(null);
-  const boardAreaRef = useRef(null);
-  const opponentsRef = useRef(null);
-  const playColumnRef = useRef(null);
-  const meWrapRef = useRef(null);
-  const centerRef = useRef(null);
-  const actionPanelRef = useRef(null);
-
-  return {
-    shellRef,
-    boardAreaRef,
-    opponentsRef,
-    playColumnRef,
-    meWrapRef,
-    centerRef,
-    actionPanelRef,
-    layoutReady: true,
-  };
 }
 
 function readGameValue(key) {
@@ -1893,7 +1874,8 @@ function GameScreen({
     centerRef,
     actionPanelRef,
     layoutReady,
-  } = useAdaptiveBoardSizing(state.players.length, layoutKey);
+    layoutClassName,
+  } = useAdaptiveBoardSizing(state.players.length, layoutKey, isActionMode);
 
   useEffect(() => {
     if (!actionPlayId) {
@@ -2438,10 +2420,12 @@ function GameScreen({
   return (
     <div
       ref={shellRef}
-      className={`sj-app-shell ${state.players.length === 2 ? 'sj-two-player-game' : ''} ${isActionMode ? 'sj-action-game' : ''} ${layoutReady ? '' : 'sj-layout-pending'}`}
+      className={`sj-app-shell ${state.players.length === 2 ? 'sj-two-player-game' : ''} ${isActionMode ? 'sj-action-game' : ''} ${layoutClassName} ${layoutReady ? '' : 'sj-layout-pending'}`}
     >
-      {leaveButton}
-      {chatButton}
+      <div className="sj-game-controls" aria-label="Contrôles de la partie">
+        {chatButton}
+        {leaveButton}
+      </div>
       {isActionMode && state.phase !== 'roundEnd' && (
         <ActionHandDock
           cards={actionCardsForDisplay}
@@ -2474,7 +2458,7 @@ function GameScreen({
         {others.length > 0 && (
           <section
             ref={opponentsRef}
-            className={`sj-opponents sj-opponents-count-${Math.min(others.length, 4)}`}
+            className={`sj-player-zone sj-opponents sj-opponents-count-${Math.min(others.length, 4)}`}
             aria-label="Adversaires"
           >
             {others.map((player) => (
@@ -2498,44 +2482,44 @@ function GameScreen({
           </section>
         )}
 
-        <section ref={playColumnRef} className="sj-play-column">
-          <div ref={centerRef} className="sj-center">
-            <div ref={actionPanelRef} className="sj-action-panel">
-              <div className="sj-pile-group">
-                <PileButton
-                  ariaLabel="Piocher dans le paquet"
-                  enabled={canDrawDeck}
-                  active={canDrawDeck}
-                  drawnCard={drawnFromDeck ? drawnCard : null}
-                  drawnFrom="deck"
-                  drawnPulse={drawnCardIsMine}
-                  onClick={() => socket.emit('drawCard', { source: 'deck' })}
-                >
-                  <Card faceUp={false} size="pile" pulse={canDrawDeck} />
-                </PileButton>
+        <section ref={centerRef} className="sj-center sj-piles-zone" aria-label="Pioches">
+          <div ref={actionPanelRef} className="sj-action-panel">
+            <div className="sj-pile-group">
+              <PileButton
+                ariaLabel="Piocher dans le paquet"
+                enabled={canDrawDeck}
+                active={canDrawDeck}
+                drawnCard={drawnFromDeck ? drawnCard : null}
+                drawnFrom="deck"
+                drawnPulse={drawnCardIsMine}
+                onClick={() => socket.emit('drawCard', { source: 'deck' })}
+              >
+                <Card faceUp={false} size="pile" pulse={canDrawDeck} />
+              </PileButton>
 
-                <PileButton
-                  ariaLabel={canDiscardDrawn ? 'Défausser la carte tirée' : 'Piocher dans la défausse'}
-                  enabled={canDrawDiscard || canDiscardDrawn}
-                  active={canDrawDiscard || canDiscardDrawn}
-                  tone={canDiscardDrawn ? 'danger' : 'default'}
-                  drawnCard={drawnFromDiscard ? drawnCard : null}
-                  drawnFrom="discard"
-                  drawnPulse={drawnCardIsMine}
-                  onClick={handleDiscardClick}
-                >
-                  {state.discardTop ? (
-                    <Card value={state.discardTop.value} kind={state.discardTop.kind} faceUp size="pile" pulse={canDrawDiscard || canDiscardDrawn} tone={canDiscardDrawn ? 'danger' : undefined} />
-                  ) : (
-                    <Card removed size="pile" />
-                  )}
-                </PileButton>
-              </div>
+              <PileButton
+                ariaLabel={canDiscardDrawn ? 'Défausser la carte tirée' : 'Piocher dans la défausse'}
+                enabled={canDrawDiscard || canDiscardDrawn}
+                active={canDrawDiscard || canDiscardDrawn}
+                tone={canDiscardDrawn ? 'danger' : 'default'}
+                drawnCard={drawnFromDiscard ? drawnCard : null}
+                drawnFrom="discard"
+                drawnPulse={drawnCardIsMine}
+                onClick={handleDiscardClick}
+              >
+                {state.discardTop ? (
+                  <Card value={state.discardTop.value} kind={state.discardTop.kind} faceUp size="pile" pulse={canDrawDiscard || canDiscardDrawn} tone={canDiscardDrawn ? 'danger' : undefined} />
+                ) : (
+                  <Card removed size="pile" />
+                )}
+              </PileButton>
             </div>
           </div>
+        </section>
 
+        <section ref={playColumnRef} className="sj-play-column">
           {me && (
-            <div ref={meWrapRef} className="sj-me-wrap">
+            <div ref={meWrapRef} className="sj-player-zone sj-me-wrap">
               <PlayerBoard
                 player={me}
                 isMe
