@@ -2282,47 +2282,15 @@ input:focus {
 }
 
 .sj-board-action-popup-card {
-  --sj-board-action-popup-width: clamp(74px, calc(var(--card-width) * 2.35), 168px);
-  width: var(--sj-board-action-popup-width);
-  aspect-ratio: 88 / 122;
-  display: flex;
-  flex-direction: column;
-  border: clamp(1.5px, calc(var(--sj-board-action-popup-width) * 0.02), 3px) solid rgba(255, 231, 177, 0.88);
-  border-radius: clamp(9px, calc(var(--sj-board-action-popup-width) * 0.095), 15px);
-  background: #24152f;
-  color: #fff;
-  overflow: hidden;
+  --sj-action-card-width: clamp(74px, calc(var(--card-width) * 2.35), 168px);
+  flex: 0 0 auto;
+  border-color: rgba(255, 231, 177, 0.88);
   box-shadow:
     0 18px 40px rgba(0, 0, 0, 0.48),
     0 0 0 1px rgba(255, 255, 255, 0.16),
     0 0 28px rgba(240, 189, 87, 0.3);
   transform-origin: center;
   animation: sjBoardActionPopupCard 3.4s cubic-bezier(0.2, 0.9, 0.18, 1) both;
-}
-
-.sj-board-action-popup-art {
-  flex: 1 1 auto;
-  min-height: 0;
-  display: block;
-  background-position: center;
-  background-size: cover;
-  background-repeat: no-repeat;
-}
-
-.sj-board-action-popup-copy {
-  min-height: clamp(34px, calc(var(--sj-board-action-popup-width) * 0.36), 58px);
-  display: grid;
-  align-content: center;
-  border-top: 1px solid rgba(255, 231, 177, 0.42);
-  background: linear-gradient(145deg, #702765, #321c49);
-  padding: clamp(5px, calc(var(--sj-board-action-popup-width) * 0.055), 9px);
-}
-
-.sj-board-action-popup-copy strong {
-  color: #fff;
-  font-size: clamp(9px, calc(var(--sj-board-action-popup-width) * 0.1), 15px);
-  font-weight: 950;
-  line-height: 1.08;
 }
 
 .sj-board-me {

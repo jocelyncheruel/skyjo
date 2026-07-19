@@ -32,12 +32,12 @@ export default function PlayerBoard({
     <section className={boardClasses.join(' ')}>
       {actionPopup && (
         <div key={actionPopup.id} className="sj-board-action-popup" aria-live="polite">
-          <div className="sj-board-action-popup-card">
+          <div className="sj-action-card sj-action-card-static sj-board-action-popup-card">
             <span
-              className={`sj-board-action-popup-art sj-action-art-${actionPopup.artType || 'drawThree'}`}
+              className={`sj-action-card-art sj-action-art-${actionPopup.artType || 'drawThree'}`}
               aria-hidden="true"
             />
-            <span className="sj-board-action-popup-copy">
+            <span className="sj-action-card-copy">
               <strong>{actionPopup.title}</strong>
             </span>
           </div>
