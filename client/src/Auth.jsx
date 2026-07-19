@@ -249,7 +249,13 @@ export function AuthProvider({ children }) {
     try {
       const data = await authApi('/api/auth/login', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password, remember, captchaToken }),
+        body: JSON.stringify({
+          email,
+          password,
+          remember,
+          captchaToken,
+          preferredLocale: navigator.language,
+        }),
       });
       setCsrfToken(data?.csrfToken);
       setUser(data?.user || null);
@@ -271,7 +277,15 @@ export function AuthProvider({ children }) {
       try {
         const data = await authApi('/api/auth/register', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, password, firstName, lastName, captchaToken, remember }),
+          body: JSON.stringify({
+            email,
+            password,
+            firstName,
+            lastName,
+            captchaToken,
+            remember,
+            preferredLocale: navigator.language,
+          }),
         });
         if (remember) localStorage.setItem(LAST_EMAIL_KEY, email);
         else localStorage.removeItem(LAST_EMAIL_KEY);

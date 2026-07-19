@@ -521,7 +521,10 @@ export function createAuthBff({
 
   router.post('/login', rateLimit('auth-login', 8, 10 * 60_000), requireOrigin, async (req, res, next) => {
     try {
-      const body = objectPayload(req.body, ['email', 'password', 'remember', 'captchaToken']);
+      const body = objectPayload(
+        req.body,
+        ['email', 'password', 'remember', 'captchaToken', 'preferredLocale'],
+      );
       const email = normalizeEmail(body.email);
       const password = String(body.password || '');
       if (!email || password.length < 1 || password.length > 128) throw authFailure();
@@ -531,7 +534,21 @@ export function createAuthBff({
         options: body.captchaToken ? { captchaToken: String(body.captchaToken).slice(0, 2048) } : undefined,
       });
       if (error || !data?.session) throw publicSupabaseError(error) || authFailure();
-      res.json(await createBrowserSession(res, data.session, body.remember === true));
+      let session = data.session;
+      const currentLocale = normalizeLocale(session.user?.user_metadata?.preferred_locale);
+      const preferredLocale = normalizeLocale(body.preferredLocale);
+      if (!currentLocale && preferredLocale) {
+        try {
+          const { data: updated, error: updateError } = await client.auth.updateUser({
+            data: { preferred_locale: preferredLocale },
+          });
+          if (updateError) logInternal('auth_password_profile_update', updateError);
+          else if (updated?.user) session = { ...session, user: updated.user };
+        } catch (updateError) {
+          logInternal('auth_password_profile_update', updateError);
+        }
+      }
+      res.json(await createBrowserSession(res, session, body.remember === true));
     } catch (error) {
       next(error instanceof PublicError || isTransientAuthError(error) ? error : authFailure());
     }
@@ -539,11 +556,15 @@ export function createAuthBff({
 
   router.post('/register', rateLimit('auth-register', 5, 10 * 60_000), requireOrigin, async (req, res, next) => {
     try {
-      const body = objectPayload(req.body, ['email', 'password', 'firstName', 'lastName', 'remember', 'captchaToken']);
+      const body = objectPayload(
+        req.body,
+        ['email', 'password', 'firstName', 'lastName', 'remember', 'captchaToken', 'preferredLocale'],
+      );
       const email = normalizeEmail(body.email);
       const password = String(body.password || '');
       const firstName = normalizeName(body.firstName);
       const lastName = normalizeName(body.lastName);
+      const preferredLocale = normalizeLocale(body.preferredLocale);
       if (!email || password.length < 12 || password.length > 128 || !firstName || !lastName) {
         throw new PublicError('invalid_registration', "Impossible de finaliser l'inscription.", 400);
       }
@@ -559,6 +580,7 @@ export function createAuthBff({
             last_name: lastName,
             display_name: `${firstName} ${lastName}`.trim(),
             source: 'skyjo',
+            ...(preferredLocale ? { preferred_locale: preferredLocale } : {}),
           },
         },
       });
