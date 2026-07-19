@@ -1551,6 +1551,7 @@ function StealActionCardModal({
 function DrawThreeActionModal({
   open,
   cards = [],
+  canRevealHidden = true,
   onSelect,
 }) {
   const modalRef = useRef(null);
@@ -1594,9 +1595,10 @@ function DrawThreeActionModal({
         <button
           type="button"
           className="sj-btn sj-action-draw-three-none"
+          disabled={!canRevealHidden}
           onClick={() => onSelect(null)}
         >
-          Aucune
+          {canRevealHidden ? 'Aucune' : 'Aucune carte cachée'}
         </button>
       </section>
     </div>
@@ -2283,6 +2285,7 @@ function GameScreen({
     <DrawThreeActionModal
       open={showDrawThreeModal}
       cards={pendingAction?.type === 'drawThree' ? pendingAction.drawn : []}
+      canRevealHidden={me?.board.some((slot) => !slot.removed && !slot.faceUp)}
       onSelect={handleDrawThreeChoice}
     />
   );

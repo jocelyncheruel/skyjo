@@ -468,12 +468,15 @@ function advanceTurn(state) {
   const finishingId = currentPlayerId(state);
   const player = state.playersById[finishingId];
   const isFinalTurn = !!state.roundEnderId && finishingId !== state.roundEnderId;
-  if (!state.roundEnderId && boardFinished(player)) {
+  const finishedBoard = boardFinished(player);
+  if (!state.roundEnderId && finishedBoard) {
     state.roundEnderId = finishingId;
     state.actionNextStarterId = finishingId;
     log(state, `${player.name} termine son tableau. Dernier tour.`);
   }
-  if ((state.extraTurns[finishingId] || 0) > 0) {
+  if (finishedBoard) {
+    state.extraTurns[finishingId] = 0;
+  } else if ((state.extraTurns[finishingId] || 0) > 0) {
     state.extraTurns[finishingId] -= 1;
     state.turnStage = 'choose';
     state.drawnCard = null;
@@ -516,7 +519,8 @@ export function decideActionGameCard(state, playerId, keep) {
   else {
     state.discard.push(state.drawnCard.card);
     state.drawnCard = null;
-    state.turnStage = 'reveal';
+    if (boardFinished(state.playersById[playerId])) advanceTurn(state);
+    else state.turnStage = 'reveal';
   }
 }
 
@@ -891,6 +895,9 @@ function storeActionDraft(state, pending, playerId, draft) {
   if (pending.type === 'drawThree') {
     if (!Object.prototype.hasOwnProperty.call(draft, 'choiceIndex')) throw new Error('Sélection invalide.');
     if (draft.choiceIndex === null) {
+      if (boardFinished(state.playersById[actorId])) {
+        throw new Error('Vous n’avez plus de carte cachée à retourner.');
+      }
       pending.selection = { choiceIndex: null };
       return;
     }
