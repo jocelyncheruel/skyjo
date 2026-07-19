@@ -1266,13 +1266,6 @@ export function publicActionState(state, forPlayerId) {
   const actionPausedForDefense = !!defensePrompt;
   const canSeeDefensePrompt = defensePrompt
     && (defensePrompt.actorId === forPlayerId || defensePrompt.targetId === forPlayerId);
-  const inspectableTargetId = pending?.playerId === forPlayerId
-    ? pending.type === 'removeEach'
-      ? pending.remaining?.[0]
-      : pending.type === 'stealAction'
-        ? pending.selection?.stealTargetId
-        : null
-    : null;
   return {
     actionMarket: state.actionMarket,
     actionDiscard: state.actionDiscard,
@@ -1317,11 +1310,8 @@ export function publicActionState(state, forPlayerId) {
     turnSerial: state.turnSerial,
     playersAction: Object.fromEntries(state.order.map((id) => {
       const player = state.playersById[id];
-      const canSeeActionCards = id === forPlayerId || id === inspectableTargetId;
       return [id, {
-        actionCards: canSeeActionCards
-          ? player.actionCards
-          : player.actionCards.map((_, index) => ({ id: `hidden-${index}`, type: 'hidden', hidden: true })),
+        actionCards: player.actionCards,
         peek: id === forPlayerId ? visibleOwnPeek : null,
       }];
     })),
