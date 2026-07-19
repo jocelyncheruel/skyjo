@@ -346,7 +346,7 @@ function GameApp() {
       timeout: 8000,
       withCredentials: true,
       auth: {
-        protocolVersion: 7,
+        protocolVersion: 8,
         roomId: savedRoomId,
         playerName: savedPlayerName,
       },
@@ -385,7 +385,7 @@ function GameApp() {
       setPlayerId(pid);
       saveGameValue('sj-room-id', rid);
       nextSocket.auth = {
-        protocolVersion: 7,
+        protocolVersion: 8,
         roomId: rid,
         playerName: normalizePlayerNameInput(readGameValue('sj-player-name')),
       };
@@ -661,16 +661,16 @@ function GameApp() {
 
               <div className="sj-divider"><span>ou</span></div>
 
-              <label htmlFor="room-code">Code de la salle</label>
+              <label htmlFor="room-code">Code de la salle à 6 chiffres</label>
               <input
                 id="room-code"
                 value={joinRoomInput}
-                onChange={(event) => setJoinRoomInput(event.target.value.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 16))}
+                onChange={(event) => setJoinRoomInput(event.target.value.replace(/[^0-9]/g, '').slice(0, 6))}
                 onPaste={handleRoomCodePaste}
-                placeholder="Code d'invitation"
-                inputMode="text"
-                pattern="[A-Za-z0-9_-]{16}"
-                maxLength={16}
+                placeholder="123456"
+                inputMode="numeric"
+                pattern="[0-9]{6}"
+                maxLength={6}
                 autoComplete="off"
               />
               <button className="sj-btn" disabled={!canJoinRoom} onClick={joinRoom}>

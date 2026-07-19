@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { isIP } from 'node:net';
 
-export const CLIENT_PROTOCOL_VERSION = 7;
-export const ROOM_SCHEMA_VERSION = 2;
+export const CLIENT_PROTOCOL_VERSION = 8;
+export const ROOM_SCHEMA_VERSION = 3;
 export const ROOM_TTL_MS = 24 * 60 * 60 * 1000;
 export const CONSENT_VERSION = '2026-07-15-bff';
 export const MAX_PLAYER_NAME_LENGTH = 20;
@@ -46,7 +46,7 @@ export function clientIpFromForwarded(forwarded, fallback) {
 
 export function normalizeRoomId(value) {
   const roomId = String(value || '').trim();
-  return /^[A-Za-z0-9_-]{16}$/.test(roomId) ? roomId : '';
+  return /^[0-9]{6}$/.test(roomId) ? roomId : '';
 }
 
 export function normalizePlayerId(value) {

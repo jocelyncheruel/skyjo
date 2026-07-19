@@ -1,4 +1,4 @@
-export const ROOM_CODE_PATTERN = /^[A-Za-z0-9_-]{16}$/;
+export const ROOM_CODE_PATTERN = /^[0-9]{6}$/;
 
 export function extractRoomCodeFromInvite(value) {
   const input = String(value || '').trim();

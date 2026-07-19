@@ -26,7 +26,7 @@ const MAX_SOCKETS_PER_USER = 3;
 const CHAT_PAGE_SIZE = 80;
 const DISCONNECT_GRACE_MS = 30_000;
 const SESSION_CHECK_CACHE_MS = 30_000;
-const generateRoomId = customAlphabet('0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz-', 16);
+const generateRoomId = customAlphabet('0123456789', 6);
 const NODE_ENV = process.env.NODE_ENV || 'development';
 if (!['development', 'test', 'production'].includes(NODE_ENV)) {
   console.error('❌  NODE_ENV doit valoir development, test ou production.');
@@ -883,6 +883,11 @@ io.on('connection', (socket) => {
     const roomId = normalizeRoomId(data.roomId);
     const playerName = normalizePlayerName(data.playerName);
     if (!roomId || !playerName) throw new PublicError('invalid_join', 'Impossible de rejoindre cette salle.', 400);
+    const joinUserLimit = consumeRateLimit(`join-attempt:user:${socket.data.auth.user.id}`, { limit: 10, windowMs: 60_000 });
+    const joinIpLimit = consumeRateLimit(`join-attempt:ip:${socketIp(socket)}`, { limit: 40, windowMs: 60_000 });
+    if (!joinUserLimit.allowed || !joinIpLimit.allowed) {
+      throw new PublicError('rate_limited', 'Trop de tentatives. Réessayez plus tard.', 429);
+    }
     let state = await getOrLoadRoom(roomId);
     if (!state) {
       const userLimit = consumeRateLimit(`join-failure:user:${socket.data.auth.user.id}`, { limit: 5, windowMs: 600_000 });

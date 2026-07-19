@@ -10,13 +10,13 @@ REVOKE ALL ON TABLE public.skyjo_schema_migrations FROM PUBLIC, anon, authentica
 DO $$
 BEGIN
   IF NOT EXISTS (
-    SELECT 1 FROM public.skyjo_schema_migrations WHERE version = 'v2'
+    SELECT 1 FROM public.skyjo_schema_migrations WHERE version = 'v3'
   ) THEN
     IF to_regclass('public.rooms') IS NOT NULL THEN
       TRUNCATE TABLE public.rooms CASCADE;
     END IF;
     INSERT INTO public.skyjo_schema_migrations (version)
-    VALUES ('v2');
+    VALUES ('v3');
   END IF;
 END;
 $$;
@@ -26,7 +26,7 @@ CREATE TABLE IF NOT EXISTS public.rooms (
   state_json JSONB NOT NULL,
   owner_user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
   state_revision BIGINT NOT NULL DEFAULT 0,
-  state_schema_version SMALLINT NOT NULL DEFAULT 2,
+  state_schema_version SMALLINT NOT NULL DEFAULT 3,
   visibility TEXT NOT NULL DEFAULT 'private',
   phase TEXT NOT NULL DEFAULT 'lobby',
   game_mode TEXT NOT NULL DEFAULT 'classic',
@@ -38,13 +38,13 @@ CREATE TABLE IF NOT EXISTS public.rooms (
   CONSTRAINT rooms_visibility_check CHECK (visibility IN ('private', 'public')),
   CONSTRAINT rooms_player_count_check CHECK (player_count BETWEEN 0 AND 8),
   CONSTRAINT rooms_state_size_check CHECK (octet_length(state_json::text) <= 2097152),
-  CONSTRAINT rooms_schema_version_check CHECK (state_schema_version = 2),
-  CONSTRAINT rooms_id_check CHECK (room_id ~ '^[A-Za-z0-9_-]{16}$')
+  CONSTRAINT rooms_schema_version_check CHECK (state_schema_version = 3),
+  CONSTRAINT rooms_id_check CHECK (room_id ~ '^[0-9]{6}$')
 );
 
 ALTER TABLE public.rooms ADD COLUMN IF NOT EXISTS owner_user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE;
 ALTER TABLE public.rooms ADD COLUMN IF NOT EXISTS state_revision BIGINT NOT NULL DEFAULT 0;
-ALTER TABLE public.rooms ADD COLUMN IF NOT EXISTS state_schema_version SMALLINT NOT NULL DEFAULT 2;
+ALTER TABLE public.rooms ADD COLUMN IF NOT EXISTS state_schema_version SMALLINT NOT NULL DEFAULT 3;
 ALTER TABLE public.rooms ADD COLUMN IF NOT EXISTS visibility TEXT NOT NULL DEFAULT 'private';
 ALTER TABLE public.rooms ADD COLUMN IF NOT EXISTS phase TEXT NOT NULL DEFAULT 'lobby';
 ALTER TABLE public.rooms ADD COLUMN IF NOT EXISTS game_mode TEXT NOT NULL DEFAULT 'classic';
@@ -52,15 +52,20 @@ ALTER TABLE public.rooms ADD COLUMN IF NOT EXISTS player_count SMALLINT NOT NULL
 ALTER TABLE public.rooms ADD COLUMN IF NOT EXISTS creator_name TEXT NOT NULL DEFAULT '';
 ALTER TABLE public.rooms ADD COLUMN IF NOT EXISTS quarantined_at TIMESTAMPTZ;
 ALTER TABLE public.rooms ADD COLUMN IF NOT EXISTS quarantine_reason TEXT;
-ALTER TABLE public.rooms ALTER COLUMN state_schema_version SET DEFAULT 2;
+ALTER TABLE public.rooms ALTER COLUMN state_schema_version SET DEFAULT 3;
+
+DELETE FROM public.rooms
+WHERE state_schema_version IS DISTINCT FROM 3
+   OR room_id !~ '^[0-9]{6}$';
+
 ALTER TABLE public.rooms ALTER COLUMN state_schema_version SET NOT NULL;
 
 ALTER TABLE public.rooms DROP CONSTRAINT IF EXISTS rooms_id_check;
 ALTER TABLE public.rooms ADD CONSTRAINT rooms_id_check
-  CHECK (room_id ~ '^[A-Za-z0-9_-]{16}$');
+  CHECK (room_id ~ '^[0-9]{6}$');
 ALTER TABLE public.rooms DROP CONSTRAINT IF EXISTS rooms_schema_version_check;
 ALTER TABLE public.rooms ADD CONSTRAINT rooms_schema_version_check
-  CHECK (state_schema_version = 2);
+  CHECK (state_schema_version = 3);
 
 DO $$
 BEGIN
