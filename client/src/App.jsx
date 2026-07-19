@@ -6,6 +6,7 @@ import PlayerBoard from './components/PlayerBoard.jsx';
 import { AuthLoadingView, AuthView, ConsentGate, LegalPage, ResetPasswordView } from './Auth.jsx';
 import { useAuth } from './authContext.js';
 import { apiFetch, AUTH_REMEMBER_KEY, SERVER_URL } from './apiClient.js';
+import { extractRoomCodeFromInvite, ROOM_CODE_PATTERN } from './inviteCode.js';
 import { useAdaptiveBoardSizing } from './useAdaptiveBoardSizing.js';
 
 const AUTO_RECONNECT_TIMEOUT_MS = 5000;
@@ -27,7 +28,7 @@ function takeRoomInviteFromFragment() {
   if (typeof window === 'undefined') return '';
   const params = new URLSearchParams(window.location.hash.replace(/^#/, ''));
   const candidate = params.get('room') || '';
-  const room = /^[A-Za-z0-9_-]{16}$/.test(candidate) ? candidate : '';
+  const room = ROOM_CODE_PATTERN.test(candidate) ? candidate : '';
   if (window.location.hash) window.history.replaceState({}, document.title, `${window.location.pathname}${window.location.search}`);
   return room;
 }
@@ -459,7 +460,7 @@ function GameApp() {
     setAutoReconnectPending(false);
     setPendingReconnectState(null);
     const candidate = String(targetRoomId || '').trim();
-    const normalizedRoomId = /^[A-Za-z0-9_-]{16}$/.test(candidate) ? candidate : '';
+    const normalizedRoomId = ROOM_CODE_PATTERN.test(candidate) ? candidate : '';
     if (!normalizedRoomId) {
       showError('Le code de salle est invalide.');
       return;
@@ -471,6 +472,18 @@ function GameApp() {
 
   function joinRoom() {
     joinRoomById(joinRoomInput);
+  }
+
+  function handleRoomCodePaste(event) {
+    const pastedText = event.clipboardData.getData('text');
+    const roomCode = extractRoomCodeFromInvite(pastedText);
+    const looksLikeInviteLink = pastedText.includes('://')
+      || /^[#?]/.test(pastedText.trim())
+      || /(?:^|[?&#])room=/i.test(pastedText);
+    if (!roomCode && !looksLikeInviteLink) return;
+
+    event.preventDefault();
+    setJoinRoomInput(roomCode);
   }
 
   function openPublicRoomsPanel() {
@@ -525,7 +538,7 @@ function GameApp() {
       );
     }
 
-    const canJoinRoom = connected && /^[A-Za-z0-9_-]{16}$/.test(joinRoomInput);
+    const canJoinRoom = connected && ROOM_CODE_PATTERN.test(joinRoomInput);
     const canJoinPublicRoom = connected;
 
     return (
@@ -653,6 +666,7 @@ function GameApp() {
                 id="room-code"
                 value={joinRoomInput}
                 onChange={(event) => setJoinRoomInput(event.target.value.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 16))}
+                onPaste={handleRoomCodePaste}
                 placeholder="Code d'invitation"
                 inputMode="text"
                 pattern="[A-Za-z0-9_-]{16}"
