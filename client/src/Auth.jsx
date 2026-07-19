@@ -296,7 +296,11 @@ export function AuthProvider({ children }) {
     try {
       const data = await authApi('/api/auth/google/start', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ remember, captchaToken }),
+        body: JSON.stringify({
+          remember,
+          captchaToken,
+          preferredLocale: navigator.language,
+        }),
       });
       if (!data?.url) throw new Error("La connexion avec Google n'est pas disponible.");
       window.location.assign(data.url);

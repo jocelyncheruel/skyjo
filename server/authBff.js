@@ -61,6 +61,80 @@ function normalizeName(value) {
     .replace(/\s+/gu, ' ').trim()].slice(0, 50).join('');
 }
 
+function normalizeLocale(value) {
+  const locale = String(value || '').trim().replaceAll('_', '-');
+  if (!locale || locale.length > 35) return '';
+  try {
+    return Intl.getCanonicalLocales(locale)[0] || '';
+  } catch {
+    return '';
+  }
+}
+
+async function fetchGoogleUserInfo(providerToken) {
+  if (typeof providerToken !== 'string' || providerToken.length < 20 || providerToken.length > 8192) {
+    return null;
+  }
+  const response = await fetch('https://openidconnect.googleapis.com/v1/userinfo', {
+    headers: { Authorization: `Bearer ${providerToken}` },
+    signal: AbortSignal.timeout(5000),
+  });
+  if (!response.ok) throw new Error(`google_userinfo_failed_${response.status}`);
+  const profile = await response.json();
+  if (!profile || typeof profile !== 'object' || Array.isArray(profile)) {
+    throw new Error('google_userinfo_invalid');
+  }
+  return profile;
+}
+
+export function googleProfileMetadata(user, providerProfile = null, browserLocale = '') {
+  const metadata = user?.user_metadata && typeof user.user_metadata === 'object'
+    ? user.user_metadata
+    : {};
+  const directProfile = providerProfile && typeof providerProfile === 'object'
+    && !Array.isArray(providerProfile)
+    ? providerProfile
+    : {};
+  const identity = Array.isArray(user?.identities)
+    ? user.identities.find((candidate) => candidate?.provider === 'google')
+    : null;
+  const identityData = identity?.identity_data && typeof identity.identity_data === 'object'
+    ? identity.identity_data
+    : {};
+  const providerFirstName = normalizeName(
+    directProfile.given_name || identityData.given_name || metadata.given_name || '',
+  );
+  const providerLastName = normalizeName(
+    directProfile.family_name || identityData.family_name || metadata.family_name || '',
+  );
+  const preferredLocale = normalizeLocale(
+    browserLocale || directProfile.locale || identityData.locale
+      || metadata.preferred_locale || metadata.locale || '',
+  );
+  if (!providerFirstName && !providerLastName && !preferredLocale) return null;
+
+  const firstName = providerFirstName || normalizeName(metadata.first_name || '');
+  const lastName = providerLastName || normalizeName(metadata.last_name || '');
+  const displayName = normalizeName(`${firstName} ${lastName}`.trim()
+    || directProfile.name || directProfile.full_name
+    || identityData.name || identityData.full_name
+    || metadata.name || metadata.full_name || '');
+  const update = {};
+  if (providerFirstName && normalizeName(metadata.first_name || '') !== providerFirstName) {
+    update.first_name = providerFirstName;
+  }
+  if (providerLastName && normalizeName(metadata.last_name || '') !== providerLastName) {
+    update.last_name = providerLastName;
+  }
+  if (displayName && normalizeName(metadata.display_name || '') !== displayName) {
+    update.display_name = displayName;
+  }
+  if (preferredLocale && normalizeLocale(metadata.preferred_locale || '') !== preferredLocale) {
+    update.preferred_locale = preferredLocale;
+  }
+  return Object.keys(update).length ? update : null;
+}
+
 function publicUser(user) {
   if (!user?.id) return null;
   const metadata = user.user_metadata || {};
@@ -74,6 +148,7 @@ function publicUser(user) {
     lastName,
     displayName: normalizeName(metadata.display_name || metadata.full_name || metadata.name
       || `${firstName} ${lastName}`.trim() || fallback || 'Joueur'),
+    preferredLocale: normalizeLocale(metadata.preferred_locale || metadata.locale || ''),
   };
 }
 
@@ -545,7 +620,7 @@ export function createAuthBff({
 
   router.post('/google/start', rateLimit('auth-google', 10, 10 * 60_000), requireOrigin, async (req, res, next) => {
     try {
-      const body = objectPayload(req.body, ['remember', 'captchaToken']);
+      const body = objectPayload(req.body, ['remember', 'captchaToken', 'preferredLocale']);
       if (!await verifyTurnstile(body.captchaToken, req.ip)) {
         throw new PublicError('captcha_failed', 'La vérification anti-robot a échoué.', 400);
       }
@@ -560,6 +635,7 @@ export function createAuthBff({
         provider: 'google',
         options: {
           redirectTo: oauthCallbackUrl(req),
+          scopes: 'openid email profile',
           skipBrowserRedirect: true,
         },
       });
@@ -571,6 +647,7 @@ export function createAuthBff({
       const flow = encrypt({
         values,
         remember: body.remember === true,
+        preferredLocale: normalizeLocale(body.preferredLocale),
         clientOrigin: clientOrigin(req),
         expiresAt: Date.now() + OAUTH_FLOW_MS,
       }, 'oauth');
@@ -604,7 +681,28 @@ export function createAuthBff({
         logInternal('auth_google_exchange', error || new Error('oauth_session_missing'));
         throw authFailure();
       }
-      await createBrowserSession(res, data.session, flow.remember === true);
+      let session = data.session;
+      let providerProfile = null;
+      try {
+        providerProfile = await fetchGoogleUserInfo(session.provider_token);
+      } catch (profileError) {
+        logInternal('auth_google_profile_fetch', profileError);
+      }
+      const profileMetadata = googleProfileMetadata(
+        session.user,
+        providerProfile,
+        flow.preferredLocale,
+      );
+      if (profileMetadata) {
+        try {
+          const { data: updated, error: updateError } = await client.auth.updateUser({ data: profileMetadata });
+          if (updateError) logInternal('auth_google_profile_update', updateError);
+          else if (updated?.user) session = { ...session, user: updated.user };
+        } catch (updateError) {
+          logInternal('auth_google_profile_update', updateError);
+        }
+      }
+      await createBrowserSession(res, session, flow.remember === true);
       res.redirect(303, `${destination}/auth/callback?status=success`);
     } catch (error) {
       logInternal('auth_google_callback', error);
