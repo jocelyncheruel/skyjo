@@ -155,15 +155,47 @@ const nextRoundTimers = new Map();
 const defensePromptTimers = new Map();
 const rateBuckets = new Map();
 
+function redactInternalLogValue(value, maxLength = 500) {
+  return String(value || '')
+    .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/giu, '[email-redacted]')
+    .replace(/eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{10,}/gu, '[jwt-redacted]')
+    .replace(/\b[A-Za-z0-9_-]{40,}\b/gu, '[token-redacted]')
+    .slice(0, maxLength);
+}
+
+function internalErrorPayload(error) {
+  if (error instanceof Error) {
+    return {
+      message: redactInternalLogValue(error.message || error.name),
+      ...(error.cause ? { cause: redactInternalLogValue(error.cause, 300) } : {}),
+    };
+  }
+  if (error && typeof error === 'object') {
+    const message = error.message || error.error_description || error.details || error.code;
+    let fallback = '';
+    if (!message) {
+      try { fallback = JSON.stringify(error); }
+      catch { fallback = Object.prototype.toString.call(error); }
+    }
+    return {
+      message: redactInternalLogValue(message || fallback || 'Erreur structurée sans message'),
+      ...(error.code ? { code: redactInternalLogValue(error.code, 100) } : {}),
+      ...(error.details && error.details !== message
+        ? { details: redactInternalLogValue(error.details, 500) }
+        : {}),
+      ...(error.hint ? { hint: redactInternalLogValue(error.hint, 300) } : {}),
+      ...(Number.isFinite(Number(error.status)) ? { status: Number(error.status) } : {}),
+    };
+  }
+  return { message: redactInternalLogValue(error || 'Erreur inconnue') };
+}
+
 function logInternal(label, error, correlationId = requestId()) {
-  const rawMessage = error instanceof Error ? error.message : String(error);
   console.error(JSON.stringify({
-    level: 'error', label, correlationId,
-    message: rawMessage
-      .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/giu, '[email-redacted]')
-      .replace(/eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{10,}/gu, '[jwt-redacted]')
-      .replace(/\b[A-Za-z0-9_-]{40,}\b/gu, '[token-redacted]')
-      .slice(0, 500),
+    level: 'error',
+    label,
+    correlationId,
+    ...internalErrorPayload(error),
   }));
   return correlationId;
 }
