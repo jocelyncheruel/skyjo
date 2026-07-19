@@ -541,7 +541,7 @@ function actionPayload(value) {
   const payload = objectPayload(value, [
     'draft', 'targetPlayerId', 'slotIndex', 'actionCardId', 'slots',
     'choiceIndex', 'revealSlot', 'firstSlotIndex', 'secondSlotIndex',
-    'cardId', 'first', 'second',
+    'groupType', 'cardId', 'first', 'second',
   ]);
   if (!payload.draft) return payload;
   const draft = objectPayload(payload.draft, [

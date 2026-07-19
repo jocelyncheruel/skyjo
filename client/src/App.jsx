@@ -345,7 +345,7 @@ function GameApp() {
       timeout: 8000,
       withCredentials: true,
       auth: {
-        protocolVersion: 6,
+        protocolVersion: 7,
         roomId: savedRoomId,
         playerName: savedPlayerName,
       },
@@ -384,7 +384,7 @@ function GameApp() {
       setPlayerId(pid);
       saveGameValue('sj-room-id', rid);
       nextSocket.auth = {
-        protocolVersion: 6,
+        protocolVersion: 7,
         roomId: rid,
         playerName: normalizePlayerNameInput(readGameValue('sj-player-name')),
       };
@@ -724,21 +724,46 @@ function getPeekLineCandidates(player, first) {
 
   if (!first) {
     return player.board
-      .map((slot, index) => (!slot.removed ? index : -1))
+      .map((slot, index) => (!slot.removed && !slot.faceUp ? index : -1))
       .filter((index) => index >= 0);
   }
+  return [];
+}
 
-  if (first.playerId !== player.id) return [];
+function getPeekLineOptions(player, firstSlotIndex) {
+  if (!player || !Number.isInteger(firstSlotIndex)) return [];
+  const firstSlot = player.board[firstSlotIndex];
+  if (!firstSlot || firstSlot.removed || firstSlot.faceUp) return [];
 
-  const rowIndex = Math.floor(first.slotIndex / BOARD_COLUMNS);
-  const columnIndex = first.slotIndex % BOARD_COLUMNS;
-  const candidateIndexes = new Set([
-    ...BOARD_ROWS[rowIndex],
-    ...BOARD_COLUMN_GROUPS[columnIndex],
-  ]);
-  candidateIndexes.delete(first.slotIndex);
+  const groups = [
+    { groupType: 'row', indexes: BOARD_ROWS[Math.floor(firstSlotIndex / BOARD_COLUMNS)] },
+    { groupType: 'column', indexes: BOARD_COLUMN_GROUPS[firstSlotIndex % BOARD_COLUMNS] },
+  ];
 
-  return [...candidateIndexes].filter((index) => !player.board[index]?.removed);
+  return groups.flatMap(({ groupType, indexes }) => {
+    const hasOtherCard = indexes.some((index) => (
+      index !== firstSlotIndex && !player.board[index]?.removed
+    ));
+    if (!hasOtherCard) return [];
+
+    const cards = indexes.map((slotIndex) => {
+      const slot = player.board[slotIndex];
+      return {
+        slotIndex,
+        value: slot?.value ?? null,
+        kind: slot?.kind || 'number',
+        faceUp: !!slot?.faceUp,
+        removed: !!slot?.removed,
+        selected: slotIndex === firstSlotIndex,
+      };
+    });
+    return [{
+      groupType,
+      indexes,
+      cards,
+      hiddenCount: cards.filter((card) => !card.removed && !card.faceUp).length,
+    }];
+  });
 }
 
 function LeaveRoomModal({ open, onCancel, onConfirm }) {
@@ -1085,10 +1110,99 @@ function StarGroupChoiceModal({ choice, onResolve }) {
   );
 }
 
+function PeekLineChoiceModal({ choice, onResolve, onBack }) {
+  if (!choice?.options?.length) return null;
+
+  const rowOption = choice.options.find((option) => option.groupType === 'row');
+  const columnOption = choice.options.find((option) => option.groupType === 'column');
+  const rowIndexes = new Set(rowOption?.indexes || []);
+  const columnIndexes = new Set(columnOption?.indexes || []);
+  const selectedRow = Math.floor(choice.firstSlotIndex / BOARD_COLUMNS) + 1;
+  const selectedColumn = (choice.firstSlotIndex % BOARD_COLUMNS) + 1;
+
+  return (
+    <div className="sj-modal-overlay sj-fade-in">
+      <section
+        className="sj-confirm-modal sj-peek-choice-modal sj-pop-in"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="peek-choice-title"
+      >
+        <h2 id="peek-choice-title">Choisissez une direction</h2>
+        <p>
+          {choice.isOwnBoard
+            ? 'Voici votre plateau.'
+            : `Voici le plateau de ${choice.targetPlayerName}.`}{' '}
+          La carte dorée est votre point de départ.
+        </p>
+        <div className="sj-peek-board-snapshot" aria-hidden="true">
+          <div className="sj-grid sj-peek-board-grid">
+            {choice.boardCards.map((card) => {
+              const inRow = rowIndexes.has(card.slotIndex);
+              const inColumn = columnIndexes.has(card.slotIndex);
+              const selected = card.slotIndex === choice.firstSlotIndex;
+              return (
+                <Card
+                  key={card.slotIndex}
+                  value={card.value}
+                  kind={card.kind}
+                  faceUp={card.faceUp && !card.removed}
+                  removed={card.removed}
+                  selected={selected}
+                  dim={!inRow && !inColumn}
+                  size="table"
+                />
+              );
+            })}
+            {rowOption && (
+              <span
+                className={`sj-peek-group-outline sj-peek-row-outline sj-peek-row-outline-${selectedRow}`}
+              />
+            )}
+            {columnOption && (
+              <span
+                className={`sj-peek-group-outline sj-peek-column-outline sj-peek-column-outline-${selectedColumn}`}
+              />
+            )}
+          </div>
+        </div>
+        <div className="sj-peek-direction-actions">
+          {choice.options.map((option) => {
+            const groupLabel = option.groupType === 'row' ? 'Regarder la ligne' : 'Regarder la colonne';
+            const hiddenLabel = `${option.hiddenCount} cachée${option.hiddenCount > 1 ? 's' : ''}`;
+            return (
+              <button
+                key={option.groupType}
+                type="button"
+                className={`sj-peek-direction sj-peek-direction-${option.groupType}`}
+                onClick={() => onResolve(option.groupType)}
+              >
+                <span aria-hidden="true" />
+                <strong>{groupLabel}</strong>
+                <small>{hiddenLabel}</small>
+              </button>
+            );
+          })}
+        </div>
+        <div className="sj-modal-actions">
+          <button type="button" className="sj-btn" onClick={onBack}>
+            Choisir une autre carte
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 function PeekResultModal({ peek, onClose }) {
   if (!peek) return null;
 
-  const groupLabel = peek.groupType === 'row' ? 'ligne' : 'colonne';
+  const groupLabel = peek.groupType === 'single'
+    ? peek.isLastHidden ? 'dernière carte cachée' : 'carte isolée'
+    : peek.groupType === 'row' ? 'ligne' : 'colonne';
+  const title = peek.groupType === 'single'
+    ? `${peek.isLastHidden ? 'Dernière carte cachée' : 'Carte isolée'} de ${peek.targetPlayerName}`
+    : `${peek.groupType === 'row' ? 'Ligne' : 'Colonne'} de ${peek.targetPlayerName}`;
 
   return (
     <div className="sj-modal-overlay sj-fade-in">
@@ -1098,9 +1212,7 @@ function PeekResultModal({ peek, onClose }) {
         aria-modal="true"
         aria-labelledby="peek-result-title"
       >
-        <h2 id="peek-result-title">
-          {groupLabel === 'ligne' ? 'Ligne' : 'Colonne'} de {peek.targetPlayerName}
-        </h2>
+        <h2 id="peek-result-title">{title}</h2>
         <div className={`sj-star-group-snapshot sj-star-group-${peek.groupType}`} aria-label={`Aperçu privé de la ${groupLabel}`}>
           {peek.cards.map((card) => (
             <Card
@@ -1777,6 +1889,31 @@ function GameScreen({
   const lastPlayedAction = state.lastPlayedAction || null;
   const actionPlayId = lastPlayedAction?.id || null;
   const actionSelection = pendingAction?.selection || {};
+  const peekFirst = pendingAction?.type === 'peekLine' ? actionSelection.peekFirst : null;
+  const peekTarget = peekFirst
+    ? state.players.find((player) => player.id === peekFirst.playerId)
+    : null;
+  const peekFirstSlot = peekTarget?.board?.[peekFirst?.slotIndex];
+  const invalidPeekFirst = !!pendingAction?.mustRespond
+    && pendingAction.type === 'peekLine'
+    && !!peekFirst
+    && (!peekFirstSlot || peekFirstSlot.removed || peekFirstSlot.faceUp);
+  const peekLineChoice = pendingAction?.mustRespond && peekTarget
+    ? {
+      targetPlayerId: peekTarget.id,
+      targetPlayerName: peekTarget.name,
+      isOwnBoard: peekTarget.id === myId,
+      firstSlotIndex: peekFirst.slotIndex,
+      options: getPeekLineOptions(peekTarget, peekFirst.slotIndex),
+      boardCards: peekTarget.board.map((slot, slotIndex) => ({
+        slotIndex,
+        value: slot?.value ?? null,
+        kind: slot?.kind || 'number',
+        faceUp: !!slot?.faceUp,
+        removed: !!slot?.removed,
+      })),
+    }
+    : null;
   const selectableByPlayer = Object.fromEntries(state.players.map((player) => [player.id, []]));
   const selectedByPlayer = Object.fromEntries(state.players.map((player) => [player.id, []]));
   selectableByPlayer[myId] = selectableSlots || [];
@@ -1937,6 +2074,11 @@ function GameScreen({
   }, [myActionState.peek?.id, myActionState.peek?.expiresAt]);
 
   useEffect(() => {
+    if (!invalidPeekFirst) return;
+    socket.emit('resolveAction', { draft: { peekFirst: null } });
+  }, [invalidPeekFirst, socket]);
+
+  useEffect(() => {
     if (!pendingAction?.mustRespond || pendingAction.type !== 'stealAction' || !autoStealTargetId) return;
     socket.emit('resolveAction', { draft: { stealTargetId: autoStealTargetId } });
   }, [autoStealTargetId, pendingAction?.mustRespond, pendingAction?.type, socket]);
@@ -2088,7 +2230,24 @@ function GameScreen({
     if (pendingAction?.mustRespond && pendingAction.type === 'peekLine') {
       const first = actionSelection.peekFirst;
       if (!first) {
-        socket.emit('resolveAction', { draft: { peekFirst: { playerId, slotIndex } } });
+        const target = state.players.find((player) => player.id === playerId);
+        const options = getPeekLineOptions(target, slotIndex);
+        const hiddenIndexes = target?.board
+          .map((slot, index) => (!slot.removed && !slot.faceUp ? index : -1))
+          .filter((index) => index >= 0) || [];
+        const isLastHiddenCard = hiddenIndexes.length === 1 && hiddenIndexes[0] === slotIndex;
+        const automaticGroupType = isLastHiddenCard || options.length === 0
+          ? 'single'
+          : options.length === 1 ? options[0].groupType : null;
+        if (automaticGroupType) {
+          socket.emit('resolveAction', {
+            targetPlayerId: playerId,
+            firstSlotIndex: slotIndex,
+            groupType: automaticGroupType,
+          });
+        } else {
+          socket.emit('resolveAction', { draft: { peekFirst: { playerId, slotIndex } } });
+        }
       } else if (first.playerId === playerId && first.slotIndex !== slotIndex) {
         socket.emit('resolveAction', {
           targetPlayerId: playerId,
@@ -2279,6 +2438,17 @@ function GameScreen({
     <StarGroupChoiceModal
       choice={pendingGroupChoice}
       onResolve={handleStarGroupChoice}
+    />
+  );
+  const peekLineChoiceModal = (
+    <PeekLineChoiceModal
+      choice={peekLineChoice}
+      onResolve={(groupType) => socket.emit('resolveAction', {
+        targetPlayerId: peekLineChoice?.targetPlayerId,
+        firstSlotIndex: peekLineChoice?.firstSlotIndex,
+        groupType,
+      })}
+      onBack={() => socket.emit('resolveAction', { draft: { peekFirst: null } })}
     />
   );
   const drawThreeActionModal = (
@@ -2556,6 +2726,7 @@ function GameScreen({
       {actionDrawModal}
       {defensePromptModal}
       {starGroupChoiceModal}
+      {peekLineChoiceModal}
       {drawThreeActionModal}
       {playDiscardActionModal}
       {stealActionPlayerModal}

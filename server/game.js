@@ -330,7 +330,7 @@ function advanceTurn(state) {
 
   if (!state.roundEnderId && boardFinished(finishingPlayer)) {
     state.roundEnderId = finishingId;
-    log(state, `${finishingPlayer.name} a terminé son tableau ! Dernier tour pour les autres.`);
+    log(state, `${finishingPlayer.name} a terminé son plateau ! Dernier tour pour les autres.`);
   }
 
   if (isFinalTurn) revealRemainingCards(finishingPlayer);
@@ -473,6 +473,7 @@ export function nextRound(state) {
 
 export function publicState(state, forPlayerId) {
   const creatorId = ensureCreator(state);
+  const actionState = state.gameMode === 'action' ? publicActionState(state, forPlayerId) : {};
   const completedRounds = state.completedRounds ?? (
     state.phase === 'roundEnd' || state.phase === 'gameEnd' || state.order.some(id => state.playersById[id]?.lastRoundScore !== null)
       ? 1
@@ -527,7 +528,7 @@ export function publicState(state, forPlayerId) {
         })),
       };
     }),
-    ...(state.gameMode === 'action' ? publicActionState(state, forPlayerId) : {}),
+    ...actionState,
   };
 }
 

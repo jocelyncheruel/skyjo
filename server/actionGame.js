@@ -57,6 +57,23 @@ function ensureActionFields(state) {
     player.peek ||= null;
     player.groupChoiceSkips ||= {};
   }
+
+  const pending = state.pendingAction;
+  if (pending?.type === 'peekLine' && pending.selection?.peekFirst) {
+    const { playerId, slotIndex } = pending.selection.peekFirst;
+    const firstSlot = state.playersById[playerId]?.board?.[slotIndex];
+    if (!firstSlot || firstSlot.removed || firstSlot.faceUp) {
+      pending.selection = null;
+    }
+  }
+
+  const actionIsOrphaned = state.gameMode === 'action'
+    && state.phase === 'playing'
+    && state.turnStage === 'action'
+    && !state.pendingAction
+    && !state.pendingStarClaim
+    && !state.pendingGroupChoice;
+  if (actionIsOrphaned) state.turnStage = 'choose';
 }
 
 function grantTemporaryPlayableActionCards(state, playerId) {
@@ -472,7 +489,7 @@ function advanceTurn(state) {
   if (!state.roundEnderId && finishedBoard) {
     state.roundEnderId = finishingId;
     state.actionNextStarterId = finishingId;
-    log(state, `${player.name} termine son tableau. Dernier tour.`);
+    log(state, `${player.name} termine son plateau. Dernier tour.`);
   }
   if (finishedBoard) {
     state.extraTurns[finishingId] = 0;
@@ -869,6 +886,18 @@ function validateSlot(state, playerId, slotIndex) {
   return slot;
 }
 
+function peekGroupIndexes(firstIndex, groupType) {
+  if (groupType === 'row') return ROWS[Math.floor(firstIndex / 4)];
+  if (groupType === 'column') return COLUMNS[firstIndex % 4];
+  if (groupType === 'single') return [firstIndex];
+  throw new Error('Choix de ligne ou colonne invalide.');
+}
+
+function peekGroupHasOtherCard(player, firstIndex, groupType) {
+  return peekGroupIndexes(firstIndex, groupType)
+    .some((index) => index !== firstIndex && !player.board[index]?.removed);
+}
+
 function executeNestedAction(state, actorId, card) {
   beginActionEffect(state, actorId, card);
 }
@@ -909,8 +938,13 @@ function storeActionDraft(state, pending, playerId, draft) {
   }
 
   if (pending.type === 'peekLine') {
+    if (draft.peekFirst === null) {
+      pending.selection = null;
+      return;
+    }
     const first = normalizeTarget(draft.peekFirst || draft.first || draft.target);
-    validateSlot(state, first.playerId, first.slotIndex);
+    const firstSlot = validateSlot(state, first.playerId, first.slotIndex);
+    if (firstSlot.faceUp) throw new Error('Choisissez une carte cachée comme point de départ.');
     pending.selection = { peekFirst: first };
     return;
   }
@@ -1036,22 +1070,43 @@ export function resolveActionInput(state, playerId, payload = {}) {
     const target = state.playersById[targetPlayerId];
     if (!target) throw new Error('Joueur invalide.');
     const firstIndex = payload.firstSlotIndex ?? storedFirst?.slotIndex;
-    const secondIndex = payload.secondSlotIndex;
-    validateSlot(state, target.id, firstIndex);
-    validateSlot(state, target.id, secondIndex);
-    if (firstIndex === secondIndex) throw new Error('Choisissez deux cartes distinctes.');
-    const sameRow = Math.floor(firstIndex / 4) === Math.floor(secondIndex / 4);
-    const sameColumn = firstIndex % 4 === secondIndex % 4;
-    if (!sameRow && !sameColumn) throw new Error('Choisissez deux cartes sur une même ligne ou colonne.');
-    const indexes = sameRow
-      ? ROWS[Math.floor(firstIndex / 4)]
-      : COLUMNS[firstIndex % 4];
+    const firstSlot = validateSlot(state, target.id, firstIndex);
+    if (firstSlot.faceUp) throw new Error('Choisissez une carte cachée comme point de départ.');
+    let groupType = payload.groupType;
+    let indexes;
+    let isLastHidden = false;
+    if (groupType) {
+      indexes = peekGroupIndexes(firstIndex, groupType);
+      if (groupType === 'single') {
+        const hiddenIndexes = target.board
+          .map((slot, index) => (!slot.removed && !slot.faceUp ? index : -1))
+          .filter((index) => index >= 0);
+        isLastHidden = hiddenIndexes.length === 1 && hiddenIndexes[0] === firstIndex;
+        const isIsolated = !peekGroupHasOtherCard(target, firstIndex, 'row')
+          && !peekGroupHasOtherCard(target, firstIndex, 'column');
+        if (!isLastHidden && !isIsolated) {
+          throw new Error('Cette carte doit être regardée avec sa ligne ou sa colonne.');
+        }
+      } else if (!peekGroupHasOtherCard(target, firstIndex, groupType)) {
+        throw new Error(`Cette ${groupType === 'row' ? 'ligne' : 'colonne'} ne contient qu’une carte.`);
+      }
+    } else {
+      const secondIndex = payload.secondSlotIndex;
+      validateSlot(state, target.id, secondIndex);
+      if (firstIndex === secondIndex) throw new Error('Choisissez deux cartes distinctes.');
+      const sameRow = Math.floor(firstIndex / 4) === Math.floor(secondIndex / 4);
+      const sameColumn = firstIndex % 4 === secondIndex % 4;
+      if (!sameRow && !sameColumn) throw new Error('Choisissez deux cartes sur une même ligne ou colonne.');
+      groupType = sameRow ? 'row' : 'column';
+      indexes = peekGroupIndexes(firstIndex, groupType);
+    }
     state.peekSerial = (state.peekSerial || 0) + 1;
     actor.peek = {
       id: `peek-${Date.now()}-${state.peekSerial}`,
       targetPlayerId: target.id,
       targetPlayerName: target.name,
-      groupType: sameRow ? 'row' : 'column',
+      groupType,
+      isLastHidden,
       indexes,
       cards: indexes.map((index) => {
         const slot = target.board[index];
