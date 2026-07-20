@@ -178,6 +178,9 @@ export default function ProfileModal({ open, onClose, onProfileUpdated }) {
         lastName: normalizedLastName,
         playerName: normalizedPlayerName,
       });
+      setFirstName(updatedUser.firstName || '');
+      setLastName(updatedUser.lastName || '');
+      setPlayerName(updatedUser.playerName || updatedUser.firstName || '');
       onProfileUpdated?.(updatedUser);
       showNotification('success', 'Profil mis à jour.');
     } catch (profileError) {
