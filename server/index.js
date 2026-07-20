@@ -14,7 +14,8 @@ import {
   resolveGroupChoice, assertActionCardIntegrity, MAX_PLAYERS_PER_ROOM,
 } from './game.js';
 import {
-  CLIENT_PROTOCOL_VERSION, CONSENT_VERSION, ROOM_SCHEMA_VERSION, ROOM_TTL_MS,
+  CLIENT_PROTOCOL_VERSION, PRIVACY_CONSENT_VERSION, ROOM_SCHEMA_VERSION, ROOM_TTL_MS,
+  TERMS_CONSENT_VERSION,
   PublicError, clientIpFromForwarded,
   isValidRoomState, normalizeChatMessage, normalizeOrigin,
   normalizePlayerName, normalizeRoomId, objectPayload, publicErrorPayload, requestId,
@@ -229,7 +230,8 @@ async function hasCurrentConsent(userId) {
     .eq('user_id', userId)
     .maybeSingle();
   if (error) throw error;
-  return data?.terms_version === CONSENT_VERSION && data?.privacy_version === CONSENT_VERSION;
+  return data?.terms_version === TERMS_CONSENT_VERSION
+    && data?.privacy_version === PRIVACY_CONSENT_VERSION;
 }
 
 function httpRateLimit({ limit, windowMs, keyPrefix, user = false }) {
@@ -767,23 +769,35 @@ app.get('/health', (req, res) => res.json({ ok: true, clientProtocolVersion: CLI
 app.use('/api/auth', authBff.router);
 
 app.get('/api/account/consent', requireHttpAuth, authBff.requireStandardSession, async (req, res, next) => {
-  try { res.json({ accepted: await hasCurrentConsent(req.auth.user.id), version: CONSENT_VERSION }); }
-  catch (error) { next(error); }
+  try {
+    res.json({
+      accepted: await hasCurrentConsent(req.auth.user.id),
+      termsVersion: TERMS_CONSENT_VERSION,
+      privacyVersion: PRIVACY_CONSENT_VERSION,
+    });
+  } catch (error) { next(error); }
 });
 
 app.post('/api/account/consent', requireHttpAuth, authBff.requireStandardSession, authBff.requireCsrf, httpRateLimit({ keyPrefix: 'consent', limit: 5, windowMs: 60_000, user: true }), async (req, res, next) => {
   try {
     const payload = objectPayload(req.body, ['termsVersion', 'privacyVersion']);
-    if (payload.termsVersion !== CONSENT_VERSION || payload.privacyVersion !== CONSENT_VERSION) {
+    if (
+      payload.termsVersion !== TERMS_CONSENT_VERSION
+      || payload.privacyVersion !== PRIVACY_CONSENT_VERSION
+    ) {
       throw new PublicError('invalid_consent', 'Version de consentement invalide.', 400);
     }
     const provider = String(req.auth.user.app_metadata?.provider || 'unknown').slice(0, 32);
     const { error } = await supabase.from('account_consents').upsert({
-      user_id: req.auth.user.id, terms_version: CONSENT_VERSION,
-      privacy_version: CONSENT_VERSION, accepted_at: new Date().toISOString(), provider,
+      user_id: req.auth.user.id, terms_version: TERMS_CONSENT_VERSION,
+      privacy_version: PRIVACY_CONSENT_VERSION, accepted_at: new Date().toISOString(), provider,
     }, { onConflict: 'user_id' });
     if (error) throw error;
-    res.json({ accepted: true, version: CONSENT_VERSION });
+    res.json({
+      accepted: true,
+      termsVersion: TERMS_CONSENT_VERSION,
+      privacyVersion: PRIVACY_CONSENT_VERSION,
+    });
   } catch (error) { next(error); }
 });
 

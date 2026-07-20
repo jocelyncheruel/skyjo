@@ -768,6 +768,7 @@ const LEGAL_DOCUMENTS = {
   terms: {
     eyebrow: "Règles du service",
     title: "Conditions d'utilisation",
+    updatedAt: "15 juillet 2026",
     sections: [
       [
         "Service proposé",
@@ -802,6 +803,7 @@ const LEGAL_DOCUMENTS = {
   privacy: {
     eyebrow: "Tes données",
     title: "Politique de confidentialité",
+    updatedAt: "20 juillet 2026",
     sections: [
       [
         "Données du compte",
@@ -809,7 +811,7 @@ const LEGAL_DOCUMENTS = {
       ],
       [
         "Données de jeu",
-        "Pour faire fonctionner une salle, le serveur enregistre son code, sa visibilité, son mode, les identifiants de compte et de joueur, les pseudonymes, les connexions, les cartes, les tours, les scores, l'historique nécessaire à la partie et, dans une table séparée, tous les messages acceptés pendant toute la durée de conservation de la salle.",
+        "Pour faire fonctionner une salle, le serveur enregistre son code, sa visibilité, son mode, les identifiants de compte et de joueur, les pseudonymes, les connexions, les cartes, les tours, les scores, l'historique nécessaire à la partie et, dans une table séparée, tous les messages acceptés pendant toute la durée de conservation de la salle. Le compte conserve également des statistiques de participation, de victoire, de défaite, d'abandon et de manches jouées.",
       ],
       [
         "Données techniques et stockage local",
@@ -817,7 +819,7 @@ const LEGAL_DOCUMENTS = {
       ],
       [
         "Finalités",
-        "Ces données servent uniquement à créer et sécuriser le compte, authentifier les requêtes, créer et rejoindre les salles, synchroniser les parties, permettre la reconnexion, afficher le chat et limiter les abus.",
+        "Ces données servent uniquement à créer et sécuriser le compte, authentifier les requêtes, créer et rejoindre les salles, synchroniser les parties, permettre la reconnexion, afficher les statistiques et le chat, et limiter les abus.",
       ],
       [
         "Hébergement",
@@ -832,7 +834,7 @@ const LEGAL_DOCUMENTS = {
       ],
       [
         "Conservation",
-        "Le compte est conservé jusqu'à sa suppression. Une session BFF expire après 24 heures d'inactivité et au plus tard après sept jours ; elle est aussi supprimée lors d'une déconnexion globale. Avec la configuration actuelle, une salle devient éligible à la suppression après 24 heures sans activité enregistrée ; elle est supprimée avec son historique et ses messages lors du prochain nettoyage automatique. Une reconnexion ou une action avant ce nettoyage actualise sa date d'activité. Les limites de requêtes sont conservées uniquement en mémoire pendant leur courte fenêtre de contrôle. Les données du navigateur restent présentes jusqu'à la déconnexion, la sortie de salle ou leur effacement manuel, selon leur nature.",
+        "Le compte et ses statistiques de jeu sont conservés jusqu'à sa suppression. Une session BFF expire après 24 heures d'inactivité et au plus tard après sept jours ; elle est aussi supprimée lors d'une déconnexion globale. Avec la configuration actuelle, une salle devient éligible à la suppression après 24 heures sans activité enregistrée ; elle est supprimée avec son historique et ses messages lors du prochain nettoyage automatique. Une reconnexion ou une action avant ce nettoyage actualise sa date d'activité. Les limites de requêtes sont conservées uniquement en mémoire pendant leur courte fenêtre de contrôle. Les données du navigateur restent présentes jusqu'à la déconnexion, la sortie de salle ou leur effacement manuel, selon leur nature.",
       ],
       [
         "Visibilité et destinataires",
@@ -876,7 +878,7 @@ export function LegalPage({ documentId }) {
           </a>
           <p>{document.eyebrow}</p>
           <h1>{document.title}</h1>
-          <p className="legal-page-date">Dernière mise à jour : 15 juillet 2026</p>
+          <p className="legal-page-date">Dernière mise à jour : {document.updatedAt}</p>
         </header>
         <div className="legal-page-content">
           {document.sections.map(([title, content]) => (
@@ -940,7 +942,7 @@ function LegalModal({ documentId, onClose, onAcknowledge }) {
             <X size={20} aria-hidden="true" />
           </button>
         </header>
-        <p className="auth-legal-date">Dernière mise à jour : 15 juillet 2026</p>
+        <p className="auth-legal-date">Dernière mise à jour : {document.updatedAt}</p>
         <div
           ref={contentRef}
           className="auth-legal-content"

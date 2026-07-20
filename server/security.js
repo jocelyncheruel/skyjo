@@ -4,7 +4,8 @@ import { isIP } from 'node:net';
 export const CLIENT_PROTOCOL_VERSION = 8;
 export const ROOM_SCHEMA_VERSION = 3;
 export const ROOM_TTL_MS = 24 * 60 * 60 * 1000;
-export const CONSENT_VERSION = '2026-07-15-bff';
+export const TERMS_CONSENT_VERSION = '2026-07-15-bff';
+export const PRIVACY_CONSENT_VERSION = '2026-07-20-statistics';
 export const MAX_PLAYER_NAME_LENGTH = 20;
 export const MAX_CHAT_LENGTH = 280;
 

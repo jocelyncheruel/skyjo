@@ -156,16 +156,19 @@ export default function App() {
 function SkyjoApp() {
   const { user, ready, recoveryMode, logout } = useAuth();
   const [consent, setConsent] = useState(null);
+  const [consentVersions, setConsentVersions] = useState(null);
   const [consentBusy, setConsentBusy] = useState(false);
   const [consentError, setConsentError] = useState('');
 
   useEffect(() => {
     if (!user || recoveryMode) {
       setConsent(null);
+      setConsentVersions(null);
       return;
     }
     if (!SERVER_URL) {
       setConsent(false);
+      setConsentVersions(null);
       setConsentError('Le serveur de jeu n\'est pas configuré correctement.');
       return;
     }
@@ -173,9 +176,21 @@ function SkyjoApp() {
     apiFetch('/api/account/consent').then(async (response) => {
       if (!response.ok) throw new Error(await serverErrorMessage(response, 'Impossible de vérifier le consentement.'));
       const data = await response.json();
-      if (!cancelled) setConsent(data.accepted === true);
+      if (!data?.termsVersion || !data?.privacyVersion) {
+        throw new Error('Les versions des documents sont indisponibles.');
+      }
+      if (!cancelled) {
+        setConsentVersions({
+          termsVersion: data.termsVersion,
+          privacyVersion: data.privacyVersion,
+        });
+        setConsent(data.accepted === true);
+      }
     }).catch(() => {
-      if (!cancelled) setConsent(false);
+      if (!cancelled) {
+        setConsentVersions(null);
+        setConsent(false);
+      }
     });
     return () => { cancelled = true; };
   }, [recoveryMode, user]);
@@ -185,13 +200,17 @@ function SkyjoApp() {
   if (!user) return <AuthView />;
   if (consent === null) return <AuthLoadingView label="Vérification du consentement" />;
   if (!consent) return <ConsentGate busy={consentBusy} error={consentError} onLogout={logout} onAccept={async () => {
+    if (!consentVersions) {
+      setConsentError('Impossible de vérifier la version des documents. Recharge la page.');
+      return;
+    }
     setConsentBusy(true);
     setConsentError('');
     try {
       const response = await apiFetch('/api/account/consent', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ termsVersion: '2026-07-15-bff', privacyVersion: '2026-07-15-bff' }),
+        body: JSON.stringify(consentVersions),
       });
       if (!response.ok) throw new Error(await serverErrorMessage(response, 'Impossible d\'enregistrer le consentement.'));
       setConsent(true);
