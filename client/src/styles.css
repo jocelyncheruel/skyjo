@@ -2969,8 +2969,18 @@ button.sj-action-count-badge:focus-visible {
   padding-top: 4px;
 }
 
-.sj-profile-toast {
+.sj-game-toast.sj-profile-toast {
   z-index: 140;
+  grid-template-columns: auto minmax(0, 1fr);
+  border-radius: 18px;
+}
+
+.sj-profile-toast .sj-game-toast-text {
+  max-width: none;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+  line-height: 1.35;
 }
 
 .sj-profile-save {
