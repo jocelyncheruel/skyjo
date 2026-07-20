@@ -92,7 +92,7 @@ export function googleProfileMetadata(user, providerProfile = null, browserLocal
   const metadata = user?.user_metadata && typeof user.user_metadata === 'object'
     ? user.user_metadata
     : {};
-  if (metadata.profile_source === 'user') return null;
+  const userOwnsIdentity = metadata.profile_source === 'user';
   const directProfile = providerProfile && typeof providerProfile === 'object'
     && !Array.isArray(providerProfile)
     ? providerProfile
@@ -122,13 +122,19 @@ export function googleProfileMetadata(user, providerProfile = null, browserLocal
     || identityData.name || identityData.full_name
     || metadata.name || metadata.full_name || '');
   const update = {};
-  if (providerFirstName && normalizeName(metadata.first_name || '') !== providerFirstName) {
+  if (!userOwnsIdentity
+    && providerFirstName
+    && normalizeName(metadata.first_name || '') !== providerFirstName) {
     update.first_name = providerFirstName;
   }
-  if (providerLastName && normalizeName(metadata.last_name || '') !== providerLastName) {
+  if (!userOwnsIdentity
+    && providerLastName
+    && normalizeName(metadata.last_name || '') !== providerLastName) {
     update.last_name = providerLastName;
   }
-  if (displayName && normalizeName(metadata.display_name || '') !== displayName) {
+  if (!userOwnsIdentity
+    && displayName
+    && normalizeName(metadata.display_name || '') !== displayName) {
     update.display_name = displayName;
   }
   if (preferredLocale && normalizeLocale(metadata.preferred_locale || '') !== preferredLocale) {
