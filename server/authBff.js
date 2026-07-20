@@ -109,10 +109,12 @@ export function googleProfileMetadata(user, providerProfile = null, browserLocal
   const providerLastName = normalizeName(
     directProfile.family_name || identityData.family_name || metadata.family_name || '',
   );
-  const preferredLocale = normalizeLocale(
-    browserLocale || directProfile.locale || identityData.locale
-      || metadata.preferred_locale || metadata.locale || '',
-  );
+  const currentLocale = normalizeLocale(metadata.preferred_locale || '');
+  const preferredLocale = currentLocale
+    || normalizeLocale(browserLocale)
+    || normalizeLocale(directProfile.locale)
+    || normalizeLocale(identityData.locale)
+    || normalizeLocale(metadata.locale);
   if (!providerFirstName && !providerLastName && !preferredLocale) return null;
 
   const firstName = providerFirstName || normalizeName(metadata.first_name || '');
@@ -137,7 +139,7 @@ export function googleProfileMetadata(user, providerProfile = null, browserLocal
     && normalizeName(metadata.display_name || '') !== displayName) {
     update.display_name = displayName;
   }
-  if (preferredLocale && normalizeLocale(metadata.preferred_locale || '') !== preferredLocale) {
+  if (!currentLocale && preferredLocale) {
     update.preferred_locale = preferredLocale;
   }
   return Object.keys(update).length ? update : null;
