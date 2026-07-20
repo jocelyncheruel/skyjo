@@ -19,6 +19,14 @@ import {
 import { useAuth } from './authContext.js';
 
 const PROFILE_COMPACT_QUERY = '(max-width: 760px)';
+const PROFILE_FOCUSABLE_SELECTOR = [
+  'a[href]',
+  'button:not([disabled])',
+  'input:not([disabled])',
+  'select:not([disabled])',
+  'textarea:not([disabled])',
+  '[tabindex]:not([tabindex="-1"])',
+].join(',');
 
 function mediaMatches(query) {
   return typeof window !== 'undefined'
@@ -44,6 +52,31 @@ function formatAccountDate(value, locale) {
   }).format(date);
 }
 
+function trapDialogFocus(event, dialog) {
+  const focusableElements = dialog
+    ? [...dialog.querySelectorAll(PROFILE_FOCUSABLE_SELECTOR)].filter((element) => (
+      !element.closest('[inert]') && element.getClientRects().length > 0
+    ))
+    : [];
+  if (focusableElements.length === 0) {
+    event.preventDefault();
+    dialog?.focus({ preventScroll: true });
+    return;
+  }
+
+  const firstElement = focusableElements[0];
+  const lastElement = focusableElements.at(-1);
+  const activeElement = document.activeElement;
+  const focusIsOutside = activeElement === dialog || !dialog.contains(activeElement);
+  if (event.shiftKey && (focusIsOutside || activeElement === firstElement)) {
+    event.preventDefault();
+    lastElement.focus();
+  } else if (!event.shiftKey && (focusIsOutside || activeElement === lastElement)) {
+    event.preventDefault();
+    firstElement.focus();
+  }
+}
+
 export function ProfileButton({ onClick }) {
   return (
     <button
@@ -63,6 +96,9 @@ export default function ProfileModal({ open, onClose, onProfileUpdated }) {
   const {
     user, updateProfile, requestProfilePasswordChange, deleteAccount,
   } = useAuth();
+  const profileModalRef = useRef(null);
+  const deleteModalRef = useRef(null);
+  const deleteTriggerRef = useRef(null);
   const firstNameRef = useRef(null);
   const deleteConfirmationRef = useRef(null);
   const wasOpenRef = useRef(false);
@@ -88,6 +124,18 @@ export default function ProfileModal({ open, onClose, onProfileUpdated }) {
   }, []);
 
   useEffect(() => {
+    if (!open) return undefined;
+    const returnFocusTarget = document.activeElement;
+    return () => {
+      window.requestAnimationFrame(() => {
+        if (returnFocusTarget?.isConnected) {
+          returnFocusTarget.focus({ preventScroll: true });
+        }
+      });
+    };
+  }, [open]);
+
+  useEffect(() => {
     if (!open) {
       wasOpenRef.current = false;
       return undefined;
@@ -103,17 +151,22 @@ export default function ProfileModal({ open, onClose, onProfileUpdated }) {
     setDeleteConfirmation('');
     setActiveSection('account');
     const shouldFocusForm = mediaMatches('(min-width: 761px) and (pointer: fine)');
-    const frame = shouldFocusForm
-      ? window.requestAnimationFrame(() => firstNameRef.current?.focus())
-      : null;
+    const frame = window.requestAnimationFrame(() => {
+      const focusTarget = shouldFocusForm ? firstNameRef.current : profileModalRef.current;
+      focusTarget?.focus({ preventScroll: true });
+    });
     return () => {
-      if (frame !== null) window.cancelAnimationFrame(frame);
+      window.cancelAnimationFrame(frame);
     };
   }, [open, user]);
 
   useEffect(() => {
     if (!open) return undefined;
     const handleKeyDown = (event) => {
+      if (event.key === 'Tab') {
+        trapDialogFocus(event, deleteMode ? deleteModalRef.current : profileModalRef.current);
+        return;
+      }
       if (event.key !== 'Escape' || busy || securityBusy) return;
       if (deleteMode) {
         setDeleteMode(false);
@@ -128,8 +181,16 @@ export default function ProfileModal({ open, onClose, onProfileUpdated }) {
 
   useEffect(() => {
     if (!deleteMode) return undefined;
+    const returnFocusTarget = deleteTriggerRef.current;
     const frame = window.requestAnimationFrame(() => deleteConfirmationRef.current?.focus());
-    return () => window.cancelAnimationFrame(frame);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.requestAnimationFrame(() => {
+        if (returnFocusTarget?.isConnected) {
+          returnFocusTarget.focus({ preventScroll: true });
+        }
+      });
+    };
   }, [deleteMode]);
 
   useEffect(() => {
@@ -235,12 +296,14 @@ export default function ProfileModal({ open, onClose, onProfileUpdated }) {
       }}
     >
       <section
+        ref={profileModalRef}
         className="sj-profile-modal sj-pop-in"
         role="dialog"
         aria-modal="true"
         aria-labelledby="profile-title"
         aria-hidden={deleteMode || undefined}
         inert={deleteMode ? '' : undefined}
+        tabIndex={-1}
       >
         <header className="sj-profile-head">
           <div>
@@ -470,6 +533,7 @@ export default function ProfileModal({ open, onClose, onProfileUpdated }) {
 
               <div className="sj-profile-security-action sj-profile-security-danger">
                 <button
+                  ref={deleteTriggerRef}
                   type="button"
                   className="sj-profile-security-icon sj-profile-security-trigger sj-profile-security-delete-trigger"
                   onClick={() => {
@@ -504,10 +568,12 @@ export default function ProfileModal({ open, onClose, onProfileUpdated }) {
         }}
       >
         <section
+          ref={deleteModalRef}
           className="sj-confirm-modal sj-profile-delete-modal sj-pop-in"
           role="dialog"
           aria-modal="true"
           aria-labelledby="profile-delete-title"
+          tabIndex={-1}
         >
           <button
             type="button"
