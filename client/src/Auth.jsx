@@ -127,6 +127,17 @@ function getAuthErrorMessage(error) {
   if (code === "same_password") {
     return "Choisis un mot de passe différent de l'ancien.";
   }
+  if (code === "invalid_profile") {
+    return String(error?.message || "Vérifie les informations de ton profil.").slice(0, 200);
+  }
+  if ([
+    "active_rooms",
+    "invalid_account_confirmation",
+    "password_unavailable",
+    "recent_authentication_required",
+  ].includes(code)) {
+    return String(error?.message || "Cette action ne peut pas être effectuée.").slice(0, 200);
+  }
   if (code === "invalid_password" || code === "recent_recovery_required") {
     return String(error?.message || "Demande un nouveau lien de réinitialisation.").slice(0, 200);
   }
@@ -361,6 +372,56 @@ export function AuthProvider({ children }) {
     setRecoveryMode(false);
   }, []);
 
+  const updateProfile = useCallback(async ({ firstName, lastName, playerName }) => {
+    setError("");
+    requireAuthConfiguration(setError);
+    try {
+      const data = await authApi('/api/auth/profile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ firstName, lastName, playerName }),
+      }, 'Impossible de mettre à jour le profil.');
+      if (!data?.user) throw new Error('Le profil mis à jour est indisponible.');
+      setUser(data.user);
+      return data.user;
+    } catch (profileError) {
+      const message = profileError instanceof TypeError
+        ? "Impossible de contacter le service d'authentification. Vérifie ta connexion."
+        : getAuthErrorMessage(profileError);
+      throw new Error(message);
+    }
+  }, []);
+
+  const requestProfilePasswordChange = useCallback(async () => {
+    try {
+      await authApi('/api/auth/password/change-request', { method: 'POST' }, "Impossible d'envoyer l'e-mail de modification.");
+    } catch (requestError) {
+      const message = requestError instanceof TypeError
+        ? "Impossible de contacter le service d'authentification. Vérifie ta connexion."
+        : getAuthErrorMessage(requestError);
+      throw new Error(message);
+    }
+  }, []);
+
+  const deleteAccount = useCallback(async (confirmationEmail) => {
+    try {
+      await authApi('/api/auth/account/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ confirmationEmail }),
+      }, 'Impossible de supprimer le compte.');
+      clearBrowserAuthArtifacts();
+      localStorage.removeItem(LAST_EMAIL_KEY);
+      setUser(null);
+      setRecoveryMode(false);
+    } catch (deleteError) {
+      const message = deleteError instanceof TypeError
+        ? "Impossible de contacter le service d'authentification. Vérifie ta connexion."
+        : getAuthErrorMessage(deleteError);
+      throw new Error(message);
+    }
+  }, []);
+
   const logout = useCallback(async () => {
     try {
       if (SERVER_URL) await authApi('/api/auth/logout', { method: 'POST' });
@@ -387,6 +448,9 @@ export function AuthProvider({ children }) {
       register,
       requestPasswordReset,
       updatePassword,
+      updateProfile,
+      requestProfilePasswordChange,
+      deleteAccount,
       logout,
       clearError: () => setError(""),
     }),
@@ -402,6 +466,9 @@ export function AuthProvider({ children }) {
       register,
       requestPasswordReset,
       updatePassword,
+      updateProfile,
+      requestProfilePasswordChange,
+      deleteAccount,
       logout,
     ],
   );
@@ -659,7 +726,7 @@ const LEGAL_DOCUMENTS = {
     sections: [
       [
         "Données du compte",
-        "Le service traite ton adresse e-mail, ton prénom, ton nom, ton identifiant Supabase et les informations techniques de ta session d'authentification. Render transmet les identifiants de connexion à Supabase Auth sans enregistrer le mot de passe. Si tu continues avec Google, Google transmet à Supabase les informations de base autorisées pour ton compte, notamment ton identité et ton adresse e-mail. Le mot de passe n'est jamais enregistré dans l'état des salles.",
+        "Le service traite ton adresse e-mail, ton prénom, ton nom, ton pseudonyme de jeu par défaut, ton identifiant Supabase et les informations techniques de ta session d'authentification. Render transmet les identifiants de connexion à Supabase Auth sans enregistrer le mot de passe. Si tu continues avec Google, Google transmet à Supabase les informations de base autorisées pour ton compte, notamment ton identité et ton adresse e-mail. Le mot de passe n'est jamais enregistré dans l'état des salles.",
       ],
       [
         "Données de jeu",
@@ -699,7 +766,7 @@ const LEGAL_DOCUMENTS = {
       [
         "Tes choix et tes droits",
         <>
-          Tu peux refuser la mémorisation durable de ta session, te déconnecter et quitter une salle. Tu peux aussi demander l'accès, la rectification ou la suppression de tes données, ainsi que la limitation ou l'opposition à leur traitement lorsque ces droits s'appliquent, en écrivant à{" "}
+          Tu peux modifier les informations de ton profil et supprimer ton compte directement depuis l'application après avoir quitté tes salles. Tu peux également refuser la mémorisation durable de ta session ou te déconnecter. Pour toute autre demande d'accès, de rectification, de limitation ou d'opposition lorsque ces droits s'appliquent, écris à{" "}
           <a href="mailto:support@jocelyncheruel.dev">support@jocelyncheruel.dev</a>.
         </>,
       ],

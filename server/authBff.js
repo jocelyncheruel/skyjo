@@ -3,7 +3,7 @@ import express from 'express';
 import { createClient } from '@supabase/supabase-js';
 import {
   PublicError, decodeVerifiedJwtClaims, isConfirmedUser, normalizeOrigin,
-  objectPayload,
+  normalizePlayerName, objectPayload,
 } from './security.js';
 
 const SESSION_COOKIE_PROD = '__Host-skyjo_session';
@@ -13,6 +13,7 @@ const OAUTH_COOKIE_DEV = 'skyjo_oauth';
 const SESSION_IDLE_MS = 24 * 60 * 60 * 1000;
 const SESSION_ABSOLUTE_MS = 7 * 24 * 60 * 60 * 1000;
 const OAUTH_FLOW_MS = 10 * 60 * 1000;
+const RECENT_AUTHENTICATION_MS = 10 * 60 * 1000;
 const ACCESS_REFRESH_MARGIN_MS = 60_000;
 
 function sha256(value) {
@@ -91,6 +92,7 @@ export function googleProfileMetadata(user, providerProfile = null, browserLocal
   const metadata = user?.user_metadata && typeof user.user_metadata === 'object'
     ? user.user_metadata
     : {};
+  if (metadata.profile_source === 'user') return null;
   const directProfile = providerProfile && typeof providerProfile === 'object'
     && !Array.isArray(providerProfile)
     ? providerProfile
@@ -135,20 +137,45 @@ export function googleProfileMetadata(user, providerProfile = null, browserLocal
   return Object.keys(update).length ? update : null;
 }
 
+function authProviders(user) {
+  const declaredProviders = Array.isArray(user?.app_metadata?.providers)
+    ? user.app_metadata.providers
+    : [];
+  const primaryProvider = String(user?.app_metadata?.provider || '').toLowerCase();
+  const providers = [...new Set([...declaredProviders, primaryProvider]
+    .map((provider) => String(provider || '').toLowerCase())
+    .filter((provider) => provider === 'google' || provider === 'email'))];
+  if (providers.length > 0) return providers;
+  return [primaryProvider === 'google' ? 'google' : 'email'];
+}
+
 function publicUser(user) {
   if (!user?.id) return null;
   const metadata = user.user_metadata || {};
   const firstName = normalizeName(metadata.first_name || metadata.given_name || '');
   const lastName = normalizeName(metadata.last_name || metadata.family_name || '');
   const fallback = String(user.email || '').split('@')[0];
+  const displayName = normalizeName(metadata.display_name || metadata.full_name || metadata.name
+    || `${firstName} ${lastName}`.trim() || fallback || 'Joueur');
+  const providers = authProviders(user);
+  const declaredProvider = String(user.app_metadata?.provider || '').toLowerCase();
+  const provider = providers.includes(declaredProvider) ? declaredProvider : providers[0];
+  const publicDate = (value) => {
+    const timestamp = Date.parse(String(value || ''));
+    return Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : '';
+  };
   return {
     id: user.id,
     email: String(user.email || '').slice(0, 254),
     firstName,
     lastName,
-    displayName: normalizeName(metadata.display_name || metadata.full_name || metadata.name
-      || `${firstName} ${lastName}`.trim() || fallback || 'Joueur'),
+    displayName,
+    playerName: normalizePlayerName(metadata.player_name || firstName || displayName || fallback),
     preferredLocale: normalizeLocale(metadata.preferred_locale || metadata.locale || ''),
+    provider,
+    providers,
+    createdAt: publicDate(user.created_at),
+    lastSignInAt: publicDate(user.last_sign_in_at),
   };
 }
 
@@ -519,6 +546,89 @@ export function createAuthBff({
     });
   });
 
+  router.post('/profile', rateLimit('auth-profile', 10, 60_000), requireAuth, requireStandardSession, requireCsrf, async (req, res, next) => {
+    try {
+      const body = objectPayload(req.body, ['firstName', 'lastName', 'playerName']);
+      const firstName = normalizeName(body.firstName);
+      const lastName = normalizeName(body.lastName);
+      const playerName = normalizePlayerName(body.playerName);
+      if (!firstName || !lastName || !playerName) {
+        throw new PublicError('invalid_profile', 'Renseignez un prénom, un nom et un pseudonyme valides.', 400);
+      }
+
+      const client = buildAuthClient();
+      const current = await client.auth.setSession({
+        access_token: req.auth.accessToken,
+        refresh_token: req.auth.refreshToken,
+      });
+      if (current.error || !current.data?.session) {
+        throw isTransientAuthError(current.error) ? current.error : authFailure();
+      }
+      const currentMetadata = current.data.session.user?.user_metadata || {};
+      const identityChanged = normalizeName(
+        currentMetadata.first_name || currentMetadata.given_name || '',
+      ) !== firstName || normalizeName(
+        currentMetadata.last_name || currentMetadata.family_name || '',
+      ) !== lastName;
+      const profileMetadata = {
+        first_name: firstName,
+        last_name: lastName,
+        display_name: normalizeName(`${firstName} ${lastName}`),
+        player_name: playerName,
+        ...(identityChanged ? { profile_source: 'user' } : {}),
+      };
+      const { data, error } = await client.auth.updateUser({
+        data: profileMetadata,
+      });
+      if (error || !data?.user) throw publicSupabaseError(error) || error || authFailure();
+      res.json({ user: publicUser(data.user) });
+    } catch (error) { next(error); }
+  });
+
+  router.post('/password/change-request', rateLimit('auth-password-change-request', 3, 10 * 60_000), requireAuth, requireStandardSession, requireCsrf, async (req, res, next) => {
+    try {
+      if (!authProviders(req.auth.user).includes('email')) {
+        throw new PublicError('password_unavailable', 'Ce compte utilise uniquement la connexion Google.', 400);
+      }
+      const email = normalizeEmail(req.auth.user.email);
+      if (!email) throw authFailure();
+      const { error } = await serviceClient.auth.resetPasswordForEmail(email, {
+        redirectTo: `${clientOrigin(req)}/auth/confirm`,
+      });
+      if (error) throw publicSupabaseError(error) || error;
+      res.status(202).json({ accepted: true });
+    } catch (error) { next(error); }
+  });
+
+  router.post('/account/delete', rateLimit('auth-account-delete', 3, 60 * 60_000), requireAuth, requireStandardSession, requireCsrf, async (req, res, next) => {
+    try {
+      if (!Number.isFinite(req.auth.createdAt)
+        || req.auth.createdAt < Date.now() - RECENT_AUTHENTICATION_MS) {
+        throw new PublicError(
+          'recent_authentication_required',
+          'Reconnectez-vous avant de supprimer votre compte.',
+          403,
+        );
+      }
+      const body = objectPayload(req.body, ['confirmationEmail']);
+      const accountEmail = normalizeEmail(req.auth.user.email);
+      if (!accountEmail || normalizeEmail(body.confirmationEmail) !== accountEmail) {
+        throw new PublicError('invalid_account_confirmation', "L'adresse e-mail de confirmation ne correspond pas.", 400);
+      }
+      const { count, error: membershipError } = await serviceClient.from('room_members')
+        .select('room_id', { count: 'exact', head: true })
+        .eq('user_id', req.auth.user.id);
+      if (membershipError) throw membershipError;
+      if (Number(count || 0) > 0) {
+        throw new PublicError('active_rooms', 'Quittez vos salles avant de supprimer votre compte.', 409);
+      }
+      const { error } = await serviceClient.auth.admin.deleteUser(req.auth.user.id);
+      if (error) throw error;
+      clearSessionCookie(res);
+      res.status(204).end();
+    } catch (error) { next(error); }
+  });
+
   router.post('/login', rateLimit('auth-login', 8, 10 * 60_000), requireOrigin, async (req, res, next) => {
     try {
       const body = objectPayload(
@@ -579,6 +689,7 @@ export function createAuthBff({
             first_name: firstName,
             last_name: lastName,
             display_name: `${firstName} ${lastName}`.trim(),
+            player_name: firstName,
             source: 'skyjo',
             ...(preferredLocale ? { preferred_locale: preferredLocale } : {}),
           },

@@ -3,6 +3,7 @@ import { io } from 'socket.io-client';
 import { LogOut, MessageCircle, Send, X } from 'lucide-react';
 import Card from './components/Card.jsx';
 import PlayerBoard from './components/PlayerBoard.jsx';
+import ProfileModal, { ProfileButton } from './ProfileModal.jsx';
 import { AuthLoadingView, AuthView, ConsentGate, LegalPage, ResetPasswordView } from './Auth.jsx';
 import { useAuth } from './authContext.js';
 import { apiFetch, AUTH_REMEMBER_KEY, SERVER_URL } from './apiClient.js';
@@ -205,7 +206,7 @@ function SkyjoApp() {
 
 function GameApp() {
   const { user, logout } = useAuth();
-  const accountPlayerName = normalizePlayerNameInput(user?.firstName || user?.displayName || '');
+  const accountPlayerName = normalizePlayerNameInput(user?.playerName || user?.firstName || user?.displayName || '');
   const [socket, setSocket] = useState(null);
   const [connected, setConnected] = useState(false);
   const [roomId, setRoomId] = useState(() => readGameValue('sj-room-id'));
@@ -221,6 +222,7 @@ function GameApp() {
   const [publicRooms, setPublicRooms] = useState([]);
   const [publicRoomsLoading, setPublicRoomsLoading] = useState(false);
   const [homePanel, setHomePanel] = useState('home');
+  const [profileOpen, setProfileOpen] = useState(false);
   const [state, setState] = useState(null);
   const [chatMessages, setChatMessages] = useState([]);
   const [chatHasMore, setChatHasMore] = useState(false);
@@ -542,6 +544,7 @@ function GameApp() {
     const canJoinPublicRoom = connected;
 
     return (
+      <>
       <div className="sj-app-shell sj-lobby-room">
         <GameToast key={errorSerial} message={error} />
         <div className="sj-home-panel-stack">
@@ -550,15 +553,18 @@ function GameApp() {
             key="public-rooms"
             className="sj-lobby-card sj-home-card sj-public-search-card"
           >
-            <button
-              type="button"
-              className="sj-account-logout"
-              onClick={logoutFromHome}
-              aria-label="Se déconnecter du compte"
-              title="Se déconnecter"
-            >
-              <LogOut aria-hidden="true" size={16} />
-            </button>
+            <div className="sj-account-controls">
+              <ProfileButton onClick={() => setProfileOpen(true)} />
+              <button
+                type="button"
+                className="sj-account-logout"
+                onClick={logoutFromHome}
+                aria-label="Se déconnecter du compte"
+                title="Se déconnecter"
+              >
+                <LogOut aria-hidden="true" size={16} />
+              </button>
+            </div>
             <div className="sj-brand-mark">
               <SkyjoLogo connectionBadge={<ConnectionBadge connected={connected} />} />
             </div>
@@ -603,15 +609,18 @@ function GameApp() {
             aria-hidden={homePanel === 'public' || undefined}
             inert={homePanel === 'public' ? '' : undefined}
           >
-            <button
-              type="button"
-              className="sj-account-logout"
-              onClick={logoutFromHome}
-              aria-label="Se déconnecter du compte"
-              title="Se déconnecter"
-            >
-              <LogOut aria-hidden="true" size={16} />
-            </button>
+            <div className="sj-account-controls">
+              <ProfileButton onClick={() => setProfileOpen(true)} />
+              <button
+                type="button"
+                className="sj-account-logout"
+                onClick={logoutFromHome}
+                aria-label="Se déconnecter du compte"
+                title="Se déconnecter"
+              >
+                <LogOut aria-hidden="true" size={16} />
+              </button>
+            </div>
             <div className="sj-brand-mark">
               <SkyjoLogo connectionBadge={<ConnectionBadge connected={connected} />} />
             </div>
@@ -686,6 +695,18 @@ function GameApp() {
           </section>
         </div>
       </div>
+      <ProfileModal
+        open={profileOpen}
+        onClose={() => setProfileOpen(false)}
+        onProfileUpdated={(updatedUser) => {
+          const nextPlayerName = normalizePlayerNameInput(updatedUser?.playerName || '');
+          if (!nextPlayerName) return;
+          setNameInput(nextPlayerName);
+          setPlayerName(nextPlayerName);
+          saveGameValue('sj-player-name', nextPlayerName);
+        }}
+      />
+      </>
     );
   }
 
