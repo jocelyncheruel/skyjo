@@ -3021,6 +3021,27 @@ button.sj-action-count-badge:focus-visible {
   text-align: center;
 }
 
+.sj-peek-result-modal {
+  width: min(560px, 100%);
+  text-align: center;
+}
+
+.sj-peek-result-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  text-align: left;
+}
+
+.sj-peek-result-head h2 {
+  min-width: 0;
+}
+
+.sj-peek-result-modal .sj-peek-board-snapshot {
+  margin-bottom: 0;
+}
+
 .sj-peek-board-snapshot {
   display: flex;
   justify-content: center;

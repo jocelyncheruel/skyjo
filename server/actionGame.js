@@ -898,6 +898,18 @@ function peekGroupHasOtherCard(player, firstIndex, groupType) {
     .some((index) => index !== firstIndex && !player.board[index]?.removed);
 }
 
+function automaticPeekGroupType(player, firstIndex) {
+  const informativeGroups = ['row', 'column'].filter((groupType) => (
+    peekGroupIndexes(firstIndex, groupType).some((index) => {
+      const slot = player.board[index];
+      return index !== firstIndex && slot && !slot.removed && !slot.faceUp;
+    })
+  ));
+  if (informativeGroups.length === 0) return 'single';
+  if (informativeGroups.length === 1) return informativeGroups[0];
+  return null;
+}
+
 function executeNestedAction(state, actorId, card) {
   beginActionEffect(state, actorId, card);
 }
@@ -989,6 +1001,18 @@ export function resolveActionInput(state, playerId, payload = {}) {
   if (payload.draft) {
     if (playerId !== actorId) throw new Error('Ce choix ne vous appartient pas.');
     storeActionDraft(state, pending, playerId, payload.draft);
+    if (pending.type === 'peekLine' && pending.selection?.peekFirst) {
+      const first = pending.selection.peekFirst;
+      const target = state.playersById[first.playerId];
+      const groupType = automaticPeekGroupType(target, first.slotIndex);
+      if (groupType) {
+        resolveActionInput(state, playerId, {
+          targetPlayerId: first.playerId,
+          firstSlotIndex: first.slotIndex,
+          groupType,
+        });
+      }
+    }
     return;
   }
 
@@ -1082,9 +1106,7 @@ export function resolveActionInput(state, playerId, payload = {}) {
           .map((slot, index) => (!slot.removed && !slot.faceUp ? index : -1))
           .filter((index) => index >= 0);
         isLastHidden = hiddenIndexes.length === 1 && hiddenIndexes[0] === firstIndex;
-        const isIsolated = !peekGroupHasOtherCard(target, firstIndex, 'row')
-          && !peekGroupHasOtherCard(target, firstIndex, 'column');
-        if (!isLastHidden && !isIsolated) {
+        if (automaticPeekGroupType(target, firstIndex) !== 'single') {
           throw new Error('Cette carte doit être regardée avec sa ligne ou sa colonne.');
         }
       } else if (!peekGroupHasOtherCard(target, firstIndex, groupType)) {

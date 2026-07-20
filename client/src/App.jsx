@@ -1208,41 +1208,89 @@ function PeekLineChoiceModal({ choice, onResolve, onBack }) {
   );
 }
 
-function PeekResultModal({ peek, onClose }) {
-  if (!peek) return null;
+function PeekResultModal({ peek, targetPlayer, isOwnBoard, onClose }) {
+  if (!peek || !targetPlayer) return null;
 
-  const groupLabel = peek.groupType === 'single'
-    ? peek.isLastHidden ? 'dernière carte cachée' : 'carte isolée'
-    : peek.groupType === 'row' ? 'ligne' : 'colonne';
-  const title = peek.groupType === 'single'
-    ? `${peek.isLastHidden ? 'Dernière carte cachée' : 'Carte isolée'} de ${peek.targetPlayerName}`
-    : `${peek.groupType === 'row' ? 'Ligne' : 'Colonne'} de ${peek.targetPlayerName}`;
+  const peekCardsByIndex = new Map(peek.cards.map((card) => [card.slotIndex, card]));
+  const viewedIndexes = new Set(peek.indexes);
+  const newlyViewedIndexes = new Set(peek.cards
+    .filter((card) => !card.removed && !card.wasFaceUp)
+    .map((card) => card.slotIndex));
+  const referenceIndex = peek.indexes[0];
+  const selectedRow = Math.floor(referenceIndex / BOARD_COLUMNS) + 1;
+  const selectedColumn = (referenceIndex % BOARD_COLUMNS) + 1;
+  const viewedCardCount = newlyViewedIndexes.size;
+  const viewedCardsLabel = `${viewedCardCount > 1 ? 'Les cartes regardées sont entourées' : 'La carte regardée est entourée'} en doré.`;
+  const groupLabel = peek.groupType === 'row' ? 'Ligne' : peek.groupType === 'column' ? 'Colonne' : 'Carte';
+  const title = isOwnBoard
+    ? `${groupLabel} regardée sur votre plateau`
+    : `${groupLabel} regardée chez ${targetPlayer.name}`;
 
   return (
-    <div className="sj-modal-overlay sj-fade-in">
+    <div
+      className="sj-modal-overlay sj-fade-in"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
       <section
         className="sj-confirm-modal sj-peek-result-modal sj-pop-in"
         role="dialog"
         aria-modal="true"
         aria-labelledby="peek-result-title"
       >
-        <h2 id="peek-result-title">{title}</h2>
-        <div className={`sj-star-group-snapshot sj-star-group-${peek.groupType}`} aria-label={`Aperçu privé de la ${groupLabel}`}>
-          {peek.cards.map((card) => (
-            <Card
-              key={card.slotIndex}
-              value={card.value}
-              kind={card.kind}
-              faceUp={!card.removed}
-              removed={card.removed}
-              size="pile"
-            />
-          ))}
-        </div>
-        <div className="sj-modal-actions">
-          <button type="button" className="sj-btn sj-btn-primary" onClick={onClose}>
-            Fermer
+        <div className="sj-peek-result-head">
+          <h2 id="peek-result-title">{title}</h2>
+          <button
+            type="button"
+            className="sj-action-hand-modal-close"
+            aria-label="Fermer l’aperçu des cartes regardées"
+            onClick={onClose}
+          >
+            ×
           </button>
+        </div>
+        <p>
+          {isOwnBoard
+            ? 'Voici votre plateau.'
+            : `Voici le plateau de ${targetPlayer.name}.`}{' '}
+          {viewedCardsLabel}
+        </p>
+        <div
+          className="sj-peek-board-snapshot"
+          role="img"
+          aria-label={isOwnBoard ? 'Aperçu privé de votre plateau' : `Aperçu privé du plateau de ${targetPlayer.name}`}
+        >
+          <div className="sj-grid sj-peek-board-grid">
+            {targetPlayer.board.map((slot, slotIndex) => {
+              const privateCard = peekCardsByIndex.get(slotIndex);
+              const removed = !!slot.removed;
+              return (
+                <Card
+                  key={slotIndex}
+                  value={privateCard?.value ?? slot.value}
+                  kind={privateCard?.kind || slot.kind || 'number'}
+                  faceUp={!removed && (!!slot.faceUp || (!!privateCard && !privateCard.removed))}
+                  removed={removed}
+                  selected={newlyViewedIndexes.has(slotIndex)}
+                  dim={!viewedIndexes.has(slotIndex)}
+                  size="table"
+                />
+              );
+            })}
+            {peek.groupType === 'row' && (
+              <span
+                className={`sj-peek-group-outline sj-peek-row-outline sj-peek-row-outline-${selectedRow}`}
+                aria-hidden="true"
+              />
+            )}
+            {peek.groupType === 'column' && (
+              <span
+                className={`sj-peek-group-outline sj-peek-column-outline sj-peek-column-outline-${selectedColumn}`}
+                aria-hidden="true"
+              />
+            )}
+          </div>
         </div>
       </section>
     </div>
@@ -1890,6 +1938,9 @@ function GameScreen({
     && myActionState.peek.id !== dismissedPeekId
     ? myActionState.peek
     : null;
+  const activePeekTarget = activePeek
+    ? state.players.find((player) => player.id === activePeek.targetPlayerId)
+    : null;
   const actionCardsForDisplay = SHOW_ALL_ACTION_CARDS_PREVIEW
     ? [
       ...myActionState.actionCards,
@@ -2254,13 +2305,10 @@ function GameScreen({
       if (!first) {
         const target = state.players.find((player) => player.id === playerId);
         const options = getPeekLineOptions(target, slotIndex);
-        const hiddenIndexes = target?.board
-          .map((slot, index) => (!slot.removed && !slot.faceUp ? index : -1))
-          .filter((index) => index >= 0) || [];
-        const isLastHiddenCard = hiddenIndexes.length === 1 && hiddenIndexes[0] === slotIndex;
-        const automaticGroupType = isLastHiddenCard || options.length === 0
+        const informativeOptions = options.filter((option) => option.hiddenCount > 1);
+        const automaticGroupType = informativeOptions.length === 0
           ? 'single'
-          : options.length === 1 ? options[0].groupType : null;
+          : informativeOptions.length === 1 ? informativeOptions[0].groupType : null;
         if (automaticGroupType) {
           socket.emit('resolveAction', {
             targetPlayerId: playerId,
@@ -2510,6 +2558,8 @@ function GameScreen({
   const peekResultModal = (
     <PeekResultModal
       peek={activePeek}
+      targetPlayer={activePeekTarget}
+      isOwnBoard={activePeek?.targetPlayerId === myId}
       onClose={() => setDismissedPeekId(activePeek?.id || null)}
     />
   );
