@@ -1490,8 +1490,13 @@ function ActionHandModal({
                 && isMyTurn
                 && turnStage === 'choose'
                 && !lastTurnLocked
+                && card.availableAt <= turnSerial
+                && !card.unavailableReason;
+              const discardable = !card.preview
+                && isMyTurn
+                && turnStage === 'choose'
+                && !lastTurnLocked
                 && card.availableAt <= turnSerial;
-              const discardable = playable;
 
               return (
                 <div key={card.id} className={`sj-action-hand-modal-item ${playable ? 'sj-action-hand-modal-item-playable' : ''}`}>
@@ -1872,6 +1877,7 @@ function ActionTile({ card, onClick, disabled = false, compact = false, interact
       disabled={disabled}
       onClick={onClick}
       aria-label={ACTION_LABELS[card.type] || 'Carte Action'}
+      title={disabled ? card.unavailableReason : undefined}
     >
       {content}
     </button>
@@ -2044,6 +2050,9 @@ function GameScreen({
     && !hasDrawThreeChoice;
   const showPlayDiscardModal = !!pendingAction?.mustRespond
     && pendingAction.type === 'playDiscard';
+  const playableDiscardCardIds = new Set(pendingAction?.playableDiscardCardIds || []);
+  const playableDiscardCards = (state.actionDiscard || [])
+    .filter((card) => playableDiscardCardIds.has(card.id));
   const stealTargetId = pendingAction?.type === 'stealAction'
     ? actionSelection.stealTargetId
     : null;
@@ -2532,7 +2541,7 @@ function GameScreen({
   const playDiscardActionModal = (
     <PlayDiscardActionModal
       open={showPlayDiscardModal}
-      cards={state.actionDiscard || []}
+      cards={playableDiscardCards}
       onSelect={handlePlayDiscardActionSelect}
     />
   );

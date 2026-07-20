@@ -67,6 +67,13 @@ function ensureActionFields(state) {
     }
   }
 
+  if (pending?.type === 'playDiscard'
+    && replayableDiscardCards(state, pending.playerId).length === 0) {
+    discardPlayedAction(state, pending.card);
+    finishAction(state);
+    return;
+  }
+
   const actionIsOrphaned = state.gameMode === 'action'
     && state.phase === 'playing'
     && state.turnStage === 'action'
@@ -113,12 +120,6 @@ function refillGameDeck(state) {
 
 function availableGameDrawCount(state) {
   return state.deck.length + Math.max(0, state.discard.length - 1);
-}
-
-function assertCanDrawGameCards(state, count) {
-  if (availableGameDrawCount(state) < count) {
-    throw new Error('Plus assez de cartes dans la pioche.');
-  }
 }
 
 function refillActionDeck(state) {
@@ -784,10 +785,18 @@ function beginActionEffect(state, playerId, card) {
     finishAction(state);
     return;
   }
-  if (card.type === 'playDiscard' && state.actionDiscard.length === 0) {
-    discardPlayedAction(state, card);
-    finishAction(state);
-    return;
+  if (card.type === 'playDiscard') {
+    const playableCards = replayableDiscardCards(state, playerId);
+    if (playableCards.length === 1) {
+      const selected = playableCards[0];
+      discardPlayedAction(state, card);
+      state.actionDiscard.splice(
+        state.actionDiscard.findIndex((discardedCard) => discardedCard.id === selected.id),
+        1,
+      );
+      executeNestedAction(state, playerId, selected);
+      return;
+    }
   }
   if (card.type === 'stealAction' && !state.order.some((id) => id !== playerId && state.playersById[id].actionCards.length)) {
     discardPlayedAction(state, card);
@@ -815,15 +824,44 @@ function beginActionEffect(state, playerId, card) {
   state.turnStage = 'action';
 }
 
-function assertActionCanBegin(state, playerId, card) {
-  if (!card) throw new Error('Carte Action invalide.');
+function actionUnavailableReason(state, playerId, card, { fromDiscard = false } = {}) {
+  if (!card || !ACTION_TYPES.includes(card.type)) return 'Carte Action invalide.';
 
-  if (card.type === 'drawThree') {
-    assertCanDrawGameCards(state, 3);
+  if (fromDiscard && card.type === 'playDiscard') {
+    return 'Cette carte ne peut pas rejouer une autre Action défaussée.';
   }
 
-  if (card.type === 'playDiscard' && state.actionDiscard.length === 0) {
-    return;
+  if (card.type === 'drawThree' && availableGameDrawCount(state) < 3) {
+    return 'Plus assez de cartes dans la pioche.';
+  }
+
+  if (card.type === 'swapOwn') {
+    const availableSlots = state.playersById[playerId]?.board
+      ?.filter((slot) => !slot.removed).length || 0;
+    if (availableSlots < 2) return 'Il faut au moins deux cartes sur votre plateau.';
+  }
+
+  if (card.type === 'swapPlayers') {
+    const availableSlots = state.order.reduce((count, id) => (
+      count + (state.playersById[id]?.board?.filter((slot) => !slot.removed).length || 0)
+    ), 0);
+    if (availableSlots < 2) return 'Il faut au moins deux cartes disponibles sur les plateaux.';
+  }
+
+  if (card.type === 'peekLine') {
+    const hasHiddenCard = state.order.some((id) => state.playersById[id]?.board
+      ?.some((slot) => !slot.removed && !slot.faceUp));
+    if (!hasHiddenCard) return 'Aucune carte cachée ne peut être regardée.';
+  }
+
+  if (card.type === 'removeEach') {
+    const targets = actionTargetsAfterActor(state, playerId);
+    if (targets.length === 0) return 'Aucun autre joueur ne peut être ciblé.';
+    const hasBlockedTarget = targets.some((id) => {
+      const target = state.playersById[id];
+      return !target?.board?.some((slot) => !slot.removed) && !target?.actionCards?.length;
+    });
+    if (hasBlockedTarget) return 'Un joueur ne possède aucune carte pouvant être retirée.';
   }
 
   if (card.type === 'stealAction') {
@@ -831,8 +869,32 @@ function assertActionCanBegin(state, playerId, card) {
       id !== playerId
       && state.playersById[id]?.connected
       && state.playersById[id]?.actionCards?.length);
-    if (!hasTarget) return;
+    if (!hasTarget) return 'Aucun autre joueur ne possède de carte Action.';
   }
+
+  if (card.type === 'playDiscard' && replayableDiscardCards(state, playerId).length === 0) {
+    return 'Aucune carte Action défaussée ne peut être jouée.';
+  }
+
+  return null;
+}
+
+function replayableDiscardCards(state, playerId) {
+  const seenTypes = new Set();
+  const cards = [];
+  for (let index = state.actionDiscard.length - 1; index >= 0; index -= 1) {
+    const card = state.actionDiscard[index];
+    if (seenTypes.has(card.type)
+      || actionUnavailableReason(state, playerId, card, { fromDiscard: true })) continue;
+    seenTypes.add(card.type);
+    cards.push(card);
+  }
+  return cards;
+}
+
+function assertActionCanBegin(state, playerId, card, options) {
+  const reason = actionUnavailableReason(state, playerId, card, options);
+  if (reason) throw new Error(reason);
 }
 
 export function playOwnedAction(state, playerId, cardId) {
@@ -1146,7 +1208,7 @@ export function resolveActionInput(state, playerId, payload = {}) {
     const index = state.actionDiscard.findIndex((card) => card.id === payload.cardId);
     if (index < 0) throw new Error('Carte Action défaussée invalide.');
     const selected = state.actionDiscard[index];
-    assertActionCanBegin(state, actorId, selected);
+    assertActionCanBegin(state, actorId, selected, { fromDiscard: true });
     discardPlayedAction(state, pending.card);
     state.actionDiscard.splice(index, 1);
     executeNestedAction(state, actorId, selected);
@@ -1350,6 +1412,9 @@ export function publicActionState(state, forPlayerId) {
   const actionPausedForDefense = !!defensePrompt;
   const canSeeDefensePrompt = defensePrompt
     && (defensePrompt.actorId === forPlayerId || defensePrompt.targetId === forPlayerId);
+  const playableDiscardCardIds = pending?.type === 'playDiscard' && pending.playerId === forPlayerId
+    ? replayableDiscardCards(state, pending.playerId).map((card) => card.id)
+    : undefined;
   return {
     actionMarket: state.actionMarket,
     actionDiscard: state.actionDiscard,
@@ -1381,6 +1446,7 @@ export function publicActionState(state, forPlayerId) {
         : undefined,
       drawn: pending.playerId === forPlayerId ? pending.drawn : undefined,
       selection: pending.playerId === forPlayerId ? pending.selection : undefined,
+      playableDiscardCardIds,
       defensePrompt: canSeeDefensePrompt ? {
         id: defensePrompt.id,
         type: defensePrompt.type,
@@ -1395,7 +1461,11 @@ export function publicActionState(state, forPlayerId) {
     playersAction: Object.fromEntries(state.order.map((id) => {
       const player = state.playersById[id];
       return [id, {
-        actionCards: player.actionCards,
+        actionCards: player.actionCards.map((card) => {
+          if (id !== forPlayerId) return card;
+          const unavailableReason = actionUnavailableReason(state, id, card);
+          return unavailableReason ? { ...card, unavailableReason } : card;
+        }),
         peek: id === forPlayerId ? visibleOwnPeek : null,
       }];
     })),
