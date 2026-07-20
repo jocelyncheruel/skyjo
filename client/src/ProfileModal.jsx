@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
+  BarChart3,
   CalendarDays,
   Check,
   ChevronDown,
@@ -9,16 +10,18 @@ import {
   LogIn,
   LoaderCircle,
   Mail,
+  RotateCw,
   Save,
   ShieldCheck,
   Trash2,
+  Trophy,
   UserPen,
   UserRound,
   X,
 } from 'lucide-react';
 import { useAuth } from './authContext.js';
 
-const PROFILE_COMPACT_QUERY = '(max-width: 760px)';
+const PROFILE_COMPACT_QUERY = '(max-width: 1020px)';
 const PROFILE_FOCUSABLE_SELECTOR = [
   'a[href]',
   'button:not([disabled])',
@@ -94,7 +97,15 @@ export function ProfileButton({ onClick }) {
 
 export default function ProfileModal({ open, onClose, onProfileUpdated }) {
   const {
-    user, updateProfile, requestProfilePasswordChange, deleteAccount, logout,
+    user,
+    updateProfile,
+    profileStats,
+    profileStatsLoading,
+    profileStatsError,
+    getProfileStats,
+    requestProfilePasswordChange,
+    deleteAccount,
+    logout,
   } = useAuth();
   const profileModalRef = useRef(null);
   const deleteModalRef = useRef(null);
@@ -165,7 +176,7 @@ export default function ProfileModal({ open, onClose, onProfileUpdated }) {
     setReauthenticationRequired(false);
     setDeleteConfirmation('');
     setActiveSection('account');
-    const shouldFocusForm = mediaMatches('(min-width: 761px) and (pointer: fine)');
+    const shouldFocusForm = mediaMatches('(min-width: 1021px) and (pointer: fine)');
     const frame = window.requestAnimationFrame(() => {
       const focusTarget = shouldFocusForm ? firstNameRef.current : profileModalRef.current;
       focusTarget?.focus({ preventScroll: true });
@@ -174,6 +185,12 @@ export default function ProfileModal({ open, onClose, onProfileUpdated }) {
       window.cancelAnimationFrame(frame);
     };
   }, [open, user]);
+
+  useEffect(() => {
+    if (!open || !user?.id) return undefined;
+    getProfileStats({ force: true }).catch(() => {});
+    return undefined;
+  }, [getProfileStats, open, user?.id]);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -260,6 +277,20 @@ export default function ProfileModal({ open, onClose, onProfileUpdated }) {
   const savedDisplayName = user.displayName
     || `${user.firstName || ''} ${user.lastName || ''}`.trim()
     || user.email;
+  const statistics = profileStats;
+  const statisticsLoading = profileStatsLoading && !statistics;
+  const statisticsError = statistics ? '' : profileStatsError;
+  const completedGames = (statistics?.gamesWon || 0) + (statistics?.gamesLost || 0);
+  const winRate = completedGames > 0
+    ? Math.round(((statistics?.gamesWon || 0) / completedGames) * 100)
+    : 0;
+  const formatStat = (value) => new Intl.NumberFormat(currentLocale).format(Number(value || 0));
+  const primaryStatistics = [
+    { label: 'Parties jouées', value: statistics?.gamesPlayed, tone: 'played' },
+    { label: 'Victoires', value: statistics?.gamesWon, tone: 'won' },
+    { label: 'Défaites', value: statistics?.gamesLost, tone: 'lost' },
+    { label: 'Abandons', value: statistics?.gamesAbandoned, tone: 'abandoned' },
+  ];
 
   function showNotification(tone, message) {
     notificationSerialRef.current += 1;
@@ -333,6 +364,61 @@ export default function ProfileModal({ open, onClose, onProfileUpdated }) {
   async function handleReauthentication() {
     setSecurityBusy('reauthentication');
     await logout();
+  }
+
+  function renderSecuritySection() {
+    return (
+      <section
+        className="sj-profile-security"
+        aria-labelledby={compactProfile ? undefined : 'profile-security-title'}
+      >
+        <div className="sj-profile-security-head">
+          <h3 id="profile-security-title">Sécurité du compte</h3>
+        </div>
+
+        {hasEmailProvider && (
+          <div className="sj-profile-security-action">
+            <button
+              type="button"
+              className="sj-profile-security-icon sj-profile-security-trigger sj-profile-security-password-trigger"
+              onClick={handlePasswordChangeRequest}
+              disabled={!!securityBusy}
+              aria-label="Modifier le mot de passe"
+              title="Modifier le mot de passe"
+            >
+              {securityBusy === 'password'
+                ? <LoaderCircle className="sj-profile-security-spinner" aria-hidden="true" size={17} />
+                : <KeyRound aria-hidden="true" size={18} />}
+            </button>
+            <div>
+              <strong>Mot de passe</strong>
+              <small>Recevez un lien sécurisé par e-mail pour le modifier.</small>
+            </div>
+          </div>
+        )}
+
+        <div className="sj-profile-security-action sj-profile-security-danger">
+          <button
+            ref={deleteTriggerRef}
+            type="button"
+            className="sj-profile-security-icon sj-profile-security-trigger sj-profile-security-delete-trigger"
+            onClick={() => {
+              setReauthenticationRequired(false);
+              setDeleteMode(true);
+            }}
+            disabled={!!securityBusy || deleteMode}
+            aria-label="Supprimer le compte"
+            title="Supprimer le compte"
+          >
+            <Trash2 aria-hidden="true" size={17} />
+          </button>
+          <div>
+            <strong>Supprimer le compte</strong>
+            <small>Cette action supprimera définitivement votre compte et ses informations.</small>
+          </div>
+        </div>
+      </section>
+    );
   }
 
   return (
@@ -412,12 +498,14 @@ export default function ProfileModal({ open, onClose, onProfileUpdated }) {
           >
             <div className="sj-profile-accordion-panel-clip">
             <aside className="sj-profile-sidebar" aria-label={compactProfile ? undefined : 'Résumé du compte'}>
-            <div className="sj-profile-identity">
-              <strong>{savedDisplayName}</strong>
+            <div className="sj-profile-account-summary">
+              <div className="sj-profile-identity">
+                <strong>{savedDisplayName}</strong>
+              </div>
+              <span className="sj-profile-provider">
+                <LogIn aria-hidden="true" size={14} /> {providerLabel}
+              </span>
             </div>
-            <span className="sj-profile-provider">
-              <LogIn aria-hidden="true" size={14} /> {providerLabel}
-            </span>
 
             <dl className="sj-profile-account-data">
               <div>
@@ -433,11 +521,113 @@ export default function ProfileModal({ open, onClose, onProfileUpdated }) {
                 <dd>{formatAccountDate(user.lastSignInAt, currentLocale)}</dd>
               </div>
             </dl>
+            {!compactProfile && renderSecuritySection()}
             </aside>
             </div>
           </div>
 
           <div className="sj-profile-main">
+            {compactProfile && (
+              <button
+                id="profile-accordion-statistics"
+                type="button"
+                className="sj-profile-accordion-trigger"
+                aria-expanded={activeSection === 'statistics'}
+                aria-controls="profile-panel-statistics"
+                onClick={() => setActiveSection((section) => (
+                  section === 'statistics' ? null : 'statistics'
+                ))}
+              >
+                <span className="sj-profile-accordion-icon"><BarChart3 aria-hidden="true" size={17} /></span>
+                <span className="sj-profile-accordion-copy">
+                  <strong>Statistiques</strong>
+                  <small>Parties, victoires et abandons</small>
+                </span>
+                <ChevronDown className="sj-profile-accordion-chevron" aria-hidden="true" size={17} />
+              </button>
+            )}
+            <div
+              id="profile-panel-statistics"
+              className={`sj-profile-accordion-panel ${activeSection === 'statistics' ? 'sj-profile-accordion-panel-open' : ''}`}
+              aria-labelledby={compactProfile ? 'profile-accordion-statistics' : undefined}
+              aria-hidden={compactProfile ? activeSection !== 'statistics' : undefined}
+              inert={compactProfile && activeSection !== 'statistics' ? '' : undefined}
+              role={compactProfile ? 'region' : undefined}
+            >
+              <div className="sj-profile-accordion-panel-clip">
+                <section
+                  className="sj-profile-statistics"
+                  aria-labelledby={compactProfile ? undefined : 'profile-statistics-title'}
+                  aria-busy={statisticsLoading}
+                >
+                  <div className="sj-profile-statistics-head">
+                    <div>
+                      <BarChart3 aria-hidden="true" size={18} />
+                      <h3 id="profile-statistics-title">Statistiques de jeu</h3>
+                    </div>
+                    {!statisticsLoading && !statisticsError && (statistics?.gamesPlayed || 0) > 0 && (
+                      <span>{winRate}% de victoires</span>
+                    )}
+                  </div>
+
+                  {statisticsError ? (
+                    <div className="sj-profile-statistics-state" role="status">
+                      <p>{statisticsError}</p>
+                      <button
+                        type="button"
+                        className="sj-profile-statistics-retry"
+                        onClick={() => getProfileStats({ force: true }).catch(() => {})}
+                      >
+                        <RotateCw aria-hidden="true" size={14} /> Réessayer
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <div className={`sj-profile-statistics-grid ${statisticsLoading ? 'sj-profile-statistics-grid-loading' : ''}`}>
+                        {primaryStatistics.map((statistic) => (
+                          <article key={statistic.label} className={`sj-profile-stat sj-profile-stat-${statistic.tone}`}>
+                            <strong>{statisticsLoading ? '—' : formatStat(statistic.value)}</strong>
+                            <span>{statistic.label}</span>
+                          </article>
+                        ))}
+                      </div>
+                      <dl className="sj-profile-statistics-details">
+                        <div>
+                          <dt>Taux de victoire</dt>
+                          <dd>{statisticsLoading ? '—' : `${winRate}%`}</dd>
+                        </div>
+                        <div>
+                          <dt>Manches jouées</dt>
+                          <dd>{statisticsLoading ? '—' : formatStat(statistics?.roundsPlayed)}</dd>
+                        </div>
+                        <div>
+                          <dt>Classique</dt>
+                          <dd>{statisticsLoading ? '—' : formatStat(statistics?.classicGames)}</dd>
+                        </div>
+                        <div>
+                          <dt>Action</dt>
+                          <dd>{statisticsLoading ? '—' : formatStat(statistics?.actionGames)}</dd>
+                        </div>
+                        <div>
+                          <dt>Meilleur score final</dt>
+                          <dd>
+                            {statisticsLoading || statistics?.bestScore == null
+                              ? '—'
+                              : formatStat(statistics.bestScore)}
+                          </dd>
+                        </div>
+                      </dl>
+                      {!statisticsLoading && (statistics?.gamesPlayed || 0) === 0 && (
+                        <p className="sj-profile-statistics-empty">
+                          <Trophy aria-hidden="true" size={15} /> Tes prochaines parties apparaîtront ici.
+                        </p>
+                      )}
+                    </>
+                  )}
+                </section>
+              </div>
+            </div>
+
             {compactProfile && (
               <button
                 id="profile-accordion-profile"
@@ -563,57 +753,7 @@ export default function ProfileModal({ open, onClose, onProfileUpdated }) {
               role={compactProfile ? 'region' : undefined}
             >
               <div className="sj-profile-accordion-panel-clip">
-            <section
-              className="sj-profile-security"
-              aria-labelledby={compactProfile ? undefined : 'profile-security-title'}
-            >
-              <div className="sj-profile-security-head">
-                <h3 id="profile-security-title">Sécurité du compte</h3>
-              </div>
-
-              {hasEmailProvider && (
-                <div className="sj-profile-security-action">
-                  <button
-                    type="button"
-                    className="sj-profile-security-icon sj-profile-security-trigger sj-profile-security-password-trigger"
-                    onClick={handlePasswordChangeRequest}
-                    disabled={!!securityBusy}
-                    aria-label="Modifier le mot de passe"
-                    title="Modifier le mot de passe"
-                  >
-                    {securityBusy === 'password'
-                      ? <LoaderCircle className="sj-profile-security-spinner" aria-hidden="true" size={17} />
-                      : <KeyRound aria-hidden="true" size={18} />}
-                  </button>
-                  <div>
-                    <strong>Mot de passe</strong>
-                    <small>Recevez un lien sécurisé par e-mail pour le modifier.</small>
-                  </div>
-                </div>
-              )}
-
-              <div className="sj-profile-security-action sj-profile-security-danger">
-                <button
-                  ref={deleteTriggerRef}
-                  type="button"
-                  className="sj-profile-security-icon sj-profile-security-trigger sj-profile-security-delete-trigger"
-                  onClick={() => {
-                    setReauthenticationRequired(false);
-                    setDeleteMode(true);
-                  }}
-                  disabled={!!securityBusy || deleteMode}
-                  aria-label="Supprimer le compte"
-                  title="Supprimer le compte"
-                >
-                  <Trash2 aria-hidden="true" size={17} />
-                </button>
-                <div>
-                  <strong>Supprimer le compte</strong>
-                  <small>Cette action supprimera définitivement votre compte et ses informations.</small>
-                </div>
-              </div>
-
-            </section>
+                {compactProfile && renderSecuritySection()}
               </div>
             </div>
           </div>

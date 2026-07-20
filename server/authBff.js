@@ -187,6 +187,29 @@ function publicUser(user) {
   };
 }
 
+function publicGameStats(row) {
+  const count = (value) => {
+    const parsed = Number(value);
+    return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : 0;
+  };
+  const score = Number(row?.best_score);
+  const lastGameTimestamp = Date.parse(String(row?.last_game_at || ''));
+  return {
+    gamesPlayed: count(row?.games_played),
+    gamesWon: count(row?.games_won),
+    gamesLost: count(row?.games_lost),
+    gamesAbandoned: count(row?.games_abandoned),
+    gamesInProgress: count(row?.games_in_progress),
+    classicGames: count(row?.classic_games),
+    actionGames: count(row?.action_games),
+    roundsPlayed: count(row?.rounds_played),
+    bestScore: Number.isSafeInteger(score) ? score : null,
+    lastGameAt: Number.isFinite(lastGameTimestamp)
+      ? new Date(lastGameTimestamp).toISOString()
+      : '',
+  };
+}
+
 function authFailure() {
   return new PublicError(
     'authentication_failed',
@@ -552,6 +575,17 @@ export function createAuthBff({
       remember: req.auth.remember,
       recovery: req.auth.authContext === 'recovery',
     });
+  });
+
+  router.get('/profile/stats', rateLimit('auth-profile-stats', 30, 60_000), requireAuth, requireStandardSession, async (req, res, next) => {
+    try {
+      const { data, error } = await serviceClient.rpc('get_skyjo_user_stats', {
+        p_user_id: req.auth.user.id,
+      });
+      if (error) throw error;
+      const row = Array.isArray(data) ? data[0] : data;
+      res.json({ stats: publicGameStats(row || {}) });
+    } catch (error) { next(error); }
   });
 
   router.post('/profile', rateLimit('auth-profile', 10, 60_000), requireAuth, requireStandardSession, requireCsrf, async (req, res, next) => {

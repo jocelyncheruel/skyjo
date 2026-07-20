@@ -10,13 +10,13 @@ REVOKE ALL ON TABLE public.skyjo_schema_migrations FROM PUBLIC, anon, authentica
 DO $$
 BEGIN
   IF NOT EXISTS (
-    SELECT 1 FROM public.skyjo_schema_migrations WHERE version = 'v3'
+    SELECT 1 FROM public.skyjo_schema_migrations WHERE version = 'v4'
   ) THEN
     IF to_regclass('public.rooms') IS NOT NULL THEN
       TRUNCATE TABLE public.rooms CASCADE;
     END IF;
     INSERT INTO public.skyjo_schema_migrations (version)
-    VALUES ('v3');
+    VALUES ('v4');
   END IF;
 END;
 $$;
@@ -154,6 +154,32 @@ CREATE INDEX IF NOT EXISTS app_sessions_user_idx ON public.app_sessions (user_id
 CREATE INDEX IF NOT EXISTS app_sessions_expiry_idx
   ON public.app_sessions (LEAST(idle_expires_at, absolute_expires_at));
 
+CREATE TABLE IF NOT EXISTS public.user_game_participations (
+  room_id TEXT NOT NULL,
+  game_serial BIGINT NOT NULL,
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  player_id TEXT NOT NULL,
+  game_mode TEXT NOT NULL,
+  outcome TEXT NOT NULL DEFAULT 'active',
+  rounds_played INTEGER NOT NULL DEFAULT 0,
+  final_score INTEGER,
+  started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  finished_at TIMESTAMPTZ,
+  PRIMARY KEY (room_id, game_serial, user_id),
+  CONSTRAINT user_game_participations_player_unique UNIQUE (room_id, game_serial, player_id),
+  CONSTRAINT user_game_participations_serial_check CHECK (game_serial > 0),
+  CONSTRAINT user_game_participations_player_id_check CHECK (player_id ~ '^[A-Za-z0-9_-]{10,40}$'),
+  CONSTRAINT user_game_participations_mode_check CHECK (game_mode IN ('classic', 'action')),
+  CONSTRAINT user_game_participations_outcome_check CHECK (outcome IN ('active', 'won', 'lost', 'abandoned')),
+  CONSTRAINT user_game_participations_rounds_check CHECK (rounds_played >= 0)
+);
+
+CREATE INDEX IF NOT EXISTS user_game_participations_user_idx
+  ON public.user_game_participations (user_id, started_at DESC);
+CREATE INDEX IF NOT EXISTS user_game_participations_active_idx
+  ON public.user_game_participations (room_id, game_serial)
+  WHERE outcome = 'active';
+
 ALTER TABLE public.rooms ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.rooms FORCE ROW LEVEL SECURITY;
 ALTER TABLE public.skyjo_schema_migrations ENABLE ROW LEVEL SECURITY;
@@ -166,6 +192,8 @@ ALTER TABLE public.account_consents ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.account_consents FORCE ROW LEVEL SECURITY;
 ALTER TABLE public.app_sessions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.app_sessions FORCE ROW LEVEL SECURITY;
+ALTER TABLE public.user_game_participations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.user_game_participations FORCE ROW LEVEL SECURITY;
 
 REVOKE ALL ON TABLE public.rooms FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON TABLE public.skyjo_schema_migrations FROM PUBLIC, anon, authenticated;
@@ -173,12 +201,14 @@ REVOKE ALL ON TABLE public.room_members FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON TABLE public.room_messages FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON TABLE public.account_consents FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON TABLE public.app_sessions FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON TABLE public.user_game_participations FROM PUBLIC, anon, authenticated;
 
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.rooms TO service_role;
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.room_members TO service_role;
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.room_messages TO service_role;
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.account_consents TO service_role;
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.app_sessions TO service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.user_game_participations TO service_role;
 
 DROP FUNCTION IF EXISTS public.commit_skyjo_room(
   TEXT, JSONB, BIGINT, SMALLINT, UUID, TEXT, TEXT, TEXT, SMALLINT, TEXT, UUID, TEXT
@@ -205,7 +235,19 @@ SET search_path = ''
 AS $$
 DECLARE
   v_revision BIGINT;
+  v_previous_state JSONB;
+  v_previous_phase TEXT;
+  v_previous_game_serial BIGINT := 0;
+  v_game_serial BIGINT := 0;
+  v_rounds_played INTEGER := 0;
 BEGIN
+  IF COALESCE(p_state_json ->> 'gameSerial', '') ~ '^[0-9]+$' THEN
+    v_game_serial := (p_state_json ->> 'gameSerial')::BIGINT;
+  END IF;
+  IF COALESCE(p_state_json ->> 'completedRounds', '') ~ '^[0-9]+$' THEN
+    v_rounds_played := (p_state_json ->> 'completedRounds')::INTEGER;
+  END IF;
+
   IF p_expected_revision = -1 THEN
     INSERT INTO public.rooms (
       room_id, state_json, owner_user_id, state_revision, state_schema_version,
@@ -216,6 +258,21 @@ BEGIN
     )
     RETURNING state_revision INTO v_revision;
   ELSE
+    SELECT state_json
+    INTO v_previous_state
+    FROM public.rooms
+    WHERE room_id = p_room_id AND state_revision = p_expected_revision
+    FOR UPDATE;
+
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'room_revision_conflict' USING ERRCODE = '40001';
+    END IF;
+
+    v_previous_phase := COALESCE(v_previous_state ->> 'phase', 'lobby');
+    IF COALESCE(v_previous_state ->> 'gameSerial', '') ~ '^[0-9]+$' THEN
+      v_previous_game_serial := (v_previous_state ->> 'gameSerial')::BIGINT;
+    END IF;
+
     UPDATE public.rooms
     SET state_json = p_state_json,
         owner_user_id = COALESCE(p_owner_user_id, owner_user_id),
@@ -229,12 +286,8 @@ BEGIN
         quarantined_at = NULL,
         quarantine_reason = NULL,
         updated_at = NOW()
-    WHERE room_id = p_room_id AND state_revision = p_expected_revision
+    WHERE room_id = p_room_id
     RETURNING state_revision INTO v_revision;
-
-    IF v_revision IS NULL THEN
-      RAISE EXCEPTION 'room_revision_conflict' USING ERRCODE = '40001';
-    END IF;
   END IF;
 
   IF p_member_user_id IS NOT NULL OR p_member_player_id IS NOT NULL THEN
@@ -245,9 +298,68 @@ BEGIN
     VALUES (p_room_id, p_member_player_id, p_member_user_id);
   END IF;
 
+  IF v_game_serial > 0 AND p_phase <> 'lobby' THEN
+    INSERT INTO public.user_game_participations (
+      room_id, game_serial, user_id, player_id, game_mode
+    )
+    SELECT p_room_id, v_game_serial, member.user_id, member.player_id,
+      CASE WHEN p_game_mode = 'action' THEN 'action' ELSE 'classic' END
+    FROM public.room_members AS member
+    WHERE member.room_id = p_room_id
+    ON CONFLICT (room_id, game_serial, user_id) DO NOTHING;
+  END IF;
+
   IF p_remove_member_player_id IS NOT NULL THEN
+    IF v_previous_phase NOT IN ('lobby', 'gameEnd')
+      AND v_previous_game_serial > 0 THEN
+      UPDATE public.user_game_participations AS participation
+      SET outcome = 'abandoned',
+          rounds_played = GREATEST(
+            participation.rounds_played,
+            CASE
+              WHEN COALESCE(v_previous_state ->> 'completedRounds', '') ~ '^[0-9]+$'
+                THEN (v_previous_state ->> 'completedRounds')::INTEGER
+              ELSE 0
+            END
+          ),
+          final_score = CASE
+            WHEN COALESCE(
+              v_previous_state #>> ARRAY['playersById', p_remove_member_player_id, 'totalScore'],
+              ''
+            ) ~ '^-?[0-9]+$'
+              THEN (v_previous_state #>> ARRAY['playersById', p_remove_member_player_id, 'totalScore'])::INTEGER
+            ELSE participation.final_score
+          END,
+          finished_at = COALESCE(participation.finished_at, NOW())
+      WHERE participation.room_id = p_room_id
+        AND participation.game_serial = v_previous_game_serial
+        AND participation.player_id = p_remove_member_player_id
+        AND participation.outcome = 'active';
+    END IF;
+
     DELETE FROM public.room_members
     WHERE room_id = p_room_id AND player_id = p_remove_member_player_id;
+  END IF;
+
+  IF p_phase = 'gameEnd' AND v_game_serial > 0 THEN
+    UPDATE public.user_game_participations AS participation
+    SET outcome = CASE
+          WHEN participation.outcome = 'abandoned' THEN 'abandoned'
+          WHEN participation.player_id = p_state_json ->> 'winnerId' THEN 'won'
+          ELSE 'lost'
+        END,
+        rounds_played = GREATEST(participation.rounds_played, v_rounds_played),
+        final_score = CASE
+          WHEN COALESCE(
+            p_state_json #>> ARRAY['playersById', participation.player_id, 'totalScore'],
+            ''
+          ) ~ '^-?[0-9]+$'
+            THEN (p_state_json #>> ARRAY['playersById', participation.player_id, 'totalScore'])::INTEGER
+          ELSE participation.final_score
+        END,
+        finished_at = COALESCE(participation.finished_at, NOW())
+    WHERE participation.room_id = p_room_id
+      AND participation.game_serial = v_game_serial;
   END IF;
 
   RETURN v_revision;
@@ -307,6 +419,41 @@ AS $$
   );
 $$;
 
+CREATE OR REPLACE FUNCTION public.get_skyjo_user_stats(
+  p_user_id UUID
+)
+RETURNS TABLE (
+  games_played BIGINT,
+  games_won BIGINT,
+  games_lost BIGINT,
+  games_abandoned BIGINT,
+  games_in_progress BIGINT,
+  classic_games BIGINT,
+  action_games BIGINT,
+  rounds_played BIGINT,
+  best_score INTEGER,
+  last_game_at TIMESTAMPTZ
+)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+  SELECT
+    COUNT(*) AS games_played,
+    COUNT(*) FILTER (WHERE outcome = 'won') AS games_won,
+    COUNT(*) FILTER (WHERE outcome = 'lost') AS games_lost,
+    COUNT(*) FILTER (WHERE outcome = 'abandoned') AS games_abandoned,
+    COUNT(*) FILTER (WHERE outcome = 'active') AS games_in_progress,
+    COUNT(*) FILTER (WHERE game_mode = 'classic') AS classic_games,
+    COUNT(*) FILTER (WHERE game_mode = 'action') AS action_games,
+    COALESCE(SUM(rounds_played), 0) AS rounds_played,
+    MIN(final_score) FILTER (WHERE outcome IN ('won', 'lost')) AS best_score,
+    MAX(started_at) AS last_game_at
+  FROM public.user_game_participations
+  WHERE user_id = p_user_id;
+$$;
+
 CREATE OR REPLACE FUNCTION public.delete_stale_skyjo_rooms()
 RETURNS BIGINT
 LANGUAGE plpgsql
@@ -316,6 +463,17 @@ AS $$
 DECLARE
   v_count BIGINT;
 BEGIN
+  UPDATE public.user_game_participations AS participation
+  SET outcome = 'abandoned',
+      finished_at = COALESCE(participation.finished_at, NOW())
+  WHERE participation.outcome = 'active'
+    AND EXISTS (
+      SELECT 1
+      FROM public.rooms AS room
+      WHERE room.room_id = participation.room_id
+        AND room.updated_at < NOW() - INTERVAL '24 hours'
+    );
+
   DELETE FROM public.rooms WHERE updated_at < NOW() - INTERVAL '24 hours';
   GET DIAGNOSTICS v_count = ROW_COUNT;
   RETURN v_count;
@@ -341,12 +499,14 @@ $$;
 REVOKE ALL ON FUNCTION public.commit_skyjo_room(TEXT, JSONB, BIGINT, SMALLINT, UUID, TEXT, TEXT, TEXT, SMALLINT, TEXT, UUID, TEXT, TEXT) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.append_skyjo_message(TEXT, TEXT, TEXT, TEXT, TEXT, TIMESTAMPTZ) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.is_skyjo_session_active(UUID, UUID) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.get_skyjo_user_stats(UUID) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.delete_stale_skyjo_rooms() FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.delete_expired_skyjo_app_sessions() FROM PUBLIC, anon, authenticated;
 
 GRANT EXECUTE ON FUNCTION public.commit_skyjo_room(TEXT, JSONB, BIGINT, SMALLINT, UUID, TEXT, TEXT, TEXT, SMALLINT, TEXT, UUID, TEXT, TEXT) TO service_role;
 GRANT EXECUTE ON FUNCTION public.append_skyjo_message(TEXT, TEXT, TEXT, TEXT, TEXT, TIMESTAMPTZ) TO service_role;
 GRANT EXECUTE ON FUNCTION public.is_skyjo_session_active(UUID, UUID) TO service_role;
+GRANT EXECUTE ON FUNCTION public.get_skyjo_user_stats(UUID) TO service_role;
 GRANT EXECUTE ON FUNCTION public.delete_stale_skyjo_rooms() TO service_role;
 GRANT EXECUTE ON FUNCTION public.delete_expired_skyjo_app_sessions() TO service_role;
 

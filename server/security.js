@@ -121,6 +121,7 @@ export function isValidRoomState(state, roomId) {
   if (!Array.isArray(state.order) || state.order.length > 8) return false;
   if (!state.playersById || typeof state.playersById !== 'object' || Array.isArray(state.playersById)) return false;
   if (!['private', 'public'].includes(state.roomVisibility || 'private')) return false;
+  if (!Number.isSafeInteger(state.gameSerial ?? 0) || (state.gameSerial ?? 0) < 0) return false;
   if (new Set(state.order).size !== state.order.length) return false;
   if (Object.keys(state.playersById).length !== state.order.length) return false;
   if (!Array.isArray(state.deck) || state.deck.length > 200) return false;

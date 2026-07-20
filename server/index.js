@@ -317,6 +317,9 @@ async function loadRoom(roomId) {
   const state = structuredClone(data.state_json);
   state.roomId = roomId;
   state.updatedAt = Date.parse(data.updated_at);
+  if (!Number.isSafeInteger(state.gameSerial) || state.gameSerial < 0) {
+    state.gameSerial = state.phase === 'lobby' ? 0 : 1;
+  }
   if (Number(data.state_schema_version) !== ROOM_SCHEMA_VERSION || !isValidRoomState(state, roomId)) {
     const { error: quarantineError } = await supabase.from('rooms').update({
       quarantined_at: new Date().toISOString(),

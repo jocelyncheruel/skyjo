@@ -72,6 +72,7 @@ export function newRoomState(roomId) {
     drawnCard: null,
     roundEnderId: null,
     roundNumber: 0,
+    gameSerial: 0,
     completedRounds: 0,
     nextRoundAt: null,
     roundScoresAt: null,
@@ -255,6 +256,10 @@ export function startGame(state, playerId) {
   if (state.order.filter(id => state.playersById[id].connected).length < 2) {
     throw new Error('Il faut au moins 2 joueurs.');
   }
+  const currentGameSerial = Number.isSafeInteger(state.gameSerial) && state.gameSerial >= 0
+    ? state.gameSerial
+    : 0;
+  state.gameSerial = currentGameSerial + 1;
   for (const pid of state.order) state.playersById[pid].totalScore = 0;
   state.completedRounds = 0;
   state.winnerId = null;

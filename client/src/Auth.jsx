@@ -171,6 +171,19 @@ export function AuthProvider({ children }) {
   const [error, setError] = useState("");
   const [recoveryMode, setRecoveryMode] = useState(false);
   const [pendingEmailAction, setPendingEmailAction] = useState(null);
+  const [profileStatsState, setProfileStatsState] = useState({
+    userId: '',
+    data: null,
+    loading: false,
+    error: '',
+  });
+  const profileStatsStateRef = useRef(profileStatsState);
+  const profileStatsRequestRef = useRef({ userId: '', promise: null });
+
+  const commitProfileStatsState = useCallback((nextState) => {
+    profileStatsStateRef.current = nextState;
+    setProfileStatsState(nextState);
+  }, []);
 
   useEffect(() => {
     if (!SERVER_URL) {
@@ -392,6 +405,64 @@ export function AuthProvider({ children }) {
     }
   }, []);
 
+  const getProfileStats = useCallback(async ({ force = false } = {}) => {
+    const userId = user?.id || '';
+    if (!userId) throw new Error('Aucun utilisateur connecté.');
+
+    const cachedState = profileStatsStateRef.current;
+    const cachedData = cachedState.userId === userId ? cachedState.data : null;
+    if (!force && cachedData) return cachedData;
+
+    const pendingRequest = profileStatsRequestRef.current;
+    if (pendingRequest.userId === userId && pendingRequest.promise) {
+      return pendingRequest.promise;
+    }
+
+    commitProfileStatsState({ userId, data: cachedData, loading: true, error: '' });
+    const requestPromise = (async () => {
+      try {
+        const data = await authApi('/api/auth/profile/stats', { method: 'GET' }, 'Impossible de charger les statistiques.');
+        if (!data?.stats) throw new Error('Les statistiques sont indisponibles.');
+        if (profileStatsRequestRef.current.promise === requestPromise) {
+          commitProfileStatsState({ userId, data: data.stats, loading: false, error: '' });
+        }
+        return data.stats;
+      } catch (statsError) {
+        const message = statsError instanceof TypeError
+          ? "Impossible de contacter le serveur. Vérifie ta connexion."
+          : String(statsError?.message || 'Impossible de charger les statistiques.');
+        if (profileStatsRequestRef.current.promise === requestPromise) {
+          commitProfileStatsState({
+            userId,
+            data: cachedData,
+            loading: false,
+            error: cachedData ? '' : message,
+          });
+        }
+        throw new Error(message);
+      } finally {
+        if (profileStatsRequestRef.current.promise === requestPromise) {
+          profileStatsRequestRef.current = { userId, promise: null };
+        }
+      }
+    })();
+    profileStatsRequestRef.current = { userId, promise: requestPromise };
+    return requestPromise;
+  }, [commitProfileStatsState, user?.id]);
+
+  useEffect(() => {
+    const userId = user?.id || '';
+    if (!userId) {
+      profileStatsRequestRef.current = { userId: '', promise: null };
+      commitProfileStatsState({ userId: '', data: null, loading: false, error: '' });
+      return;
+    }
+    if (profileStatsStateRef.current.userId !== userId) {
+      commitProfileStatsState({ userId, data: null, loading: false, error: '' });
+    }
+    getProfileStats().catch(() => {});
+  }, [commitProfileStatsState, getProfileStats, user?.id]);
+
   const requestProfilePasswordChange = useCallback(async () => {
     try {
       await authApi('/api/auth/password/change-request', { method: 'POST' }, "Impossible d'envoyer l'e-mail de modification.");
@@ -451,6 +522,10 @@ export function AuthProvider({ children }) {
       requestPasswordReset,
       updatePassword,
       updateProfile,
+      profileStats: profileStatsState.userId === user?.id ? profileStatsState.data : null,
+      profileStatsLoading: profileStatsState.userId === user?.id && profileStatsState.loading,
+      profileStatsError: profileStatsState.userId === user?.id ? profileStatsState.error : '',
+      getProfileStats,
       requestProfilePasswordChange,
       deleteAccount,
       logout,
@@ -469,6 +544,8 @@ export function AuthProvider({ children }) {
       requestPasswordReset,
       updatePassword,
       updateProfile,
+      profileStatsState,
+      getProfileStats,
       requestProfilePasswordChange,
       deleteAccount,
       logout,
