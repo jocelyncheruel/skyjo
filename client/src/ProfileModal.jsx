@@ -98,7 +98,9 @@ export default function ProfileModal({ open, onClose, onProfileUpdated }) {
   } = useAuth();
   const profileModalRef = useRef(null);
   const deleteModalRef = useRef(null);
+  const discardModalRef = useRef(null);
   const deleteTriggerRef = useRef(null);
+  const discardContinueRef = useRef(null);
   const firstNameRef = useRef(null);
   const deleteConfirmationRef = useRef(null);
   const wasOpenRef = useRef(false);
@@ -110,9 +112,18 @@ export default function ProfileModal({ open, onClose, onProfileUpdated }) {
   const [securityBusy, setSecurityBusy] = useState('');
   const [notification, setNotification] = useState(null);
   const [deleteMode, setDeleteMode] = useState(false);
+  const [discardMode, setDiscardMode] = useState(false);
   const [deleteConfirmation, setDeleteConfirmation] = useState('');
   const [activeSection, setActiveSection] = useState('account');
   const [compactProfile, setCompactProfile] = useState(() => mediaMatches(PROFILE_COMPACT_QUERY));
+  const normalizedFirstName = firstName.trim();
+  const normalizedLastName = lastName.trim();
+  const normalizedPlayerName = playerName.trim();
+  const hasChanges = Boolean(user) && (
+    normalizedFirstName !== user.firstName
+    || normalizedLastName !== user.lastName
+    || normalizedPlayerName !== user.playerName
+  );
 
   useEffect(() => {
     if (typeof window.matchMedia !== 'function') return undefined;
@@ -148,6 +159,7 @@ export default function ProfileModal({ open, onClose, onProfileUpdated }) {
     setSecurityBusy('');
     setNotification(null);
     setDeleteMode(false);
+    setDiscardMode(false);
     setDeleteConfirmation('');
     setActiveSection('account');
     const shouldFocusForm = mediaMatches('(min-width: 761px) and (pointer: fine)');
@@ -164,20 +176,27 @@ export default function ProfileModal({ open, onClose, onProfileUpdated }) {
     if (!open) return undefined;
     const handleKeyDown = (event) => {
       if (event.key === 'Tab') {
-        trapDialogFocus(event, deleteMode ? deleteModalRef.current : profileModalRef.current);
+        const activeDialog = deleteMode
+          ? deleteModalRef.current
+          : discardMode ? discardModalRef.current : profileModalRef.current;
+        trapDialogFocus(event, activeDialog);
         return;
       }
       if (event.key !== 'Escape' || busy || securityBusy) return;
       if (deleteMode) {
         setDeleteMode(false);
         setDeleteConfirmation('');
+      } else if (discardMode) {
+        setDiscardMode(false);
+      } else if (hasChanges) {
+        setDiscardMode(true);
       } else {
         onClose();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [busy, deleteMode, onClose, open, securityBusy]);
+  }, [busy, deleteMode, discardMode, hasChanges, onClose, open, securityBusy]);
 
   useEffect(() => {
     if (!deleteMode) return undefined;
@@ -194,6 +213,20 @@ export default function ProfileModal({ open, onClose, onProfileUpdated }) {
   }, [deleteMode]);
 
   useEffect(() => {
+    if (!discardMode) return undefined;
+    const returnFocusTarget = document.activeElement;
+    const frame = window.requestAnimationFrame(() => discardContinueRef.current?.focus());
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.requestAnimationFrame(() => {
+        if (returnFocusTarget?.isConnected) {
+          returnFocusTarget.focus({ preventScroll: true });
+        }
+      });
+    };
+  }, [discardMode]);
+
+  useEffect(() => {
     if (!notification) return undefined;
     const timeout = window.setTimeout(() => setNotification(null), 4000);
     return () => window.clearTimeout(timeout);
@@ -201,15 +234,9 @@ export default function ProfileModal({ open, onClose, onProfileUpdated }) {
 
   if (!open || !user) return null;
 
-  const normalizedFirstName = firstName.trim();
-  const normalizedLastName = lastName.trim();
-  const normalizedPlayerName = playerName.trim();
   const currentLocale = canonicalLocale(user.preferredLocale)
     || canonicalLocale(typeof navigator === 'undefined' ? '' : navigator.language)
     || 'fr-FR';
-  const hasChanges = normalizedFirstName !== user.firstName
-    || normalizedLastName !== user.lastName
-    || normalizedPlayerName !== user.playerName;
   const canSave = !busy && !securityBusy && !!normalizedFirstName && !!normalizedLastName
     && !!normalizedPlayerName && hasChanges;
   const providers = Array.isArray(user.providers) && user.providers.length > 0
@@ -227,6 +254,14 @@ export default function ProfileModal({ open, onClose, onProfileUpdated }) {
   function showNotification(tone, message) {
     notificationSerialRef.current += 1;
     setNotification({ id: notificationSerialRef.current, tone, message });
+  }
+
+  function requestProfileClose() {
+    if (hasChanges) {
+      setDiscardMode(true);
+      return;
+    }
+    onClose();
   }
 
   async function handleSubmit(event) {
@@ -292,7 +327,7 @@ export default function ProfileModal({ open, onClose, onProfileUpdated }) {
     <div
       className="sj-modal-overlay sj-profile-overlay sj-fade-in"
       onMouseDown={(event) => {
-        if (event.target === event.currentTarget && !busy && !securityBusy) onClose();
+        if (event.target === event.currentTarget && !busy && !securityBusy) requestProfileClose();
       }}
     >
       <section
@@ -301,8 +336,8 @@ export default function ProfileModal({ open, onClose, onProfileUpdated }) {
         role="dialog"
         aria-modal="true"
         aria-labelledby="profile-title"
-        aria-hidden={deleteMode || undefined}
-        inert={deleteMode ? '' : undefined}
+        aria-hidden={deleteMode || discardMode || undefined}
+        inert={deleteMode || discardMode ? '' : undefined}
         tabIndex={-1}
       >
         <header className="sj-profile-head">
@@ -313,7 +348,7 @@ export default function ProfileModal({ open, onClose, onProfileUpdated }) {
           <button
             type="button"
             className="sj-profile-close"
-            onClick={onClose}
+            onClick={requestProfileClose}
             disabled={!!busy || !!securityBusy}
             aria-label="Fermer le profil"
           >
@@ -558,6 +593,60 @@ export default function ProfileModal({ open, onClose, onProfileUpdated }) {
         </div>
       </section>
     </div>
+    {discardMode && (
+      <div
+        className="sj-modal-overlay sj-profile-confirm-overlay sj-fade-in"
+        onMouseDown={(event) => {
+          if (event.target === event.currentTarget) setDiscardMode(false);
+        }}
+      >
+        <section
+          ref={discardModalRef}
+          className="sj-confirm-modal sj-profile-discard-modal sj-pop-in"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="profile-discard-title"
+          aria-describedby="profile-discard-description"
+          tabIndex={-1}
+        >
+          <button
+            type="button"
+            className="sj-profile-close sj-profile-discard-close"
+            onClick={() => setDiscardMode(false)}
+            aria-label="Continuer à modifier le profil"
+          >
+            <X aria-hidden="true" size={20} />
+          </button>
+          <span className="sj-profile-discard-modal-icon" aria-hidden="true">
+            <Save size={22} />
+          </span>
+          <h2 id="profile-discard-title">Abandonner les modifications ?</h2>
+          <p id="profile-discard-description">
+            Les informations saisies depuis le dernier enregistrement seront perdues.
+          </p>
+          <div className="sj-modal-actions sj-profile-discard-actions">
+            <button
+              ref={discardContinueRef}
+              type="button"
+              className="sj-btn"
+              onClick={() => setDiscardMode(false)}
+            >
+              Continuer
+            </button>
+            <button
+              type="button"
+              className="sj-btn sj-btn-danger"
+              onClick={() => {
+                setDiscardMode(false);
+                onClose();
+              }}
+            >
+              Abandonner
+            </button>
+          </div>
+        </section>
+      </div>
+    )}
     {deleteMode && (
       <div
         className="sj-modal-overlay sj-profile-delete-overlay sj-fade-in"

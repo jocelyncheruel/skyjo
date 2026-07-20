@@ -3089,8 +3089,43 @@ button.sj-action-count-badge:focus-visible {
   outline-color: rgba(239, 106, 97, 0.18);
 }
 
-.sj-profile-delete-overlay {
+.sj-profile-delete-overlay,
+.sj-profile-confirm-overlay {
   z-index: 120;
+}
+
+.sj-profile-discard-modal {
+  position: relative;
+  width: min(440px, 100%);
+  border-color: rgba(240, 189, 87, 0.34);
+  padding: clamp(22px, 5vw, 30px);
+  text-align: center;
+}
+
+.sj-profile-discard-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+}
+
+.sj-profile-discard-modal-icon {
+  width: 52px;
+  height: 52px;
+  display: grid;
+  place-items: center;
+  margin: 2px auto 16px;
+  border: 1px solid rgba(240, 189, 87, 0.34);
+  border-radius: 50%;
+  background: rgba(118, 82, 20, 0.24);
+  color: #ffe1a0;
+}
+
+.sj-profile-discard-modal h2 {
+  padding: 0 34px;
+}
+
+.sj-profile-discard-actions {
+  margin-top: 20px;
 }
 
 .sj-profile-delete-modal {
@@ -3461,17 +3496,20 @@ button.sj-action-count-badge:focus-visible {
     grid-template-columns: auto minmax(0, 1fr);
   }
 
-  .sj-profile-delete-modal {
+  .sj-profile-delete-modal,
+  .sj-profile-discard-modal {
     padding: 24px 18px 18px;
   }
 }
 
 @media (max-width: 360px) {
-  .sj-profile-delete-actions {
+  .sj-profile-delete-actions,
+  .sj-profile-discard-actions {
     grid-template-columns: 1fr;
   }
 
-  .sj-profile-delete-actions .sj-btn-danger {
+  .sj-profile-delete-actions .sj-btn-danger,
+  .sj-profile-discard-actions .sj-btn-danger {
     grid-row: 1;
   }
 }
