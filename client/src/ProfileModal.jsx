@@ -547,7 +547,7 @@ export default function ProfileModal({ open, onClose, onProfileUpdated }) {
                 </button>
                 <div>
                   <strong>Supprimer le compte</strong>
-                  <small>Cette action supprimera définitivement vos données.</small>
+                  <small>Cette action supprimera définitivement votre compte et ses informations.</small>
                 </div>
               </div>
 
