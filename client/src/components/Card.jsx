@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useLayoutEffect, useMemo, useRef, useState } from 'react';
 
 const CARD_W = 88;
 const CARD_H = 122;
@@ -155,13 +155,14 @@ export default function Card({
   dim,
   tone,
   animateFlip,
+  motionAnchor,
   suppressRevealAnimation = false,
 }) {
   const uid = useMemo(() => `${++uidCounter}`, []);
   const wasFaceUp = useRef(faceUp);
   const [justFlipped, setJustFlipped] = useState(false);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!suppressRevealAnimation && !wasFaceUp.current && faceUp) {
       setJustFlipped(true);
       const timeout = setTimeout(() => setJustFlipped(false), 360);
@@ -205,6 +206,7 @@ export default function Card({
         preserveAspectRatio="none"
         role="img"
         aria-label="Colonne retirée"
+        data-sj-card-anchor={motionAnchor || undefined}
       >
         <rect {...surface} className="sj-card-removed-fill" />
         <CardFrame className="sj-card-frame-removed" inset={frameInset} />
@@ -223,6 +225,7 @@ export default function Card({
         onPointerUp={onClick ? handlePointerUp : undefined}
         role={onClick ? 'button' : 'img'}
         aria-label="Carte cachée"
+        data-sj-card-anchor={motionAnchor || undefined}
       >
         <CardBack rid={uid} inset={frameInset} />
         <CardFrame inset={frameInset} />
@@ -247,6 +250,7 @@ export default function Card({
       onPointerUp={onClick ? handlePointerUp : undefined}
       role={onClick ? 'button' : 'img'}
       aria-label={kind === 'star' ? 'Carte Étoile' : hasNumberValue ? `Carte ${displayValue}` : 'Carte sans valeur'}
+      data-sj-card-anchor={motionAnchor || undefined}
     >
       {kind === 'star' ? (
         <>

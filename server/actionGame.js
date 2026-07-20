@@ -18,6 +18,14 @@ function log(state, msg) {
   if (state.log.length > 100) state.log.shift();
 }
 
+function recordCardMove(state, move) {
+  state.cardMoveSerial = (state.cardMoveSerial || 0) + 1;
+  state.lastCardMove = {
+    id: `${state.roundNumber}:${state.cardMoveSerial}`,
+    ...move,
+  };
+}
+
 function connectedIds(state) {
   return state.order.filter((id) => state.playersById[id]?.connected);
 }
@@ -440,9 +448,14 @@ function boardFinished(player) {
 }
 
 function revealRemainingCards(player) {
-  for (const slot of player.board) {
-    if (!slot.removed) slot.faceUp = true;
-  }
+  const revealed = [];
+  player.board.forEach((slot, slotIndex) => {
+    if (!slot.removed && !slot.faceUp) {
+      revealed.push({ playerId: player.id, slotIndex, card: slot.card });
+      slot.faceUp = true;
+    }
+  });
+  return revealed;
 }
 
 function startRoundIfReady(state) {
@@ -511,6 +524,7 @@ function dealRound(state) {
   state.phase = 'initialFlip';
   state.turnStage = null;
   state.drawnCard = null;
+  state.lastCardMove = null;
   state.nextRoundAt = null;
   state.roundScoresAt = null;
   state.starterTieNotice = null;
@@ -560,10 +574,10 @@ function advanceTurn(state) {
     state.turnSerial += 1;
     return;
   }
-  if (isFinalTurn) revealRemainingCards(player);
+  const revealedBeforeRoundEnd = isFinalTurn ? revealRemainingCards(player) : [];
   const next = (state.turnIndex + 1) % state.order.length;
   if (state.roundEnderId && state.order[next] === state.roundEnderId) {
-    endActionRound(state);
+    endActionRound(state, revealedBeforeRoundEnd);
     return;
   }
   state.turnIndex = next;
@@ -577,6 +591,7 @@ export function drawActionGameCard(state, playerId, source) {
     throw new Error('Action impossible.');
   }
   if (!['deck', 'discard'].includes(source)) throw new Error('Source de pioche invalide.');
+  state.lastCardMove = null;
   if (source === 'discard') {
     if (!state.discard.length) throw new Error('Défausse vide.');
     state.drawnCard = { card: state.discard.pop(), from: 'discard' };
@@ -607,10 +622,22 @@ export function placeActionGameCard(state, playerId, slotIndex) {
   const slot = validateSlot(state, playerId, slotIndex);
   if (!slot || slot.removed) throw new Error('Emplacement invalide.');
   const oldCard = slot.card;
+  const oldFaceUp = slot.faceUp;
   const newCard = state.drawnCard.card;
+  const source = state.drawnCard.from;
   slot.card = newCard;
   slot.faceUp = true;
   state.drawnCard = null;
+  recordCardMove(state, {
+    type: 'placement',
+    playerId,
+    slotIndex,
+    source,
+    newCard,
+    oldCard,
+    oldFaceUp,
+    revealOldCard: true,
+  });
   if (oldCard) state.discard.push(oldCard);
   if (clearCompletedGroups(state, player, isStar(newCard)
     ? { type: 'starClaim', playerId, claimResume: 'advance' }
@@ -624,6 +651,10 @@ export function revealActionGameCard(state, playerId, slotIndex) {
   const player = state.playersById[playerId];
   const slot = validateSlot(state, playerId, slotIndex);
   if (!slot || slot.faceUp || slot.removed) throw new Error('Carte invalide.');
+  recordCardMove(state, {
+    type: 'reveal',
+    cards: [{ playerId, slotIndex, card: slot.card }],
+  });
   slot.faceUp = true;
   if (clearCompletedGroups(state, player, isStar(slot.card)
     ? { type: 'starClaim', playerId, claimResume: 'advance' }
@@ -694,11 +725,24 @@ function resolveRemoveEachTarget(state, pending, targetId, { slotIndex, actionCa
   let replacementIsStar = false;
   if (Number.isInteger(slotIndex)) {
     const slot = validateSlot(state, targetId, slotIndex);
+    const oldCard = slot.card;
+    const oldFaceUp = slot.faceUp;
     discardGameCardUnderTop(state, slot.card);
     refillGameDeck(state);
     slot.card = state.deck.pop();
     replacementIsStar = isStar(slot.card);
     slot.faceUp = true;
+    recordCardMove(state, {
+      type: 'replacement',
+      reason: 'removeEach',
+      playerId: targetId,
+      slotIndex,
+      source: 'deck',
+      newCard: slot.card,
+      oldCard,
+      oldFaceUp,
+      revealOldCard: false,
+    });
   } else if (actionCardId) {
     const actionIndex = target.actionCards.findIndex((card) => card.id === actionCardId);
     if (actionIndex < 0) throw new Error('Carte Action invalide.');
@@ -768,6 +812,27 @@ function completeSwapPlayersAction(state, pending, first, second) {
   const a = validateSlot(state, first.playerId, first.slotIndex);
   const b = validateSlot(state, second.playerId, second.slotIndex);
   if (maybeBeginSwapDefensePrompt(state, pending, first, second)) return;
+  recordCardMove(state, {
+    type: 'swap',
+    moves: [
+      {
+        fromPlayerId: first.playerId,
+        fromSlotIndex: first.slotIndex,
+        toPlayerId: second.playerId,
+        toSlotIndex: second.slotIndex,
+        card: a.card,
+        faceUp: a.faceUp,
+      },
+      {
+        fromPlayerId: second.playerId,
+        fromSlotIndex: second.slotIndex,
+        toPlayerId: first.playerId,
+        toSlotIndex: first.slotIndex,
+        card: b.card,
+        faceUp: b.faceUp,
+      },
+    ],
+  });
   [a.card, b.card] = [b.card, a.card];
   [a.faceUp, b.faceUp] = [b.faceUp, a.faceUp];
   const resume = { type: 'clearPlayersThenFinishAction', playerIds: [first.playerId, second.playerId] };
@@ -1180,6 +1245,27 @@ export function resolveActionInput(state, playerId, payload = {}) {
     const first = validateSlot(state, actorId, a);
     const second = validateSlot(state, actorId, b);
     if (a === b) throw new Error('Choisissez deux cartes distinctes.');
+    recordCardMove(state, {
+      type: 'swap',
+      moves: [
+        {
+          fromPlayerId: actorId,
+          fromSlotIndex: a,
+          toPlayerId: actorId,
+          toSlotIndex: b,
+          card: first.card,
+          faceUp: first.faceUp,
+        },
+        {
+          fromPlayerId: actorId,
+          fromSlotIndex: b,
+          toPlayerId: actorId,
+          toSlotIndex: a,
+          card: second.card,
+          faceUp: second.faceUp,
+        },
+      ],
+    });
     [first.card, second.card] = [second.card, first.card];
     [first.faceUp, second.faceUp] = [second.faceUp, first.faceUp];
     if (clearCompletedGroups(state, actor, { type: 'pendingActionAfterResolve', claimedStar: false })) return;
@@ -1192,6 +1278,11 @@ export function resolveActionInput(state, playerId, payload = {}) {
     if (choiceIndex === null) {
       const slot = validateSlot(state, actorId, payload.revealSlot ?? payload.slotIndex);
       if (slot.faceUp) throw new Error('Choisissez une carte cachée.');
+      const revealSlotIndex = payload.revealSlot ?? payload.slotIndex;
+      recordCardMove(state, {
+        type: 'reveal',
+        cards: [{ playerId: actorId, slotIndex: revealSlotIndex, card: slot.card }],
+      });
       slot.faceUp = true;
       claimedStar = isStar(slot.card);
       state.discard.push(...pending.drawn);
@@ -1199,9 +1290,22 @@ export function resolveActionInput(state, playerId, payload = {}) {
       const chosen = pending.drawn[choiceIndex];
       if (!chosen) throw new Error('Carte choisie invalide.');
       const slot = validateSlot(state, actorId, payload.slotIndex);
+      const oldCard = slot.card;
+      const oldFaceUp = slot.faceUp;
       if (slot.card) state.discard.push(slot.card);
       slot.card = chosen;
       slot.faceUp = true;
+      recordCardMove(state, {
+        type: 'replacement',
+        reason: 'drawThree',
+        playerId: actorId,
+        slotIndex: payload.slotIndex,
+        source: 'deck',
+        newCard: chosen,
+        oldCard,
+        oldFaceUp,
+        revealOldCard: true,
+      });
       claimedStar = isStar(chosen);
       pending.drawn.filter((_, index) => index !== choiceIndex).forEach((card) => state.discard.push(card));
     }
@@ -1351,10 +1455,12 @@ function completeActionRoundEnd(state) {
   }
 }
 
-function endActionRound(state) {
+function endActionRound(state, revealedBeforeRoundEnd = []) {
+  const revealed = [...revealedBeforeRoundEnd];
   for (const id of state.order) {
-    revealRemainingCards(state.playersById[id]);
+    revealed.push(...revealRemainingCards(state.playersById[id]));
   }
+  if (revealed.length > 0) recordCardMove(state, { type: 'reveal', cards: revealed });
   continueActionRoundEnd(state, [...state.order]);
 }
 

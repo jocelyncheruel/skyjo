@@ -13,7 +13,6 @@ export default function PlayerBoard({
   actionPopup,
   actionCardCount = null,
   onActionCardsClick,
-  suppressRevealAnimation = false,
 }) {
   const cardSize = size || 'table';
   const selectableSet = new Set(selectableSlots || []);
@@ -84,14 +83,10 @@ export default function PlayerBoard({
       <div className="sj-grid">
         {player.board.map((slot, index) => {
           const selectable = selectableSet.has(index);
-          const cardIdentity = slot.cardId || (slot.faceUp ? `${slot.kind || 'empty'}-${slot.value ?? 'empty'}` : 'hidden');
-          const cardKey = slot.removed
-            ? `slot-${index}-removed`
-            : `slot-${index}-${slot.faceUp ? 'up' : 'down'}-${cardIdentity}`;
 
           return (
             <Card
-              key={cardKey}
+              key={`slot-${index}`}
               value={slot.value}
               kind={slot.kind}
               faceUp={slot.faceUp}
@@ -100,7 +95,7 @@ export default function PlayerBoard({
               highlighted={selectable}
               selected={selectedSet.has(index)}
               onClick={selectable ? () => onSlotClick(index) : undefined}
-              suppressRevealAnimation={suppressRevealAnimation}
+              motionAnchor={`board:${player.id}:${index}`}
             />
           );
         })}

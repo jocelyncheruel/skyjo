@@ -326,34 +326,6 @@ button {
   100% { transform: rotateY(0deg) scale(1); opacity: 1; }
 }
 
-@keyframes sjCardRevealIn {
-  0% {
-    opacity: 0.72;
-    transform: scale(0.985);
-  }
-  58% {
-    opacity: 1;
-    transform: scale(1.006);
-  }
-  100% {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
-@keyframes sjCardRevealFrame {
-  0% {
-    stroke: rgba(255, 232, 164, 1);
-    stroke-width: 2.25;
-    stroke-opacity: 1;
-  }
-  100% {
-    stroke: var(--sj-card-frame-color);
-    stroke-width: var(--sj-card-frame-width);
-    stroke-opacity: var(--sj-card-frame-opacity);
-  }
-}
-
 @keyframes sjDrawFromDeck {
   0% { transform: translateY(0) rotateY(90deg) scale(0.94); opacity: 0.2; }
   55% { transform: translateY(-8px) rotateY(0deg) scale(1.04); opacity: 1; }
@@ -361,8 +333,63 @@ button {
 }
 
 @keyframes sjLiftFromDiscard {
-  0% { transform: translateY(0) scale(0.98); opacity: 0.75; }
+  0% { transform: translateY(0) scale(1); opacity: 1; }
   100% { transform: translateY(-7px) scale(1.03); opacity: 1; }
+}
+
+@keyframes sjCardFlightTravel {
+  from { offset-distance: 0%; }
+  to { offset-distance: 100%; }
+}
+
+@keyframes sjCardFlightFade {
+  0%, 84% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+@keyframes sjCardFlightFadeLate {
+  0%, 99.9% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+@keyframes sjCardFlightResize {
+  from { transform: scale(1); }
+  to { transform: scale(var(--sj-flight-scale-x), var(--sj-flight-scale-y)); }
+}
+
+@keyframes sjCardFlightZoom {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.055); }
+}
+
+@keyframes sjCardFlightPassBehind {
+  0%, 32%, 68%, 100% { opacity: 1; filter: brightness(1); }
+  48%, 52% { opacity: 0.72; filter: brightness(0.82); }
+}
+
+@keyframes sjCardMotionDestination {
+  0%, 83.9% { opacity: 0; }
+  84%, 100% { opacity: 1; }
+}
+
+@keyframes sjCardMotionDestinationLate {
+  0%, 99.9% { opacity: 0; }
+  100% { opacity: 1; }
+}
+
+@keyframes sjCardTargetHold {
+  0%, 83.9% { opacity: 1; }
+  84%, 100% { opacity: 0; }
+}
+
+@keyframes sjCardTargetSettleIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes sjCardTargetSettleOut {
+  from { opacity: 1; }
+  to { opacity: 0; }
 }
 
 @keyframes sjToastIn {
@@ -2225,6 +2252,162 @@ input:focus {
   animation: sjLiftFromDiscard 0.24s ease-out both;
 }
 
+.sj-card-motion-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 38;
+  overflow: hidden;
+  pointer-events: none;
+  contain: strict;
+}
+
+.sj-card-flight {
+  position: absolute;
+  z-index: 1;
+  margin: 0;
+  opacity: 0;
+  offset-anchor: 0 0;
+  offset-distance: 0%;
+  offset-rotate: 0deg;
+  filter: drop-shadow(0 14px 17px rgba(0, 0, 0, 0.48));
+  will-change: offset-distance, opacity;
+  animation:
+    sjCardFlightTravel var(--sj-flight-duration) cubic-bezier(0.34, 0.05, 0.18, 1) var(--sj-flight-delay) both,
+    sjCardFlightFade var(--sj-flight-duration) linear var(--sj-flight-delay) both;
+}
+
+.sj-card-target-hold {
+  position: absolute;
+  z-index: 0;
+  animation:
+    sjCardTargetHold var(--sj-flight-duration) linear
+    var(--sj-flight-delay) both;
+}
+
+.sj-card-target-settled {
+  position: absolute;
+  z-index: 0;
+  opacity: 0;
+  animation:
+    sjCardTargetSettleIn 1ms linear var(--sj-settle-delay) forwards,
+    sjCardTargetSettleOut 1ms linear var(--sj-settle-hide-delay) forwards;
+}
+
+.sj-card-target-hold > .sj-card,
+.sj-card-target-settled > .sj-card {
+  width: 100%;
+  height: 100%;
+  filter: none;
+}
+
+.sj-card-flight-card {
+  width: 100%;
+  height: 100%;
+  transform-origin: top left;
+  will-change: transform;
+  animation:
+    sjCardFlightResize var(--sj-flight-duration) cubic-bezier(0.34, 0.05, 0.18, 1)
+    var(--sj-flight-delay) both;
+}
+
+.sj-card-flight-late-handoff {
+  animation:
+    sjCardFlightTravel var(--sj-flight-duration) cubic-bezier(0.34, 0.05, 0.18, 1)
+    var(--sj-flight-delay) both,
+    sjCardFlightFadeLate var(--sj-flight-duration) linear
+    var(--sj-flight-delay) both;
+}
+
+.sj-card-flight-handoff-incoming {
+  z-index: 4;
+}
+
+.sj-card-flight-handoff-outgoing {
+  z-index: 3;
+}
+
+.sj-card-flight-card > .sj-card,
+.sj-card-flight-flip {
+  width: 100%;
+  height: 100%;
+  transform-box: fill-box;
+  transform-origin: center;
+  will-change: transform;
+  animation:
+    sjCardFlightZoom var(--sj-flight-duration) cubic-bezier(0.34, 0.05, 0.18, 1)
+    var(--sj-flight-delay) both;
+}
+
+.sj-card-flight-card > .sj-card {
+  filter: none;
+}
+
+.sj-card-flight-flip {
+  position: relative;
+  transform-style: preserve-3d;
+}
+
+.sj-card-flight-flip-layer {
+  position: absolute;
+  inset: 0;
+}
+
+.sj-card-flight-flip-underlay {
+  z-index: 0;
+}
+
+.sj-card-flight-flip-reveal {
+  z-index: 1;
+}
+
+.sj-card-flight-flip-layer > .sj-card {
+  width: 100%;
+  height: 100%;
+  filter: none;
+}
+
+.sj-card-flight-discard {
+  --sj-card-frame-color: rgba(255, 174, 145, 0.96);
+}
+
+.sj-card-flight-swap {
+  --sj-card-frame-color: rgba(151, 195, 255, 0.98);
+}
+
+.sj-card-flight-swap-front {
+  z-index: 2;
+  filter: drop-shadow(0 18px 22px rgba(0, 0, 0, 0.58));
+}
+
+.sj-card-flight-swap-back {
+  z-index: 1;
+  filter: drop-shadow(0 9px 12px rgba(0, 0, 0, 0.34));
+}
+
+.sj-card-flight-swap-back .sj-card-flight-card > .sj-card {
+  animation:
+    sjCardFlightZoom var(--sj-flight-duration) cubic-bezier(0.34, 0.05, 0.18, 1)
+    var(--sj-flight-delay) both,
+    sjCardFlightPassBehind var(--sj-flight-duration) ease-in-out
+    var(--sj-flight-delay) both;
+}
+
+.sj-card-flight-clear {
+  --sj-card-frame-color: rgba(117, 225, 176, 0.98);
+}
+
+.sj-card-motion-destination {
+  animation:
+    sjCardMotionDestination var(--sj-card-arrival-duration, 620ms)
+    linear var(--sj-card-arrival-delay, 0ms) both !important;
+}
+
+.sj-card-motion-destination-late {
+  animation:
+    sjCardMotionDestinationLate var(--sj-card-arrival-duration, 620ms)
+    linear var(--sj-card-arrival-delay, 0ms) both !important;
+}
+
 .sj-me-wrap {
   flex: 0 1 auto;
   align-items: center;
@@ -2624,20 +2807,13 @@ button.sj-action-count-badge:focus-visible {
   --sj-card-frame-opacity: 1;
 }
 
-.sj-card-flip {
+.sj-card-flip,
+.sj-card-reveal {
   animation: sjFlipIn 0.32s ease both;
   transform-box: fill-box;
   transform-origin: center;
   transform-style: preserve-3d;
-}
-
-.sj-card-reveal {
-  animation: sjCardRevealIn 0.3s ease-out both;
-  will-change: transform, opacity, filter;
-}
-
-.sj-card-reveal .sj-card-frame {
-  animation: sjCardRevealFrame 0.36s ease-out both;
+  will-change: transform, opacity;
 }
 
 .sj-card-dim {
@@ -3916,6 +4092,16 @@ button.sj-action-count-badge:focus-visible {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .sj-card-motion-layer {
+    display: none;
+  }
+
+  .sj-card-motion-destination {
+    opacity: 1;
+    filter: none;
+    animation: none !important;
+  }
+
   .sj-profile-accordion-trigger,
   .sj-profile-accordion-icon,
   .sj-profile-accordion-chevron,

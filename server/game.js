@@ -44,6 +44,25 @@ function getBoardSlot(player, slotIndex) {
   return slot;
 }
 
+function recordCardMove(state, move) {
+  state.cardMoveSerial = (state.cardMoveSerial || 0) + 1;
+  state.lastCardMove = {
+    id: `${state.roundNumber}:${state.cardMoveSerial}`,
+    ...move,
+  };
+}
+
+function revealRemainingCards(player) {
+  const revealed = [];
+  player.board.forEach((slot, slotIndex) => {
+    if (!slot.removed && !slot.faceUp) {
+      revealed.push({ playerId: player.id, slotIndex, card: slot.card });
+      slot.faceUp = true;
+    }
+  });
+  return revealed;
+}
+
 export function createPlayer(id, name) {
   return {
     id,
@@ -70,6 +89,8 @@ export function newRoomState(roomId) {
     turnIndex: 0,
     turnStage: null,
     drawnCard: null,
+    lastCardMove: null,
+    cardMoveSerial: 0,
     roundEnderId: null,
     roundNumber: 0,
     gameSerial: 0,
@@ -239,6 +260,7 @@ function dealNewRound(state) {
   state.phase = 'initialFlip';
   state.turnStage = null;
   state.drawnCard = null;
+  state.lastCardMove = null;
   state.nextRoundAt = null;
   state.roundScoresAt = null;
   state.starterTieNotice = null;
@@ -309,12 +331,6 @@ function boardFinished(player) {
   return player.board.every(s => s.removed || s.faceUp);
 }
 
-function revealRemainingCards(player) {
-  for (const slot of player.board) {
-    if (!slot.removed) slot.faceUp = true;
-  }
-}
-
 function refillDeckIfNeeded(state) {
   if (state.deck.length > 0) return;
 
@@ -339,12 +355,12 @@ function advanceTurn(state) {
     log(state, `${finishingPlayer.name} a terminé son plateau ! Dernier tour pour les autres.`);
   }
 
-  if (isFinalTurn) revealRemainingCards(finishingPlayer);
+  const revealedBeforeRoundEnd = isFinalTurn ? revealRemainingCards(finishingPlayer) : [];
 
   const next = (state.turnIndex + 1) % state.order.length;
 
   if (state.roundEnderId && state.order[next] === state.roundEnderId) {
-    endRound(state);
+    endRound(state, revealedBeforeRoundEnd);
     return;
   }
 
@@ -359,6 +375,7 @@ export function drawCard(state, playerId, source) {
   if (currentPlayerId(state) !== playerId) throw new Error("Ce n'est pas votre tour.");
   if (state.turnStage !== 'draw') throw new Error('Action impossible.');
   if (!['deck', 'discard'].includes(source)) throw new Error('Source de pioche invalide.');
+  state.lastCardMove = null;
 
   if (source === 'discard') {
     if (state.discard.length === 0) throw new Error('Défausse vide.');
@@ -403,9 +420,22 @@ export function placeDrawnCard(state, playerId, slotIndex) {
   if (!slot || slot.removed) throw new Error('Emplacement invalide.');
 
   const oldCard = slot.card;
-  slot.card = state.drawnCard.card;
+  const oldFaceUp = slot.faceUp;
+  const newCard = state.drawnCard.card;
+  const source = state.drawnCard.from;
+  slot.card = newCard;
   slot.faceUp = true;
   state.drawnCard = null;
+  recordCardMove(state, {
+    type: 'placement',
+    playerId,
+    slotIndex,
+    source,
+    newCard,
+    oldCard,
+    oldFaceUp,
+    revealOldCard: true,
+  });
 
   if (oldCard) state.discard.push(oldCard);
   checkAndClearColumns(state, p);
@@ -419,6 +449,10 @@ export function revealHiddenCard(state, playerId, slotIndex) {
   const p = state.playersById[playerId];
   const slot = getBoardSlot(p, slotIndex);
   if (!slot || slot.faceUp || slot.removed) throw new Error('Carte invalide.');
+  recordCardMove(state, {
+    type: 'reveal',
+    cards: [{ playerId, slotIndex, card: slot.card }],
+  });
   slot.faceUp = true;
   checkAndClearColumns(state, p);
   advanceTurn(state);
@@ -431,10 +465,12 @@ function boardScore(player) {
   }, 0);
 }
 
-function endRound(state) {
+function endRound(state, revealedBeforeRoundEnd = []) {
+  const revealed = [...revealedBeforeRoundEnd];
   for (const id of state.order) {
-    revealRemainingCards(state.playersById[id]);
+    revealed.push(...revealRemainingCards(state.playersById[id]));
   }
+  if (revealed.length > 0) recordCardMove(state, { type: 'reveal', cards: revealed });
   for (const id of state.order) {
     checkAndClearColumns(state, state.playersById[id]);
   }
@@ -477,6 +513,25 @@ export function nextRound(state) {
   dealNewRound(state);
 }
 
+function publicCardMove(move) {
+  if (!move) return null;
+  const cloneCard = (card) => card ? { ...card } : null;
+  return {
+    ...move,
+    newCard: cloneCard(move.newCard),
+    oldCard: move.oldFaceUp || move.revealOldCard ? cloneCard(move.oldCard) : null,
+    cards: Array.isArray(move.cards)
+      ? move.cards.map((entry) => ({ ...entry, card: cloneCard(entry.card) }))
+      : undefined,
+    moves: Array.isArray(move.moves)
+      ? move.moves.map((entry) => ({
+        ...entry,
+        card: entry.faceUp ? cloneCard(entry.card) : null,
+      }))
+      : undefined,
+  };
+}
+
 export function publicState(state, forPlayerId) {
   const creatorId = ensureCreator(state);
   const actionState = state.gameMode === 'action' ? publicActionState(state, forPlayerId) : {};
@@ -513,6 +568,7 @@ export function publicState(state, forPlayerId) {
           : null,
       }
       : null,
+    lastCardMove: publicCardMove(state.lastCardMove),
     winnerId: state.winnerId,
     log: state.log.slice(-20),
     players: state.order.map(id => {

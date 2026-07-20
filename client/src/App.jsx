@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { io } from 'socket.io-client';
 import { LogOut, MessageCircle, Send, X } from 'lucide-react';
 import Card from './components/Card.jsx';
+import CardMotionLayer from './components/CardMotionLayer.jsx';
 import PlayerBoard from './components/PlayerBoard.jsx';
 import ProfileModal, { ProfileButton } from './ProfileModal.jsx';
 import { AuthLoadingView, AuthView, ConsentGate, LegalPage, ResetPasswordView } from './Auth.jsx';
@@ -1947,7 +1948,10 @@ function GameScreen({
   const closeChatModal = useCallback(() => setChatModalOpen(false), []);
 
   const roundScorePhase = ['roundEnd', 'gameEnd'].includes(state.phase);
-  const roundScoresVisible = !roundScorePhase || !state.roundScoresAt || roundScoresReady;
+  const roundScoreDeadlineReached = !state.roundScoresAt || Date.now() >= state.roundScoresAt;
+  const roundScoresVisible = !roundScorePhase
+    || !state.roundScoresAt
+    || (roundScoresReady && roundScoreDeadlineReached);
   const roundScorePreviewActive = roundScorePhase && !roundScoresVisible;
   const boardPlayers = roundScorePreviewActive
     ? state.players.map((player) => ({
@@ -2083,9 +2087,10 @@ function GameScreen({
     && state.turnStage === (isActionMode ? 'choose' : 'draw');
   const canDrawDiscard = canDrawDeck && !!state.discardTop;
   const canDiscardDrawn = state.phase === 'playing' && isMyTurn && state.turnStage === 'decide' && !!drawnCard;
-  const drawnFromDeck = !!drawnCard && state.drawnCard?.from === 'deck';
-  const drawnFromDiscard = !!drawnCard && state.drawnCard?.from === 'discard';
-  const drawnCardIsMine = !!drawnCard && state.currentPlayerId === myId;
+  const hasDrawnCard = !!state.drawnCard;
+  const drawnFromDeck = hasDrawnCard && state.drawnCard?.from === 'deck';
+  const drawnFromDiscard = hasDrawnCard && state.drawnCard?.from === 'discard';
+  const drawnCardIsMine = hasDrawnCard && state.currentPlayerId === myId;
   const defensePrompt = pendingAction?.defensePrompt || null;
   const hasDrawThreeChoice = Object.prototype.hasOwnProperty.call(actionSelection, 'choiceIndex');
   const showDrawThreeModal = !!pendingAction?.mustRespond
@@ -2720,6 +2725,7 @@ function GameScreen({
       ref={shellRef}
       className={`sj-app-shell ${state.players.length === 2 ? 'sj-two-player-game' : ''} ${isActionMode ? 'sj-action-game' : ''} ${layoutClassName} ${layoutReady ? '' : 'sj-layout-pending'}`}
     >
+      <CardMotionLayer state={state} enabled={layoutReady} />
       <div className="sj-game-controls" aria-label="Contrôles de la partie">
         {chatButton}
         {leaveButton}
@@ -2773,7 +2779,6 @@ function GameScreen({
                 onActionCardsClick={isActionMode && (state.playersAction?.[player.id]?.actionCards?.length || 0) > 0
                   ? () => handleOpenPlayerActionCards(player.id)
                   : undefined}
-                suppressRevealAnimation={state.phase === 'initialFlip'}
                 onSlotClick={(slotIndex) => handleBoardSlotClick(player.id, slotIndex)}
               />
             ))}
@@ -2787,12 +2792,12 @@ function GameScreen({
                 ariaLabel="Piocher dans le paquet"
                 enabled={canDrawDeck}
                 active={canDrawDeck}
-                drawnCard={drawnFromDeck ? drawnCard : null}
+                drawnCard={drawnFromDeck ? (drawnCard || { hidden: true }) : null}
                 drawnFrom="deck"
                 drawnPulse={drawnCardIsMine}
                 onClick={() => socket.emit('drawCard', { source: 'deck' })}
               >
-                <Card faceUp={false} size="pile" pulse={canDrawDeck} />
+                <Card faceUp={false} size="pile" pulse={canDrawDeck} motionAnchor="pile:deck" />
               </PileButton>
 
               <PileButton
@@ -2800,15 +2805,15 @@ function GameScreen({
                 enabled={canDrawDiscard || canDiscardDrawn}
                 active={canDrawDiscard || canDiscardDrawn}
                 tone={canDiscardDrawn ? 'danger' : 'default'}
-                drawnCard={drawnFromDiscard ? drawnCard : null}
+                drawnCard={drawnFromDiscard ? (drawnCard || { hidden: true }) : null}
                 drawnFrom="discard"
                 drawnPulse={drawnCardIsMine}
                 onClick={handleDiscardClick}
               >
                 {state.discardTop ? (
-                  <Card value={state.discardTop.value} kind={state.discardTop.kind} faceUp size="pile" pulse={canDrawDiscard || canDiscardDrawn} tone={canDiscardDrawn ? 'danger' : undefined} />
+                  <Card value={state.discardTop.value} kind={state.discardTop.kind} faceUp size="pile" pulse={canDrawDiscard || canDiscardDrawn} tone={canDiscardDrawn ? 'danger' : undefined} motionAnchor="pile:discard" />
                 ) : (
-                  <Card removed size="pile" />
+                  <Card removed size="pile" motionAnchor="pile:discard" />
                 )}
               </PileButton>
             </div>
@@ -2827,7 +2832,6 @@ function GameScreen({
                 selectedSlots={selectedByPlayer[myId]}
                 actionMode={pendingAction ? 'place' : boardActionMode}
                 actionPopup={actionPopupFor(myId)}
-                suppressRevealAnimation={state.phase === 'initialFlip'}
               />
             </div>
           )}
@@ -2878,11 +2882,11 @@ function PileButton({ ariaLabel, enabled, active, tone = 'default', drawnCard, d
           <Card
             value={drawnCard.value}
             kind={drawnCard.kind}
-            faceUp
+            faceUp={!drawnCard.hidden}
             size="pile"
             pulse={drawnPulse && drawnFrom === 'deck'}
             tone={tone === 'danger' ? 'danger' : undefined}
-            animateFlip={drawnFrom === 'deck'}
+            animateFlip={drawnFrom === 'deck' && !drawnCard.hidden}
           />
         </span>
       )}
