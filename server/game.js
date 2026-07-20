@@ -1,5 +1,6 @@
 import { buildDeck, shuffle } from './deck.js';
 import {
+  assertActionCardIntegrity,
   claimStarAction,
   decideActionGameCard,
   discardOwnedAction,
@@ -533,6 +534,7 @@ export function publicState(state, forPlayerId) {
 }
 
 export {
+  assertActionCardIntegrity,
   claimStarAction,
   discardOwnedAction,
   expireDefensePrompt,

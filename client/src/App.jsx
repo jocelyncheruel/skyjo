@@ -1300,6 +1300,7 @@ function PeekResultModal({ peek, targetPlayer, isOwnBoard, onClose }) {
 function ActionDrawModal({
   open,
   market = [],
+  canDrawDeck = true,
   onSelect,
   onClose,
   title = 'Choisir une carte Action',
@@ -1341,16 +1342,18 @@ function ActionDrawModal({
         </div>
         <div className="sj-action-hand-modal-scroll">
           <div className="sj-action-hand-modal-grid sj-action-draw-modal-grid" aria-label="Cartes Action disponibles">
-            <div className="sj-action-hand-modal-item">
-              <button
-                type="button"
-                className="sj-action-deck"
-                onClick={() => onSelect({ source: 'deck' })}
-              >
-                <span>Face cachée</span>
-                <strong>Pioche Action</strong>
-              </button>
-            </div>
+            {canDrawDeck && (
+              <div className="sj-action-hand-modal-item">
+                <button
+                  type="button"
+                  className="sj-action-deck"
+                  onClick={() => onSelect({ source: 'deck' })}
+                >
+                  <span>Face cachée</span>
+                  <strong>Pioche Action</strong>
+                </button>
+              </div>
+            )}
             {market.map((card, index) => (
               <div key={card.id} className="sj-action-hand-modal-item">
                 <ActionTile
@@ -2476,6 +2479,7 @@ function GameScreen({
     <ActionDrawModal
       open={!!state.pendingStarClaim}
       market={state.actionMarket}
+      canDrawDeck={state.canDrawActionDeck}
       title="Choisir une carte Action"
       onSelect={handleActionCardSelect}
     />

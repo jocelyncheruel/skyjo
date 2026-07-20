@@ -10,6 +10,8 @@ const DEFENSE_PROMPT_MS = 5_000;
 const ACTION_PLAY_POPUP_MS = 4_500;
 const PEEK_PREVIEW_MS = 12_000;
 const TEMP_GRANT_ALL_ACTION_CARDS = false;
+const ACTION_MARKET_SIZE = 4;
+const ACTION_DECK_SIZE = ACTION_TYPES.length * 3;
 
 function log(state, msg) {
   state.log.push({ t: Date.now(), msg });
@@ -58,6 +60,13 @@ function ensureActionFields(state) {
     player.groupChoiceSkips ||= {};
   }
 
+  if (state.gameMode === 'action'
+    && state.roundNumber > 0
+    && state.actionDiscard.length === 0
+    && state.actionDeck.length > 0) {
+    seedPlayableActionDiscard(state);
+  }
+
   const pending = state.pendingAction;
   if (pending?.type === 'peekLine' && pending.selection?.peekFirst) {
     const { playerId, slotIndex } = pending.selection.peekFirst;
@@ -71,6 +80,12 @@ function ensureActionFields(state) {
     && replayableDiscardCards(state, pending.playerId).length === 0) {
     discardPlayedAction(state, pending.card);
     finishAction(state);
+    return;
+  }
+
+  if (state.pendingStarClaim && !prepareActionClaimChoices(state)) {
+    log(state, 'Aucune carte Action n’est disponible : le bonus Étoile est ignoré.');
+    resumeAfterStarClaim(state);
     return;
   }
 
@@ -122,27 +137,62 @@ function availableGameDrawCount(state) {
   return state.deck.length + Math.max(0, state.discard.length - 1);
 }
 
-function refillActionDeck(state) {
-  if (state.actionDeck.length > 0) return;
-  if (state.actionDiscard.length === 0) throw new Error('La pioche Action est vide.');
-  state.actionDeck = shuffle(state.actionDiscard);
-  state.actionDiscard = [];
+function availableActionDeckCount(state) {
+  return state.actionDeck.length + Math.max(0, state.actionDiscard.length - 1);
 }
 
 function tryRefillActionDeck(state) {
   if (state.actionDeck.length > 0) return true;
-  if (state.actionDiscard.length === 0) return false;
-  state.actionDeck = shuffle(state.actionDiscard);
-  state.actionDiscard = [];
+  const discardTop = state.actionDiscard.at(-1);
+  const recyclableCards = state.actionDiscard.slice(0, -1);
+  if (recyclableCards.length === 0) return false;
+  state.actionDeck = shuffle(recyclableCards);
+  state.actionDiscard = discardTop ? [discardTop] : [];
   return state.actionDeck.length > 0;
 }
 
+function refillActionDeck(state, { allowDiscardTop = false } = {}) {
+  if (tryRefillActionDeck(state)) return;
+  if (allowDiscardTop && state.actionDiscard.length > 0) {
+    state.actionDeck = shuffle(state.actionDiscard);
+    state.actionDiscard = [];
+    return;
+  }
+  throw new Error('La pioche Action est vide.');
+}
+
 function refillMarket(state, { strict = true } = {}) {
-  while (state.actionMarket.length < 4) {
-    if (strict) refillActionDeck(state);
-    else if (!tryRefillActionDeck(state)) break;
+  while (state.actionMarket.length < ACTION_MARKET_SIZE) {
+    if (!tryRefillActionDeck(state)) {
+      if (strict) throw new Error('La pioche Action est vide.');
+      break;
+    }
     state.actionMarket.push(state.actionDeck.pop());
   }
+}
+
+function seedPlayableActionDiscard(state, { strict = false } = {}) {
+  const discardIndex = state.actionDeck.findLastIndex((card) => (
+    state.order.every((playerId) => !actionUnavailableReason(state, playerId, card, { fromDiscard: true }))
+  ));
+  if (discardIndex < 0) {
+    if (strict) throw new Error('Aucune carte Action ne peut initialiser la défausse.');
+    return false;
+  }
+  state.actionDiscard.push(state.actionDeck.splice(discardIndex, 1)[0]);
+  return true;
+}
+
+function prepareActionClaimChoices(state) {
+  refillMarket(state, { strict: false });
+  if (state.actionMarket.length > 0 || availableActionDeckCount(state) > 0) return true;
+
+  const lastDiscardedAction = state.actionDiscard.pop();
+  if (lastDiscardedAction) {
+    state.actionMarket.push(lastDiscardedAction);
+    return true;
+  }
+  return false;
 }
 
 function giveActionCard(state, playerId, source, marketIndex) {
@@ -152,8 +202,12 @@ function giveActionCard(state, playerId, source, marketIndex) {
     if (!Number.isInteger(marketIndex) || !state.actionMarket[marketIndex]) {
       throw new Error('Carte Action visible invalide.');
     }
-    card = state.actionMarket.splice(marketIndex, 1)[0];
-    refillMarket(state, { strict: false });
+    card = state.actionMarket[marketIndex];
+    if (tryRefillActionDeck(state)) {
+      state.actionMarket[marketIndex] = state.actionDeck.pop();
+    } else {
+      state.actionMarket.splice(marketIndex, 1);
+    }
   } else if (source === 'deck') {
     refillActionDeck(state);
     card = state.actionDeck.pop();
@@ -167,6 +221,10 @@ function giveActionCard(state, playerId, source, marketIndex) {
 function beginStarClaim(state, playerId, resume) {
   state.pendingStarClaim = { playerId, resume };
   state.turnStage = 'starClaim';
+  if (!prepareActionClaimChoices(state)) {
+    log(state, 'Aucune carte Action n’est disponible : le bonus Étoile est ignoré.');
+    resumeAfterStarClaim(state);
+  }
 }
 
 function resumeAfterStarClaim(state) {
@@ -449,6 +507,7 @@ function dealRound(state) {
     for (const slot of player.board) slot.card = state.deck.pop();
   }
   state.discard.push(state.deck.pop());
+  seedPlayableActionDiscard(state, { strict: true });
   state.phase = 'initialFlip';
   state.turnStage = null;
   state.drawnCard = null;
@@ -576,6 +635,9 @@ export function revealActionGameCard(state, playerId, slotIndex) {
 export function claimStarAction(state, playerId, source, marketIndex) {
   ensureActionFields(state);
   if (state.pendingStarClaim?.playerId !== playerId) throw new Error('Aucune carte Étoile à résoudre.');
+  if (source === 'deck' && availableActionDeckCount(state) === 0) {
+    throw new Error('La pioche Action est vide. Choisissez une carte visible.');
+  }
   giveActionCard(state, playerId, source, marketIndex);
   resumeAfterStarClaim(state);
 }
@@ -642,7 +704,7 @@ function resolveRemoveEachTarget(state, pending, targetId, { slotIndex, actionCa
     if (actionIndex < 0) throw new Error('Carte Action invalide.');
     const removedAction = target.actionCards.splice(actionIndex, 1)[0];
     discardActionCardUnderTop(state, removedAction);
-    refillActionDeck(state);
+    refillActionDeck(state, { allowDiscardTop: true });
     const replacement = state.actionDeck.pop();
     target.actionCards.push({ ...replacement, availableAt: state.turnSerial + 1 });
   } else {
@@ -1350,6 +1412,12 @@ export function resolveGroupChoice(state, playerId, remove) {
 export function handleActionPlayerLeave(state, playerId) {
   ensureActionFields(state);
 
+  const leavingPlayer = state.playersById[playerId];
+  if (leavingPlayer?.actionCards?.length) {
+    state.actionDiscard.push(...leavingPlayer.actionCards.filter((card) => !card.temporary));
+    leavingPlayer.actionCards = [];
+  }
+
   if (state.pendingStarClaim?.playerId === playerId) {
     state.pendingStarClaim = null;
     if (state.turnStage === 'starClaim') {
@@ -1418,6 +1486,7 @@ export function publicActionState(state, forPlayerId) {
   return {
     actionMarket: state.actionMarket,
     actionDiscard: state.actionDiscard,
+    canDrawActionDeck: availableActionDeckCount(state) > 0,
     lastPlayedAction: state.lastPlayedAction && Date.now() - state.lastPlayedAction.t <= ACTION_PLAY_POPUP_MS
       ? state.lastPlayedAction
       : null,
@@ -1471,4 +1540,23 @@ export function publicActionState(state, forPlayerId) {
     })),
     currentPlayerId: currentId,
   };
+}
+
+export function assertActionCardIntegrity(state) {
+  if (state.gameMode !== 'action' || state.roundNumber < 1) return;
+
+  const cards = [
+    ...(state.actionDeck || []),
+    ...(state.actionMarket || []),
+    ...(state.actionDiscard || []),
+    ...Object.values(state.playersById || {}).flatMap((player) => player.actionCards || []),
+    ...(state.pendingAction?.card ? [state.pendingAction.card] : []),
+  ].filter((card) => !card.temporary);
+
+  const ids = cards.map((card) => card?.id);
+  const uniqueIds = new Set(ids);
+  const validIds = ids.every((id) => /^action-(?:[0-9]|1[0-9]|2[0-6])$/.test(id || ''));
+  if (cards.length !== ACTION_DECK_SIZE || uniqueIds.size !== cards.length || !validIds) {
+    throw new Error('État des cartes Action incohérent.');
+  }
 }

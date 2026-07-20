@@ -11,7 +11,7 @@ import {
   drawCard, decideDrawnCard, keepDrawnAndPlace, placeDrawnCard, revealHiddenCard, nextRound,
   publicState, setGameMode, playOwnedAction, resolveActionInput, claimStarAction,
   discardOwnedAction, resolveDefensePrompt, expireDefensePrompt,
-  resolveGroupChoice, MAX_PLAYERS_PER_ROOM,
+  resolveGroupChoice, assertActionCardIntegrity, MAX_PLAYERS_PER_ROOM,
 } from './game.js';
 import {
   CLIENT_PROTOCOL_VERSION, CONSENT_VERSION, ROOM_SCHEMA_VERSION, ROOM_TTL_MS,
@@ -356,6 +356,7 @@ async function mutateRoom(roomId, mutation, options = {}) {
     const draft = structuredClone(current);
     const originalMeta = { ...(roomMeta.get(roomId) || {}) };
     const result = await mutation(draft);
+    assertActionCardIntegrity(draft);
     try {
       await commitRoomState(draft, originalMeta.revision ?? 0, options);
     } catch (error) {
