@@ -3154,6 +3154,12 @@ button.sj-action-count-badge:focus-visible {
   color: #ffaaa3;
 }
 
+.sj-profile-delete-modal-icon.sj-profile-reauthentication-icon {
+  border-color: rgba(113, 168, 255, 0.34);
+  background: rgba(35, 65, 105, 0.3);
+  color: #c9deff;
+}
+
 .sj-profile-delete-modal h2 {
   padding: 0 34px;
 }

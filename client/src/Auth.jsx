@@ -418,7 +418,9 @@ export function AuthProvider({ children }) {
       const message = deleteError instanceof TypeError
         ? "Impossible de contacter le service d'authentification. Vérifie ta connexion."
         : getAuthErrorMessage(deleteError);
-      throw new Error(message);
+      const profileError = new Error(message);
+      profileError.code = String(deleteError?.code || '');
+      throw profileError;
     }
   }, []);
 

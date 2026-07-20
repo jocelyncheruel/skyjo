@@ -94,13 +94,14 @@ export function ProfileButton({ onClick }) {
 
 export default function ProfileModal({ open, onClose, onProfileUpdated }) {
   const {
-    user, updateProfile, requestProfilePasswordChange, deleteAccount,
+    user, updateProfile, requestProfilePasswordChange, deleteAccount, logout,
   } = useAuth();
   const profileModalRef = useRef(null);
   const deleteModalRef = useRef(null);
   const discardModalRef = useRef(null);
   const deleteTriggerRef = useRef(null);
   const discardContinueRef = useRef(null);
+  const reauthenticationButtonRef = useRef(null);
   const firstNameRef = useRef(null);
   const deleteConfirmationRef = useRef(null);
   const wasOpenRef = useRef(false);
@@ -113,6 +114,7 @@ export default function ProfileModal({ open, onClose, onProfileUpdated }) {
   const [notification, setNotification] = useState(null);
   const [deleteMode, setDeleteMode] = useState(false);
   const [discardMode, setDiscardMode] = useState(false);
+  const [reauthenticationRequired, setReauthenticationRequired] = useState(false);
   const [deleteConfirmation, setDeleteConfirmation] = useState('');
   const [activeSection, setActiveSection] = useState('account');
   const [compactProfile, setCompactProfile] = useState(() => mediaMatches(PROFILE_COMPACT_QUERY));
@@ -160,6 +162,7 @@ export default function ProfileModal({ open, onClose, onProfileUpdated }) {
     setNotification(null);
     setDeleteMode(false);
     setDiscardMode(false);
+    setReauthenticationRequired(false);
     setDeleteConfirmation('');
     setActiveSection('account');
     const shouldFocusForm = mediaMatches('(min-width: 761px) and (pointer: fine)');
@@ -186,6 +189,7 @@ export default function ProfileModal({ open, onClose, onProfileUpdated }) {
       if (deleteMode) {
         setDeleteMode(false);
         setDeleteConfirmation('');
+        setReauthenticationRequired(false);
       } else if (discardMode) {
         setDiscardMode(false);
       } else if (hasChanges) {
@@ -211,6 +215,12 @@ export default function ProfileModal({ open, onClose, onProfileUpdated }) {
       });
     };
   }, [deleteMode]);
+
+  useEffect(() => {
+    if (!deleteMode || !reauthenticationRequired) return undefined;
+    const frame = window.requestAnimationFrame(() => reauthenticationButtonRef.current?.focus());
+    return () => window.cancelAnimationFrame(frame);
+  }, [deleteMode, reauthenticationRequired]);
 
   useEffect(() => {
     if (!discardMode) return undefined;
@@ -264,6 +274,12 @@ export default function ProfileModal({ open, onClose, onProfileUpdated }) {
     onClose();
   }
 
+  function closeDeleteConfirmation() {
+    setDeleteMode(false);
+    setDeleteConfirmation('');
+    setReauthenticationRequired(false);
+  }
+
   async function handleSubmit(event) {
     event.preventDefault();
     if (!canSave) return;
@@ -304,9 +320,19 @@ export default function ProfileModal({ open, onClose, onProfileUpdated }) {
     try {
       await deleteAccount(deleteConfirmation);
     } catch (deleteError) {
-      showNotification('error', deleteError.message || 'Impossible de supprimer le compte.');
+      if (deleteError.code === 'recent_authentication_required') {
+        setDeleteConfirmation('');
+        setReauthenticationRequired(true);
+      } else {
+        showNotification('error', deleteError.message || 'Impossible de supprimer le compte.');
+      }
       setSecurityBusy('');
     }
+  }
+
+  async function handleReauthentication() {
+    setSecurityBusy('reauthentication');
+    await logout();
   }
 
   return (
@@ -572,6 +598,7 @@ export default function ProfileModal({ open, onClose, onProfileUpdated }) {
                   type="button"
                   className="sj-profile-security-icon sj-profile-security-trigger sj-profile-security-delete-trigger"
                   onClick={() => {
+                    setReauthenticationRequired(false);
                     setDeleteMode(true);
                   }}
                   disabled={!!securityBusy || deleteMode}
@@ -651,9 +678,8 @@ export default function ProfileModal({ open, onClose, onProfileUpdated }) {
       <div
         className="sj-modal-overlay sj-profile-delete-overlay sj-fade-in"
         onMouseDown={(event) => {
-          if (event.target !== event.currentTarget || securityBusy === 'delete') return;
-          setDeleteMode(false);
-          setDeleteConfirmation('');
+          if (event.target !== event.currentTarget || securityBusy) return;
+          closeDeleteConfirmation();
         }}
       >
         <section
@@ -662,61 +688,89 @@ export default function ProfileModal({ open, onClose, onProfileUpdated }) {
           role="dialog"
           aria-modal="true"
           aria-labelledby="profile-delete-title"
+          aria-describedby={reauthenticationRequired ? 'profile-reauthentication-description' : undefined}
           tabIndex={-1}
         >
           <button
             type="button"
             className="sj-profile-close sj-profile-delete-close"
-            onClick={() => {
-              setDeleteMode(false);
-              setDeleteConfirmation('');
-            }}
-            disabled={securityBusy === 'delete'}
+            onClick={closeDeleteConfirmation}
+            disabled={!!securityBusy}
             aria-label="Fermer la confirmation"
           >
             <X aria-hidden="true" size={20} />
           </button>
-          <span className="sj-profile-delete-modal-icon" aria-hidden="true">
-            <Trash2 size={23} />
-          </span>
-          <h2 id="profile-delete-title">Supprimer votre compte ?</h2>
-          <label className="sj-profile-delete-field">
-            <span>
-              Pour confirmer, saisissez <strong>{user.email}</strong>
-            </span>
-            <input
-              ref={deleteConfirmationRef}
-              value={deleteConfirmation}
-              onChange={(event) => setDeleteConfirmation(event.target.value.slice(0, 254))}
-              type="email"
-              inputMode="email"
-              autoComplete="off"
-              placeholder="Adresse e-mail"
-              disabled={securityBusy === 'delete'}
-            />
-          </label>
-          <div className="sj-modal-actions sj-profile-delete-actions">
-            <button
-              type="button"
-              className="sj-btn"
-              onClick={() => {
-                setDeleteMode(false);
-                setDeleteConfirmation('');
-              }}
-              disabled={securityBusy === 'delete'}
-            >
-              Annuler
-            </button>
-            <button
-              type="button"
-              className="sj-btn sj-btn-danger"
-              onClick={handleAccountDelete}
-              disabled={securityBusy === 'delete'
-                || deleteConfirmation.trim().toLowerCase() !== user.email.toLowerCase()}
-            >
-              {securityBusy === 'delete' ? 'Suppression…' : 'Supprimer'}
-            </button>
-          </div>
+          {reauthenticationRequired ? (
+            <>
+              <span className="sj-profile-delete-modal-icon sj-profile-reauthentication-icon" aria-hidden="true">
+                <KeyRound size={23} />
+              </span>
+              <h2 id="profile-delete-title">Reconnectez-vous</h2>
+              <p id="profile-reauthentication-description">
+                Pour protéger votre compte, une connexion récente est nécessaire avant sa suppression.
+              </p>
+              <div className="sj-modal-actions sj-profile-delete-actions">
+                <button
+                  type="button"
+                  className="sj-btn"
+                  onClick={closeDeleteConfirmation}
+                  disabled={!!securityBusy}
+                >
+                  Annuler
+                </button>
+                <button
+                  ref={reauthenticationButtonRef}
+                  type="button"
+                  className="sj-btn sj-btn-primary"
+                  onClick={handleReauthentication}
+                  disabled={!!securityBusy}
+                >
+                  {securityBusy === 'reauthentication' ? 'Déconnexion…' : 'Se reconnecter'}
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <span className="sj-profile-delete-modal-icon" aria-hidden="true">
+                <Trash2 size={23} />
+              </span>
+              <h2 id="profile-delete-title">Supprimer votre compte ?</h2>
+              <label className="sj-profile-delete-field">
+                <span>
+                  Pour confirmer, saisissez <strong>{user.email}</strong>
+                </span>
+                <input
+                  ref={deleteConfirmationRef}
+                  value={deleteConfirmation}
+                  onChange={(event) => setDeleteConfirmation(event.target.value.slice(0, 254))}
+                  type="email"
+                  inputMode="email"
+                  autoComplete="off"
+                  placeholder="Adresse e-mail"
+                  disabled={securityBusy === 'delete'}
+                />
+              </label>
+              <div className="sj-modal-actions sj-profile-delete-actions">
+                <button
+                  type="button"
+                  className="sj-btn"
+                  onClick={closeDeleteConfirmation}
+                  disabled={securityBusy === 'delete'}
+                >
+                  Annuler
+                </button>
+                <button
+                  type="button"
+                  className="sj-btn sj-btn-danger"
+                  onClick={handleAccountDelete}
+                  disabled={securityBusy === 'delete'
+                    || deleteConfirmation.trim().toLowerCase() !== user.email.toLowerCase()}
+                >
+                  {securityBusy === 'delete' ? 'Suppression…' : 'Supprimer'}
+                </button>
+              </div>
+            </>
+          )}
         </section>
       </div>
     )}
