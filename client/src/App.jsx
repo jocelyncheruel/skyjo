@@ -8,6 +8,7 @@ import ProfileModal, { ProfileButton } from './ProfileModal.jsx';
 import { AuthLoadingView, AuthView, ConsentGate, LegalPage, ResetPasswordView } from './Auth.jsx';
 import { useAuth } from './authContext.js';
 import { apiFetch, AUTH_REMEMBER_KEY, SERVER_URL } from './apiClient.js';
+import { connectErrorUserMessage } from './connectionError.js';
 import { extractRoomCodeFromInvite, ROOM_CODE_PATTERN } from './inviteCode.js';
 import { useAdaptiveBoardSizing } from './useAdaptiveBoardSizing.js';
 
@@ -377,9 +378,10 @@ function GameApp() {
     nextSocket.on('connect', () => setConnected(true));
     nextSocket.on('disconnect', () => setConnected(false));
     nextSocket.on('connect_error', (connectError) => {
-      const message = connectError.message || 'Connexion refusée.';
-      showError(message);
-      if (/session invalide|session expirée/iu.test(message)) void logout();
+      console.error('[Skyjo] Échec de connexion Socket.IO', connectError);
+      const rawMessage = typeof connectError?.message === 'string' ? connectError.message : '';
+      showError(connectErrorUserMessage(connectError));
+      if (/session invalide|session expirée/iu.test(rawMessage)) void logout();
     });
     nextSocket.on('errorMsg', (payload) => {
       const rawMessage = typeof payload === 'string' ? payload : payload?.message;
