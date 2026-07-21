@@ -9,7 +9,7 @@
     "dev": "node scripts/dev.mjs",
     "install:all": "npm ci --prefix server && npm ci --prefix client",
     "build": "npm run build --prefix client",
-    "lint": "npm run lint --prefix server && npm run lint --prefix client",
+    "lint": "npm run lint --prefix server && npm run lint --prefix client && node --check shared/socketProtocol.js",
     "test": "npm test --prefix server && npm test --prefix client",
     "audit": "npm audit --prefix server --audit-level=high && npm audit --prefix client --audit-level=high",
     "check": "npm run lint && npm test && npm run build"

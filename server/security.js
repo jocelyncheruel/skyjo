@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { isIP } from 'node:net';
 
-export const CLIENT_PROTOCOL_VERSION = 8;
 export const ROOM_SCHEMA_VERSION = 3;
 export const ROOM_TTL_MS = 24 * 60 * 60 * 1000;
 export const TERMS_CONSENT_VERSION = '2026-07-15-bff';

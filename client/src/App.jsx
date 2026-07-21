@@ -11,8 +11,20 @@ import { apiFetch, AUTH_REMEMBER_KEY, SERVER_URL } from './apiClient.js';
 import { connectErrorUserMessage } from './connectionError.js';
 import { extractRoomCodeFromInvite, ROOM_CODE_PATTERN } from './inviteCode.js';
 import { useAdaptiveBoardSizing } from './useAdaptiveBoardSizing.js';
+import {
+  SOCKET_EVENTS,
+  SOCKET_PROTOCOL_VERSION,
+  socketClientPayload,
+} from '../../shared/socketProtocol.js';
 
 const AUTO_RECONNECT_TIMEOUT_MS = 5000;
+
+function emitSocket(socket, eventName, payload) {
+  if (!socket) return;
+  const normalizedPayload = socketClientPayload(eventName, payload);
+  if (normalizedPayload === undefined) socket.emit(eventName);
+  else socket.emit(eventName, normalizedPayload);
+}
 
 async function serverErrorMessage(response, fallback) {
   try {
@@ -369,21 +381,21 @@ function GameApp() {
       timeout: 8000,
       withCredentials: true,
       auth: {
-        protocolVersion: 8,
+        protocolVersion: SOCKET_PROTOCOL_VERSION,
         roomId: savedRoomId,
         playerName: savedPlayerName,
       },
     });
     setSocket(nextSocket);
-    nextSocket.on('connect', () => setConnected(true));
-    nextSocket.on('disconnect', () => setConnected(false));
-    nextSocket.on('connect_error', (connectError) => {
+    nextSocket.on(SOCKET_EVENTS.CONNECT, () => setConnected(true));
+    nextSocket.on(SOCKET_EVENTS.DISCONNECT, () => setConnected(false));
+    nextSocket.on(SOCKET_EVENTS.CONNECT_ERROR, (connectError) => {
       console.error('[Skyjo] Échec de connexion Socket.IO', connectError);
       const rawMessage = typeof connectError?.message === 'string' ? connectError.message : '';
       showError(connectErrorUserMessage(connectError));
       if (/session invalide|session expirée/iu.test(rawMessage)) void logout();
     });
-    nextSocket.on('errorMsg', (payload) => {
+    nextSocket.on(SOCKET_EVENTS.ERROR, (payload) => {
       const rawMessage = typeof payload === 'string' ? payload : payload?.message;
       const baseMessage = typeof rawMessage === 'string' ? [...rawMessage].slice(0, 200).join('') : 'Action impossible.';
       const requestId = /^[0-9a-f-]{36}$/i.test(payload?.requestId || '') ? payload.requestId : '';
@@ -404,24 +416,24 @@ function GameApp() {
         stopReconnectScreen();
       }
     });
-    nextSocket.on('joined', ({ roomId: rid, playerId: pid }) => {
+    nextSocket.on(SOCKET_EVENTS.JOINED, ({ roomId: rid, playerId: pid }) => {
       setRoomId(rid);
       setPlayerId(pid);
       saveGameValue('sj-room-id', rid);
       nextSocket.auth = {
-        protocolVersion: 8,
+        protocolVersion: SOCKET_PROTOCOL_VERSION,
         roomId: rid,
         playerName: normalizePlayerNameInput(readGameValue('sj-player-name')),
       };
     });
-    nextSocket.on('state', (nextState) => {
+    nextSocket.on(SOCKET_EVENTS.STATE, (nextState) => {
       if (autoReconnectPendingRef.current) {
         setPendingReconnectState(nextState);
       } else {
         setState(nextState);
       }
     });
-    nextSocket.on('chatHistory', ({ messages, hasMore, before }) => {
+    nextSocket.on(SOCKET_EVENTS.CHAT_HISTORY, ({ messages, hasMore, before }) => {
       const page = Array.isArray(messages) ? messages : [];
       setChatMessages((current) => {
         const byId = new Map([...page, ...current].map((message) => [message.id, message]));
@@ -430,11 +442,11 @@ function GameApp() {
       setChatHasMore(Boolean(hasMore));
       setChatBefore(before || null);
     });
-    nextSocket.on('chatMessage', (message) => {
+    nextSocket.on(SOCKET_EVENTS.CHAT_MESSAGE, (message) => {
       if (!message?.id) return;
       setChatMessages((current) => current.some((item) => item.id === message.id) ? current : [...current, message]);
     });
-    nextSocket.on('roomExpired', () => {
+    nextSocket.on(SOCKET_EVENTS.ROOM_EXPIRED, () => {
       saveGameValue('sj-room-id', '');
       setRoomId('');
       setPlayerId('');
@@ -442,7 +454,7 @@ function GameApp() {
       setChatMessages([]);
       showError('Cette salle a expiré après 24 heures d\'inactivité.');
     });
-    nextSocket.on('removedFromRoom', () => {
+    nextSocket.on(SOCKET_EVENTS.REMOVED_FROM_ROOM, () => {
       saveGameValue('sj-room-id', '');
       nextSocket.auth = {
         ...nextSocket.auth,
@@ -484,7 +496,7 @@ function GameApp() {
       const data = await res.json();
       setPlayerName(name);
       saveGameValue('sj-player-name', name);
-      socket.emit('joinRoom', { roomId: data.roomId, playerName: name });
+      emitSocket(socket, SOCKET_EVENTS.JOIN_ROOM, { roomId: data.roomId, playerName: name });
     } catch (err) {
       showError(err.message || 'Serveur indisponible.');
     }
@@ -507,7 +519,7 @@ function GameApp() {
     }
     setPlayerName(name);
     saveGameValue('sj-player-name', name);
-    socket.emit('joinRoom', { roomId: normalizedRoomId, playerName: name });
+    emitSocket(socket, SOCKET_EVENTS.JOIN_ROOM, { roomId: normalizedRoomId, playerName: name });
   }
 
   function joinRoom() {
@@ -538,7 +550,7 @@ function GameApp() {
   }
 
   function leaveRoom() {
-    socket?.emit('leaveRoom');
+    emitSocket(socket, SOCKET_EVENTS.LEAVE_ROOM);
     saveGameValue('sj-room-id', '');
     setRoomId('');
     setPlayerId('');
@@ -760,7 +772,7 @@ function GameApp() {
       chatMessages={chatMessages}
       chatHasMore={chatHasMore}
       onLoadOlderChat={() => {
-        if (chatHasMore && chatBefore) socket?.emit('loadChatHistory', { before: chatBefore });
+        if (chatHasMore && chatBefore) emitSocket(socket, SOCKET_EVENTS.LOAD_CHAT_HISTORY, { before: chatBefore });
       }}
     />
   );
@@ -2329,12 +2341,12 @@ function GameScreen({
 
   useEffect(() => {
     if (!invalidPeekFirst) return;
-    socket.emit('resolveAction', { draft: { peekFirst: null } });
+    emitSocket(socket, SOCKET_EVENTS.RESOLVE_ACTION, { draft: { peekFirst: null } });
   }, [invalidPeekFirst, socket]);
 
   useEffect(() => {
     if (!pendingAction?.mustRespond || pendingAction.type !== 'stealAction' || !autoStealTargetId) return;
-    socket.emit('resolveAction', { draft: { stealTargetId: autoStealTargetId } });
+    emitSocket(socket, SOCKET_EVENTS.RESOLVE_ACTION, { draft: { stealTargetId: autoStealTargetId } });
   }, [autoStealTargetId, pendingAction?.mustRespond, pendingAction?.type, socket]);
 
   useEffect(() => {
@@ -2515,23 +2527,23 @@ function GameScreen({
     if (pendingAction?.mustRespond && pendingAction.type === 'removeEach') {
       const currentTargetId = pendingAction.currentTargetId || pendingAction.remaining?.[0];
       if (playerId !== myId && playerId === currentTargetId) {
-        socket.emit('resolveAction', { targetPlayerId: playerId, slotIndex });
+        emitSocket(socket, SOCKET_EVENTS.RESOLVE_ACTION, { targetPlayerId: playerId, slotIndex });
       }
       return;
     }
     if (pendingAction?.mustRespond && pendingAction.type === 'swapOwn' && playerId === myId) {
       const firstSlot = actionSelection.slots?.[0];
       if (Number.isInteger(firstSlot) && firstSlot !== slotIndex) {
-        socket.emit('resolveAction', { slotIndex });
+        emitSocket(socket, SOCKET_EVENTS.RESOLVE_ACTION, { slotIndex });
       } else if (!Number.isInteger(firstSlot)) {
-        socket.emit('resolveAction', { draft: { slots: [slotIndex] } });
+        emitSocket(socket, SOCKET_EVENTS.RESOLVE_ACTION, { draft: { slots: [slotIndex] } });
       }
       return;
     }
     if (pendingAction?.mustRespond && pendingAction.type === 'drawThree' && playerId === myId) {
-      if (actionSelection.choiceIndex === null) socket.emit('resolveAction', { revealSlot: slotIndex });
+      if (actionSelection.choiceIndex === null) emitSocket(socket, SOCKET_EVENTS.RESOLVE_ACTION, { revealSlot: slotIndex });
       else if (Number.isInteger(actionSelection.choiceIndex)) {
-        socket.emit('resolveAction', { slotIndex });
+        emitSocket(socket, SOCKET_EVENTS.RESOLVE_ACTION, { slotIndex });
       }
       return;
     }
@@ -2545,16 +2557,16 @@ function GameScreen({
           ? 'single'
           : informativeOptions.length === 1 ? informativeOptions[0].groupType : null;
         if (automaticGroupType) {
-          socket.emit('resolveAction', {
+          emitSocket(socket, SOCKET_EVENTS.RESOLVE_ACTION, {
             targetPlayerId: playerId,
             firstSlotIndex: slotIndex,
             groupType: automaticGroupType,
           });
         } else {
-          socket.emit('resolveAction', { draft: { peekFirst: { playerId, slotIndex } } });
+          emitSocket(socket, SOCKET_EVENTS.RESOLVE_ACTION, { draft: { peekFirst: { playerId, slotIndex } } });
         }
       } else if (first.playerId === playerId && first.slotIndex !== slotIndex) {
-        socket.emit('resolveAction', {
+        emitSocket(socket, SOCKET_EVENTS.RESOLVE_ACTION, {
           targetPlayerId: playerId,
           firstSlotIndex: first.slotIndex,
           secondSlotIndex: slotIndex,
@@ -2566,22 +2578,22 @@ function GameScreen({
       const first = actionSelection.targets?.[0];
       const target = { playerId, slotIndex };
       if (first && (first.playerId !== playerId || first.slotIndex !== slotIndex)) {
-        socket.emit('resolveAction', { second: target });
+        emitSocket(socket, SOCKET_EVENTS.RESOLVE_ACTION, { second: target });
       } else if (!first) {
-        socket.emit('resolveAction', { draft: { targets: [target] } });
+        emitSocket(socket, SOCKET_EVENTS.RESOLVE_ACTION, { draft: { targets: [target] } });
       }
       return;
     }
 
     if (playerId !== myId) return;
     if (state.phase === 'initialFlip') {
-      socket.emit('flipInitial', { slotIndex });
+      emitSocket(socket, SOCKET_EVENTS.FLIP_INITIAL, { slotIndex });
     } else if (state.turnStage === 'decide') {
-      socket.emit('keepDrawnAndPlace', { slotIndex });
+      emitSocket(socket, SOCKET_EVENTS.KEEP_DRAWN_AND_PLACE, { slotIndex });
     } else if (state.turnStage === 'place') {
-      socket.emit('placeCard', { slotIndex });
+      emitSocket(socket, SOCKET_EVENTS.PLACE_CARD, { slotIndex });
     } else if (state.turnStage === 'reveal') {
-      socket.emit('revealCard', { slotIndex });
+      emitSocket(socket, SOCKET_EVENTS.REVEAL_CARD, { slotIndex });
     }
   }
 
@@ -2591,25 +2603,25 @@ function GameScreen({
 
   function handleDiscardClick() {
     if (canDiscardDrawn) {
-      socket.emit('decideDrawn', { keep: false });
+      emitSocket(socket, SOCKET_EVENTS.DECIDE_DRAWN, { keep: false });
     } else if (canDrawDiscard) {
-      socket.emit('drawCard', { source: 'discard' });
+      emitSocket(socket, SOCKET_EVENTS.DRAW_CARD, { source: 'discard' });
     }
   }
 
   function handleActionCardSelect(payload) {
     if (state.pendingStarClaim) {
-      socket.emit('claimStarAction', payload);
+      emitSocket(socket, SOCKET_EVENTS.CLAIM_STAR_ACTION, payload);
     }
   }
 
   function handlePlayActionCard(cardId) {
-    socket.emit('playActionCard', { cardId });
+    emitSocket(socket, SOCKET_EVENTS.PLAY_ACTION_CARD, { cardId });
     setActionHandModalOpen(false);
   }
 
   function handleDiscardActionCard(cardId) {
-    socket.emit('discardActionCard', { cardId });
+    emitSocket(socket, SOCKET_EVENTS.DISCARD_ACTION_CARD, { cardId });
     setActionHandModalOpen(false);
   }
 
@@ -2619,37 +2631,37 @@ function GameScreen({
 
   function handleRemoveEachActionCardSelect(actionCardId) {
     if (!viewedActionPlayerId) return;
-    socket.emit('resolveAction', { targetPlayerId: viewedActionPlayerId, actionCardId });
+    emitSocket(socket, SOCKET_EVENTS.RESOLVE_ACTION, { targetPlayerId: viewedActionPlayerId, actionCardId });
     setViewedActionPlayerId(null);
   }
 
   function handleDefensePrompt(useDefense) {
-    socket.emit('resolveDefense', { useDefense });
+    emitSocket(socket, SOCKET_EVENTS.RESOLVE_DEFENSE, { useDefense });
   }
 
   function handleStarGroupChoice(remove) {
-    socket.emit('resolveGroupChoice', { remove });
+    emitSocket(socket, SOCKET_EVENTS.RESOLVE_GROUP_CHOICE, { remove });
   }
 
   function handleDrawThreeChoice(choiceIndex) {
-    socket.emit('resolveAction', { draft: { choiceIndex } });
+    emitSocket(socket, SOCKET_EVENTS.RESOLVE_ACTION, { draft: { choiceIndex } });
   }
 
   function handleStealTargetSelect(targetId) {
-    socket.emit('resolveAction', { draft: { stealTargetId: targetId } });
+    emitSocket(socket, SOCKET_EVENTS.RESOLVE_ACTION, { draft: { stealTargetId: targetId } });
   }
 
   function handleStealTargetReset() {
-    socket.emit('resolveAction', { draft: { stealTargetId: null } });
+    emitSocket(socket, SOCKET_EVENTS.RESOLVE_ACTION, { draft: { stealTargetId: null } });
   }
 
   function handleStealCardSelect(cardId) {
     if (!stealTargetId) return;
-    socket.emit('resolveAction', { targetPlayerId: stealTargetId, cardId });
+    emitSocket(socket, SOCKET_EVENTS.RESOLVE_ACTION, { targetPlayerId: stealTargetId, cardId });
   }
 
   function handlePlayDiscardActionSelect(cardId) {
-    socket.emit('resolveAction', { cardId });
+    emitSocket(socket, SOCKET_EVENTS.RESOLVE_ACTION, { cardId });
   }
 
   function handleOpenChat() {
@@ -2658,7 +2670,7 @@ function GameScreen({
   }
 
   function handleSendChatMessage(text) {
-    socket.emit('sendChatMessage', { text });
+    emitSocket(socket, SOCKET_EVENTS.SEND_CHAT_MESSAGE, { text });
   }
 
   function actionPopupFor(playerId) {
@@ -2685,7 +2697,7 @@ function GameScreen({
     <LeaveRoomButton onClick={() => setLeaveModalOpen(true)} />
   );
   const removePlayerFromLobby = (targetPlayerId) => {
-    socket.emit('removePlayerFromLobby', { playerId: targetPlayerId });
+    emitSocket(socket, SOCKET_EVENTS.REMOVE_PLAYER_FROM_LOBBY, { playerId: targetPlayerId });
   };
   const disconnectedPlayersModal = (
     <DisconnectedPlayersModal
@@ -2763,12 +2775,12 @@ function GameScreen({
   const peekLineChoiceModal = (
     <PeekLineChoiceModal
       choice={peekLineChoice}
-      onResolve={(groupType) => socket.emit('resolveAction', {
+      onResolve={(groupType) => emitSocket(socket, SOCKET_EVENTS.RESOLVE_ACTION, {
         targetPlayerId: peekLineChoice?.targetPlayerId,
         firstSlotIndex: peekLineChoice?.firstSlotIndex,
         groupType,
       })}
-      onBack={() => socket.emit('resolveAction', { draft: { peekFirst: null } })}
+      onBack={() => emitSocket(socket, SOCKET_EVENTS.RESOLVE_ACTION, { draft: { peekFirst: null } })}
     />
   );
   const drawThreeActionModal = (
@@ -2871,7 +2883,7 @@ function GameScreen({
                       type="button"
                       disabled={!isCreator}
                       aria-pressed={state.gameMode === mode.id}
-                      onClick={() => socket.emit('setGameMode', { gameMode: mode.id })}
+                      onClick={() => emitSocket(socket, SOCKET_EVENTS.SET_GAME_MODE, { gameMode: mode.id })}
                     >
                       <strong>{mode.label}</strong>
                     </button>
@@ -2887,7 +2899,7 @@ function GameScreen({
                     setDisconnectedPlayersModalOpen(true);
                     return;
                   }
-                  socket.emit('startGame');
+                  emitSocket(socket, SOCKET_EVENTS.START_GAME);
                 }}
               >
                 Lancer la partie
@@ -2917,7 +2929,7 @@ function GameScreen({
             <div className="sj-brand-mark"><SkyjoLogo label={`${winner?.name || 'Joueur'} gagne`} /></div>
             <ScoreTable players={state.players} />
             {isCreator ? (
-              <button className="sj-btn sj-btn-primary" onClick={() => socket.emit('returnToLobby')}>
+              <button className="sj-btn sj-btn-primary" onClick={() => emitSocket(socket, SOCKET_EVENTS.RETURN_TO_LOBBY)}>
                 Nouvelle partie
               </button>
             ) : (
@@ -3010,7 +3022,7 @@ function GameScreen({
                 drawnCard={drawnFromDeck ? (drawnCard || { hidden: true }) : null}
                 drawnFrom="deck"
                 drawnPulse={drawnCardIsMine}
-                onClick={() => socket.emit('drawCard', { source: 'deck' })}
+                onClick={() => emitSocket(socket, SOCKET_EVENTS.DRAW_CARD, { source: 'deck' })}
               >
                 <Card faceUp={false} size="pile" pulse={canDrawDeck} motionAnchor="pile:deck" />
               </PileButton>

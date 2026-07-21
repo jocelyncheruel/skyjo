@@ -7,6 +7,15 @@ import { customAlphabet, nanoid } from 'nanoid';
 import { buildSupabaseClient } from './bootstrap.js';
 import { createAuthBff } from './authBff.js';
 import {
+  SOCKET_ACTION_DRAFT_KEYS,
+  SOCKET_EVENTS,
+  SOCKET_HANDSHAKE_KEYS,
+  SOCKET_PEEK_FIRST_KEYS,
+  SOCKET_PROTOCOL_VERSION,
+  socketServerPayload,
+  socketPayloadKeys,
+} from '../shared/socketProtocol.js';
+import {
   newRoomState, addPlayer, leavePlayer, removePlayer, removeLobbyPlayer, startGame, flipInitialCard,
   drawCard, decideDrawnCard, keepDrawnAndPlace, placeDrawnCard, revealHiddenCard, nextRound,
   publicState, setGameMode, returnToLobby, playOwnedAction, resolveActionInput, claimStarAction,
@@ -14,7 +23,7 @@ import {
   resolveGroupChoice, assertActionCardIntegrity, MAX_PLAYERS_PER_ROOM,
 } from './game.js';
 import {
-  CLIENT_PROTOCOL_VERSION, PRIVACY_CONSENT_VERSION, ROOM_SCHEMA_VERSION, ROOM_TTL_MS,
+  PRIVACY_CONSENT_VERSION, ROOM_SCHEMA_VERSION, ROOM_TTL_MS,
   TERMS_CONSENT_VERSION,
   PublicError, clientIpFromForwarded,
   isValidRoomState, normalizeChatMessage, normalizeOrigin,
@@ -455,7 +464,10 @@ async function attachSocket(socket, roomId, playerId, playerName) {
     player.connected = true;
     if (playerName) player.name = playerName;
   });
-  socket.emit('joined', { roomId, playerId });
+  socket.emit(
+    SOCKET_EVENTS.JOINED,
+    socketServerPayload(SOCKET_EVENTS.JOINED, { roomId, playerId }),
+  );
   await sendChatHistory(socket, null);
   broadcastRoom(roomId);
   scheduleNextRound(roomId, state);
@@ -495,7 +507,10 @@ function scheduleSocketExpiry(socket) {
       scheduleSocketExpiry(socket);
       return;
     }
-    socket.emit('errorMsg', { code: 'invalid_session', message: 'Session invalide ou expirée.' });
+    socket.emit(SOCKET_EVENTS.ERROR, socketServerPayload(SOCKET_EVENTS.ERROR, {
+      code: 'invalid_session',
+      message: 'Session invalide ou expirée.',
+    }));
     socket.disconnect(true);
   }, SESSION_CHECK_CACHE_MS);
   socket.data.expiryTimer.unref?.();
@@ -509,17 +524,17 @@ function checkSocketRateLimit(socket, eventName) {
     consumeRateLimit(`event:user:${userId}`, { limit: 120, windowMs: 10_000 }),
     consumeRateLimit(`event:ip:${ip}`, { limit: 240, windowMs: 10_000 }),
   ];
-  if (eventName === 'sendChatMessage') {
+  if (eventName === SOCKET_EVENTS.SEND_CHAT_MESSAGE) {
     checks.push(consumeRateLimit(`chat:user:${userId}`, { limit: 8, windowMs: 60_000 }));
     const info = socketToPlayer.get(socket.id);
     if (info) checks.push(consumeRateLimit(`chat:room:${info.roomId}`, { limit: 40, windowMs: 60_000 }));
   }
   const denied = checks.find((result) => !result.allowed);
-  if (denied) socket.emit('errorMsg', {
+  if (denied) socket.emit(SOCKET_EVENTS.ERROR, socketServerPayload(SOCKET_EVENTS.ERROR, {
     code: 'rate_limited',
     message: 'Trop de requêtes. Réessayez plus tard.',
     retryAfter: denied.retryAfter,
-  });
+  }));
   return !denied;
 }
 
@@ -528,7 +543,10 @@ function withSocketGuard(socket, eventName, handler) {
     await socket.data.attachPromise;
     if (!checkSocketRateLimit(socket, eventName)) return;
     if (!await ensureSocketSession(socket)) {
-      socket.emit('errorMsg', { code: 'invalid_session', message: 'Session invalide ou expirée.' });
+      socket.emit(SOCKET_EVENTS.ERROR, socketServerPayload(SOCKET_EVENTS.ERROR, {
+        code: 'invalid_session',
+        message: 'Session invalide ou expirée.',
+      }));
       socket.disconnect(true);
       return;
     }
@@ -536,24 +554,18 @@ function withSocketGuard(socket, eventName, handler) {
       await handler(...args);
     } catch (error) {
       const correlationId = error instanceof PublicError ? null : logInternal(`socket:${eventName}`, error);
-      socket.emit('errorMsg', error instanceof PublicError
+      socket.emit(SOCKET_EVENTS.ERROR, socketServerPayload(SOCKET_EVENTS.ERROR, error instanceof PublicError
         ? { code: error.code, message: error.message }
-        : { code: 'internal_error', message: 'Action impossible.', requestId: correlationId });
+        : { code: 'internal_error', message: 'Action impossible.', requestId: correlationId }));
     }
   };
 }
 
 function actionPayload(value) {
-  const payload = objectPayload(value, [
-    'draft', 'targetPlayerId', 'slotIndex', 'actionCardId', 'slots',
-    'choiceIndex', 'revealSlot', 'firstSlotIndex', 'secondSlotIndex',
-    'groupType', 'cardId', 'first', 'second',
-  ]);
+  const payload = objectPayload(value, socketPayloadKeys(SOCKET_EVENTS.RESOLVE_ACTION));
   if (!payload.draft) return payload;
-  const draft = objectPayload(payload.draft, [
-    'slots', 'choiceIndex', 'peekFirst', 'targets', 'stealTargetId', 'targetPlayerId',
-  ]);
-  if (draft.peekFirst) objectPayload(draft.peekFirst, ['playerId', 'slotIndex']);
+  const draft = objectPayload(payload.draft, SOCKET_ACTION_DRAFT_KEYS);
+  if (draft.peekFirst) objectPayload(draft.peekFirst, SOCKET_PEEK_FIRST_KEYS);
   return { ...payload, draft };
 }
 
@@ -562,7 +574,7 @@ function broadcastRoom(roomId) {
   if (!state) return;
   for (const [socketId, info] of socketToPlayer) {
     if (info.roomId !== roomId || !state.playersById[info.playerId]) continue;
-    io.to(socketId).emit('state', publicState(state, info.playerId));
+    io.to(socketId).emit(SOCKET_EVENTS.STATE, publicState(state, info.playerId));
   }
 }
 
@@ -683,11 +695,11 @@ async function sendChatHistory(socket, before) {
   if (error) throw error;
   const rows = (data || []).slice(0, CHAT_PAGE_SIZE);
   const messages = rows.map(mapMessage).reverse();
-  socket.emit('chatHistory', {
+  socket.emit(SOCKET_EVENTS.CHAT_HISTORY, socketServerPayload(SOCKET_EVENTS.CHAT_HISTORY, {
     messages,
     hasMore: (data || []).length > CHAT_PAGE_SIZE,
     before: encodeChatCursor(rows.at(-1)),
-  });
+  }));
 }
 
 async function appendChatMessage(socket, value) {
@@ -706,7 +718,10 @@ async function appendChatMessage(socket, value) {
   });
   if (error || !data?.[0]) throw error || new Error('message_not_persisted');
   state.updatedAt = Date.now();
-  io.to(info.roomId).emit('chatMessage', mapMessage(data[0]));
+  io.to(info.roomId).emit(
+    SOCKET_EVENTS.CHAT_MESSAGE,
+    socketServerPayload(SOCKET_EVENTS.CHAT_MESSAGE, mapMessage(data[0])),
+  );
 }
 
 async function cleanupStaleRooms() {
@@ -721,7 +736,7 @@ async function cleanupStaleRooms() {
     clearRoomTimers(roomId);
     for (const [socketId, info] of socketToPlayer) {
       if (info.roomId !== roomId) continue;
-      io.to(socketId).emit('roomExpired');
+      io.to(socketId).emit(SOCKET_EVENTS.ROOM_EXPIRED);
       io.sockets.sockets.get(socketId)?.leave(roomId);
       socketToPlayer.delete(socketId);
     }
@@ -765,7 +780,7 @@ app.use(cors({
 app.use(express.json({ limit: JSON_BODY_LIMIT, strict: true }));
 app.use(httpRateLimit({ keyPrefix: 'preauth', limit: 120, windowMs: 60_000 }));
 
-app.get('/health', (req, res) => res.json({ ok: true, clientProtocolVersion: CLIENT_PROTOCOL_VERSION }));
+app.get('/health', (req, res) => res.json({ ok: true, clientProtocolVersion: SOCKET_PROTOCOL_VERSION }));
 app.use('/api/auth', authBff.router);
 
 app.get('/api/account/consent', requireHttpAuth, authBff.requireStandardSession, async (req, res, next) => {
@@ -847,10 +862,8 @@ const io = new Server(server, {
 
 io.use(async (socket, next) => {
   try {
-    const handshake = objectPayload(socket.handshake.auth || {}, [
-      'protocolVersion', 'roomId', 'playerName',
-    ]);
-    if (Number(handshake.protocolVersion) !== CLIENT_PROTOCOL_VERSION) {
+    const handshake = objectPayload(socket.handshake.auth || {}, SOCKET_HANDSHAKE_KEYS);
+    if (Number(handshake.protocolVersion) !== SOCKET_PROTOCOL_VERSION) {
       return next(new Error('Mise à jour du client requise.'));
     }
     const ip = socketIp(socket);
@@ -881,23 +894,23 @@ io.on('connection', (socket) => {
     normalizePlayerName(socket.handshake.auth?.playerName),
   ).then((member) => {
     if (initialRoomId && !member) {
-      socket.emit('errorMsg', {
+      socket.emit(SOCKET_EVENTS.ERROR, socketServerPayload(SOCKET_EVENTS.ERROR, {
         code: 'room_unavailable',
         message: 'Cette salle n\'est plus disponible.',
-      });
+      }));
     }
     return member;
   }).catch((error) => {
     logInternal('socket_auto_attach', error);
-    socket.emit('errorMsg', {
+    socket.emit(SOCKET_EVENTS.ERROR, socketServerPayload(SOCKET_EVENTS.ERROR, {
       code: 'reconnect_failed',
       message: 'Impossible de retrouver cette salle pour le moment.',
-    });
+    }));
     return null;
   });
 
-  socket.on('joinRoom', withSocketGuard(socket, 'joinRoom', async (payload = {}) => {
-    const data = objectPayload(payload, ['roomId', 'playerName']);
+  socket.on(SOCKET_EVENTS.JOIN_ROOM, withSocketGuard(socket, SOCKET_EVENTS.JOIN_ROOM, async (payload = {}) => {
+    const data = objectPayload(payload, socketPayloadKeys(SOCKET_EVENTS.JOIN_ROOM));
     const roomId = normalizeRoomId(data.roomId);
     const playerName = normalizePlayerName(data.playerName);
     if (!roomId || !playerName) throw new PublicError('invalid_join', 'Impossible de rejoindre cette salle.', 400);
@@ -936,7 +949,7 @@ io.on('connection', (socket) => {
     await attachSocket(socket, roomId, member.player_id, playerName);
   }));
 
-  socket.on('leaveRoom', withSocketGuard(socket, 'leaveRoom', async (acknowledge) => {
+  socket.on(SOCKET_EVENTS.LEAVE_ROOM, withSocketGuard(socket, SOCKET_EVENTS.LEAVE_ROOM, async (acknowledge) => {
     const info = socketToPlayer.get(socket.id);
     if (!info) { if (typeof acknowledge === 'function') acknowledge({ ok: true }); return; }
     const allSocketIds = socketIdsForPlayer(info.roomId, info.playerId);
@@ -957,9 +970,12 @@ io.on('connection', (socket) => {
     if (typeof acknowledge === 'function') acknowledge({ ok: true });
   }));
 
-  socket.on('startGame', withSocketGuard(socket, 'startGame', () => handleAction(socket, startGame)));
-  socket.on('removePlayerFromLobby', withSocketGuard(socket, 'removePlayerFromLobby', async (payload) => {
-    const targetPlayerId = objectPayload(payload, ['playerId']).playerId;
+  socket.on(SOCKET_EVENTS.START_GAME, withSocketGuard(socket, SOCKET_EVENTS.START_GAME, () => handleAction(socket, startGame)));
+  socket.on(SOCKET_EVENTS.REMOVE_PLAYER_FROM_LOBBY, withSocketGuard(socket, SOCKET_EVENTS.REMOVE_PLAYER_FROM_LOBBY, async (payload) => {
+    const targetPlayerId = objectPayload(
+      payload,
+      socketPayloadKeys(SOCKET_EVENTS.REMOVE_PLAYER_FROM_LOBBY),
+    ).playerId;
     const info = socketToPlayer.get(socket.id);
     const targetSocketIds = info ? socketIdsForPlayer(info.roomId, targetPlayerId) : [];
     await handleAction(
@@ -973,30 +989,30 @@ io.on('connection', (socket) => {
       const targetSocket = io.sockets.sockets.get(targetSocketId);
       socketToPlayer.delete(targetSocketId);
       targetSocket?.leave(info.roomId);
-      targetSocket?.emit('removedFromRoom');
+      targetSocket?.emit(SOCKET_EVENTS.REMOVED_FROM_ROOM);
     }
   }));
-  socket.on('returnToLobby', withSocketGuard(socket, 'returnToLobby', () => handleAction(socket, returnToLobby)));
-  socket.on('setGameMode', withSocketGuard(socket, 'setGameMode', (payload) => handleAction(socket, (s, p) => setGameMode(s, p, objectPayload(payload, ['gameMode']).gameMode))));
-  socket.on('flipInitial', withSocketGuard(socket, 'flipInitial', (payload) => handleAction(socket, (s, p) => flipInitialCard(s, p, objectPayload(payload, ['slotIndex']).slotIndex))));
-  socket.on('drawCard', withSocketGuard(socket, 'drawCard', (payload) => handleAction(socket, (s, p) => drawCard(s, p, objectPayload(payload, ['source']).source))));
-  socket.on('decideDrawn', withSocketGuard(socket, 'decideDrawn', (payload) => handleAction(socket, (s, p) => decideDrawnCard(s, p, objectPayload(payload, ['keep']).keep))));
-  socket.on('keepDrawnAndPlace', withSocketGuard(socket, 'keepDrawnAndPlace', (payload) => handleAction(socket, (s, p) => keepDrawnAndPlace(s, p, objectPayload(payload, ['slotIndex']).slotIndex))));
-  socket.on('placeCard', withSocketGuard(socket, 'placeCard', (payload) => handleAction(socket, (s, p) => placeDrawnCard(s, p, objectPayload(payload, ['slotIndex']).slotIndex))));
-  socket.on('revealCard', withSocketGuard(socket, 'revealCard', (payload) => handleAction(socket, (s, p) => revealHiddenCard(s, p, objectPayload(payload, ['slotIndex']).slotIndex))));
-  socket.on('playActionCard', withSocketGuard(socket, 'playActionCard', (payload) => handleAction(socket, (s, p) => playOwnedAction(s, p, objectPayload(payload, ['cardId']).cardId))));
-  socket.on('discardActionCard', withSocketGuard(socket, 'discardActionCard', (payload) => handleAction(socket, (s, p) => discardOwnedAction(s, p, objectPayload(payload, ['cardId']).cardId))));
-  socket.on('resolveAction', withSocketGuard(socket, 'resolveAction', (payload) => handleAction(socket, (s, p) => resolveActionInput(s, p, actionPayload(payload)))));
-  socket.on('resolveDefense', withSocketGuard(socket, 'resolveDefense', (payload) => handleAction(socket, (s, p) => resolveDefensePrompt(s, p, objectPayload(payload, ['useDefense']).useDefense))));
-  socket.on('resolveGroupChoice', withSocketGuard(socket, 'resolveGroupChoice', (payload) => handleAction(socket, (s, p) => resolveGroupChoice(s, p, objectPayload(payload, ['remove']).remove))));
-  socket.on('claimStarAction', withSocketGuard(socket, 'claimStarAction', (payload) => {
-    const data = objectPayload(payload, ['source', 'marketIndex']);
+  socket.on(SOCKET_EVENTS.RETURN_TO_LOBBY, withSocketGuard(socket, SOCKET_EVENTS.RETURN_TO_LOBBY, () => handleAction(socket, returnToLobby)));
+  socket.on(SOCKET_EVENTS.SET_GAME_MODE, withSocketGuard(socket, SOCKET_EVENTS.SET_GAME_MODE, (payload) => handleAction(socket, (s, p) => setGameMode(s, p, objectPayload(payload, socketPayloadKeys(SOCKET_EVENTS.SET_GAME_MODE)).gameMode))));
+  socket.on(SOCKET_EVENTS.FLIP_INITIAL, withSocketGuard(socket, SOCKET_EVENTS.FLIP_INITIAL, (payload) => handleAction(socket, (s, p) => flipInitialCard(s, p, objectPayload(payload, socketPayloadKeys(SOCKET_EVENTS.FLIP_INITIAL)).slotIndex))));
+  socket.on(SOCKET_EVENTS.DRAW_CARD, withSocketGuard(socket, SOCKET_EVENTS.DRAW_CARD, (payload) => handleAction(socket, (s, p) => drawCard(s, p, objectPayload(payload, socketPayloadKeys(SOCKET_EVENTS.DRAW_CARD)).source))));
+  socket.on(SOCKET_EVENTS.DECIDE_DRAWN, withSocketGuard(socket, SOCKET_EVENTS.DECIDE_DRAWN, (payload) => handleAction(socket, (s, p) => decideDrawnCard(s, p, objectPayload(payload, socketPayloadKeys(SOCKET_EVENTS.DECIDE_DRAWN)).keep))));
+  socket.on(SOCKET_EVENTS.KEEP_DRAWN_AND_PLACE, withSocketGuard(socket, SOCKET_EVENTS.KEEP_DRAWN_AND_PLACE, (payload) => handleAction(socket, (s, p) => keepDrawnAndPlace(s, p, objectPayload(payload, socketPayloadKeys(SOCKET_EVENTS.KEEP_DRAWN_AND_PLACE)).slotIndex))));
+  socket.on(SOCKET_EVENTS.PLACE_CARD, withSocketGuard(socket, SOCKET_EVENTS.PLACE_CARD, (payload) => handleAction(socket, (s, p) => placeDrawnCard(s, p, objectPayload(payload, socketPayloadKeys(SOCKET_EVENTS.PLACE_CARD)).slotIndex))));
+  socket.on(SOCKET_EVENTS.REVEAL_CARD, withSocketGuard(socket, SOCKET_EVENTS.REVEAL_CARD, (payload) => handleAction(socket, (s, p) => revealHiddenCard(s, p, objectPayload(payload, socketPayloadKeys(SOCKET_EVENTS.REVEAL_CARD)).slotIndex))));
+  socket.on(SOCKET_EVENTS.PLAY_ACTION_CARD, withSocketGuard(socket, SOCKET_EVENTS.PLAY_ACTION_CARD, (payload) => handleAction(socket, (s, p) => playOwnedAction(s, p, objectPayload(payload, socketPayloadKeys(SOCKET_EVENTS.PLAY_ACTION_CARD)).cardId))));
+  socket.on(SOCKET_EVENTS.DISCARD_ACTION_CARD, withSocketGuard(socket, SOCKET_EVENTS.DISCARD_ACTION_CARD, (payload) => handleAction(socket, (s, p) => discardOwnedAction(s, p, objectPayload(payload, socketPayloadKeys(SOCKET_EVENTS.DISCARD_ACTION_CARD)).cardId))));
+  socket.on(SOCKET_EVENTS.RESOLVE_ACTION, withSocketGuard(socket, SOCKET_EVENTS.RESOLVE_ACTION, (payload) => handleAction(socket, (s, p) => resolveActionInput(s, p, actionPayload(payload)))));
+  socket.on(SOCKET_EVENTS.RESOLVE_DEFENSE, withSocketGuard(socket, SOCKET_EVENTS.RESOLVE_DEFENSE, (payload) => handleAction(socket, (s, p) => resolveDefensePrompt(s, p, objectPayload(payload, socketPayloadKeys(SOCKET_EVENTS.RESOLVE_DEFENSE)).useDefense))));
+  socket.on(SOCKET_EVENTS.RESOLVE_GROUP_CHOICE, withSocketGuard(socket, SOCKET_EVENTS.RESOLVE_GROUP_CHOICE, (payload) => handleAction(socket, (s, p) => resolveGroupChoice(s, p, objectPayload(payload, socketPayloadKeys(SOCKET_EVENTS.RESOLVE_GROUP_CHOICE)).remove))));
+  socket.on(SOCKET_EVENTS.CLAIM_STAR_ACTION, withSocketGuard(socket, SOCKET_EVENTS.CLAIM_STAR_ACTION, (payload) => {
+    const data = objectPayload(payload, socketPayloadKeys(SOCKET_EVENTS.CLAIM_STAR_ACTION));
     return handleAction(socket, (s, p) => claimStarAction(s, p, data.source, data.marketIndex));
   }));
-  socket.on('sendChatMessage', withSocketGuard(socket, 'sendChatMessage', (payload) => appendChatMessage(socket, objectPayload(payload, ['text']).text)));
-  socket.on('loadChatHistory', withSocketGuard(socket, 'loadChatHistory', (payload) => sendChatHistory(socket, objectPayload(payload, ['before']).before)));
+  socket.on(SOCKET_EVENTS.SEND_CHAT_MESSAGE, withSocketGuard(socket, SOCKET_EVENTS.SEND_CHAT_MESSAGE, (payload) => appendChatMessage(socket, objectPayload(payload, socketPayloadKeys(SOCKET_EVENTS.SEND_CHAT_MESSAGE)).text)));
+  socket.on(SOCKET_EVENTS.LOAD_CHAT_HISTORY, withSocketGuard(socket, SOCKET_EVENTS.LOAD_CHAT_HISTORY, (payload) => sendChatHistory(socket, objectPayload(payload, socketPayloadKeys(SOCKET_EVENTS.LOAD_CHAT_HISTORY)).before)));
 
-  socket.on('disconnect', () => {
+  socket.on(SOCKET_EVENTS.DISCONNECT, () => {
     if (socket.data.expiryTimer) clearTimeout(socket.data.expiryTimer);
     const info = socketToPlayer.get(socket.id);
     socketToPlayer.delete(socket.id);
@@ -1043,6 +1059,6 @@ export { app, server, io };
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   cleanupStaleRooms().catch((error) => logInternal('initial_cleanup', error));
   server.listen(PORT, HOST, () => {
-    console.log(`Skyjo server v${CLIENT_PROTOCOL_VERSION} listening on ${HOST}:${PORT}`);
+    console.log(`Skyjo server v${SOCKET_PROTOCOL_VERSION} listening on ${HOST}:${PORT}`);
   });
 }
