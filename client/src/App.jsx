@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { io } from 'socket.io-client';
-import { LogOut, MessageCircle, Send, X } from 'lucide-react';
+import { LogOut, MessageCircle, Send, Trash2, X } from 'lucide-react';
 import Card from './components/Card.jsx';
 import CardMotionLayer from './components/CardMotionLayer.jsx';
 import PlayerBoard from './components/PlayerBoard.jsx';
@@ -442,6 +442,22 @@ function GameApp() {
       setChatMessages([]);
       showError('Cette salle a expiré après 24 heures d\'inactivité.');
     });
+    nextSocket.on('removedFromRoom', () => {
+      saveGameValue('sj-room-id', '');
+      nextSocket.auth = {
+        ...nextSocket.auth,
+        roomId: '',
+      };
+      setRoomId('');
+      setPlayerId('');
+      setState(null);
+      setChatMessages([]);
+      setJoinRoomInput('');
+      setHomePanel('home');
+      setAutoReconnectPending(false);
+      setPendingReconnectState(null);
+      showError('Le propriétaire vous a retiré de la salle.', 5000);
+    });
     return () => {
       if (reconnectTimeout) window.clearTimeout(reconnectTimeout);
       nextSocket?.disconnect();
@@ -881,6 +897,59 @@ function LeaveRoomButton({ onClick }) {
     >
       <LogOut aria-hidden="true" size={21} strokeWidth={2.4} />
     </button>
+  );
+}
+
+function DisconnectedPlayersModal({ open, players, onCancel, onConfirm }) {
+  const cancelButtonRef = useRef(null);
+
+  useEffect(() => {
+    if (!open) return undefined;
+
+    cancelButtonRef.current?.focus();
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') onCancel();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [open, onCancel]);
+
+  if (!open || players.length === 0) return null;
+
+  const multiplePlayers = players.length > 1;
+  return (
+    <div
+      className="sj-modal-overlay sj-fade-in"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onCancel();
+      }}
+    >
+      <section
+        className="sj-confirm-modal sj-disconnected-players-modal sj-pop-in"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="disconnected-players-title"
+        aria-describedby="disconnected-players-description"
+      >
+        <h2 id="disconnected-players-title">
+          {multiplePlayers ? 'Des joueurs sont déconnectés' : 'Un joueur est déconnecté'}
+        </h2>
+        <p id="disconnected-players-description">
+          La partie ne peut démarrer que lorsque tous les sièges sont connectés. Vous pouvez attendre leur retour ou les retirer de la salle.
+        </p>
+        <ul className="sj-disconnected-players-list">
+          {players.map((player) => <li key={player.id}>{player.name}</li>)}
+        </ul>
+        <div className="sj-modal-actions">
+          <button ref={cancelButtonRef} type="button" className="sj-btn" onClick={onCancel}>
+            Attendre
+          </button>
+          <button type="button" className="sj-btn sj-btn-danger" onClick={onConfirm}>
+            {multiplePlayers ? 'Retirer les joueurs' : 'Retirer le joueur'}
+          </button>
+        </div>
+      </section>
+    </div>
   );
 }
 
@@ -1950,6 +2019,7 @@ function GameScreen({
 }) {
   const [copied, setCopied] = useState(false);
   const [leaveModalOpen, setLeaveModalOpen] = useState(false);
+  const [disconnectedPlayersModalOpen, setDisconnectedPlayersModalOpen] = useState(false);
   const [actionHandModalOpen, setActionHandModalOpen] = useState(false);
   const [viewedActionPlayerId, setViewedActionPlayerId] = useState(null);
   const [chatModalOpen, setChatModalOpen] = useState(false);
@@ -2018,7 +2088,7 @@ function GameScreen({
   const me = boardPlayers.find((player) => player.id === myId);
   const others = boardPlayers.filter((player) => player.id !== myId);
   const isCreator = state.creatorId === myId;
-  const connectedPlayerCount = state.players.filter((player) => player.connected).length;
+  const disconnectedPlayers = state.players.filter((player) => !player.connected);
   const isMyTurn = state.phase === 'playing' && state.currentPlayerId === myId;
   const selectableSlots = getSelectableSlots(state, isMyTurn, me);
   const boardActionMode = getBoardActionMode(state);
@@ -2614,6 +2684,20 @@ function GameScreen({
   const leaveButton = (
     <LeaveRoomButton onClick={() => setLeaveModalOpen(true)} />
   );
+  const removePlayerFromLobby = (targetPlayerId) => {
+    socket.emit('removePlayerFromLobby', { playerId: targetPlayerId });
+  };
+  const disconnectedPlayersModal = (
+    <DisconnectedPlayersModal
+      open={disconnectedPlayersModalOpen}
+      players={disconnectedPlayers}
+      onCancel={() => setDisconnectedPlayersModalOpen(false)}
+      onConfirm={() => {
+        disconnectedPlayers.forEach((player) => removePlayerFromLobby(player.id));
+        setDisconnectedPlayersModalOpen(false);
+      }}
+    />
+  );
   const chatButton = (
     <ChatButton unreadCount={unreadChatCount} onClick={handleOpenChat} />
   );
@@ -2755,10 +2839,21 @@ function GameScreen({
               {state.players.map((player) => (
                 <li
                   key={player.id}
-                  className={`sj-pop-in ${player.id === myId ? 'sj-player-list-current' : ''}`}
+                  className={`sj-pop-in ${player.id === myId ? 'sj-player-list-current' : ''} ${!player.connected ? 'sj-player-list-disconnected' : ''}`}
                 >
                   <span className={`sj-turn-dot ${player.connected ? 'sj-turn-dot-on' : ''}`} />
-                  <span>{player.name}</span>
+                  <span className="sj-player-list-name">{player.name}</span>
+                  {isCreator && player.id !== myId && (
+                    <button
+                      type="button"
+                      className="sj-player-remove-button"
+                      aria-label={`Retirer ${player.name} de la salle`}
+                      title={`Retirer ${player.name} de la salle`}
+                      onClick={() => removePlayerFromLobby(player.id)}
+                    >
+                      <Trash2 aria-hidden="true" size={18} />
+                    </button>
+                  )}
                 </li>
               ))}
             </ul>
@@ -2784,11 +2879,20 @@ function GameScreen({
                 ))}
               </div>
             </section>
-            {isCreator && connectedPlayerCount >= 2 ? (
-              <button className="sj-btn sj-btn-primary" onClick={() => socket.emit('startGame')}>
+            {isCreator && state.players.length >= 2 ? (
+              <button
+                className="sj-btn sj-btn-primary"
+                onClick={() => {
+                  if (disconnectedPlayers.length > 0) {
+                    setDisconnectedPlayersModalOpen(true);
+                    return;
+                  }
+                  socket.emit('startGame');
+                }}
+              >
                 Lancer la partie
               </button>
-            ) : connectedPlayerCount < 2 ? (
+            ) : state.players.length < 2 ? (
               <p className="sj-hint">En attente d'au moins 2 joueurs</p>
             ) : (
               <p className="sj-hint">En attente de lancement par le créateur</p>
@@ -2796,6 +2900,7 @@ function GameScreen({
           </section>
         </div>
         {leaveModal}
+        {disconnectedPlayersModal}
       </>
     );
   }

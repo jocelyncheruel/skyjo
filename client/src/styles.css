@@ -1639,7 +1639,8 @@ input:focus {
 }
 
 .sj-player-list li {
-  min-height: 40px;
+  height: 50px;
+  min-height: 50px;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -1653,6 +1654,61 @@ input:focus {
   border-color: var(--blue);
   background: rgba(113, 168, 255, 0.1);
   box-shadow: 0 0 0 2px rgba(113, 168, 255, 0.2);
+}
+
+.sj-player-list-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sj-player-list-disconnected .sj-player-list-name {
+  color: var(--soft);
+}
+
+.sj-player-remove-button {
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  margin-left: auto;
+  border: 1px solid rgba(239, 106, 97, 0.38);
+  border-radius: 7px;
+  background: rgba(239, 106, 97, 0.1);
+  color: #ffaaa5;
+  padding: 0;
+  opacity: 0;
+  pointer-events: none;
+  cursor: pointer;
+  transition: opacity 0.16s ease, border-color 0.16s ease, background 0.16s ease, transform 0.12s ease;
+}
+
+.sj-player-list li:hover .sj-player-remove-button,
+.sj-player-list li:focus-within .sj-player-remove-button {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.sj-player-remove-button:hover {
+  border-color: rgba(239, 106, 97, 0.82);
+  background: rgba(239, 106, 97, 0.22);
+  transform: translateY(-1px);
+}
+
+.sj-player-remove-button:focus-visible {
+  opacity: 1;
+  pointer-events: auto;
+  outline: 3px solid rgba(239, 106, 97, 0.28);
+  outline-offset: 2px;
+}
+
+@media (hover: none) {
+  .sj-player-remove-button {
+    opacity: 1;
+    pointer-events: auto;
+  }
 }
 
 .sj-mode-picker {
@@ -2886,6 +2942,24 @@ button.sj-action-count-badge:focus-visible {
   color: var(--muted);
   font-size: 14px;
   line-height: 1.45;
+}
+
+.sj-disconnected-players-list {
+  margin: -6px 0 20px;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 7px;
+}
+
+.sj-disconnected-players-list li {
+  border: 1px solid rgba(239, 106, 97, 0.26);
+  border-radius: 8px;
+  background: rgba(239, 106, 97, 0.08);
+  color: #ffc4c0;
+  padding: 9px 11px;
+  font-size: 14px;
+  font-weight: 700;
 }
 
 .sj-profile-modal {

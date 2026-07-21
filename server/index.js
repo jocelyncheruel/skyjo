@@ -7,7 +7,7 @@ import { customAlphabet, nanoid } from 'nanoid';
 import { buildSupabaseClient } from './bootstrap.js';
 import { createAuthBff } from './authBff.js';
 import {
-  newRoomState, addPlayer, leavePlayer, startGame, flipInitialCard,
+  newRoomState, addPlayer, leavePlayer, removePlayer, removeLobbyPlayer, startGame, flipInitialCard,
   drawCard, decideDrawnCard, keepDrawnAndPlace, placeDrawnCard, revealHiddenCard, nextRound,
   publicState, setGameMode, returnToLobby, playOwnedAction, resolveActionInput, claimStarAction,
   discardOwnedAction, resolveDefensePrompt, expireDefensePrompt,
@@ -566,7 +566,7 @@ function broadcastRoom(roomId) {
   }
 }
 
-async function handleAction(socket, fn) {
+async function handleAction(socket, fn, mutationOptions = {}) {
   const info = socketToPlayer.get(socket.id);
   if (!info) throw new PublicError('not_in_room', "Vous ne faites partie d'aucune salle.", 403);
   const { state } = await mutateRoom(info.roomId, (draft) => {
@@ -583,7 +583,7 @@ async function handleAction(socket, fn) {
         400,
       );
     }
-  });
+  }, mutationOptions);
   broadcastRoom(info.roomId);
   scheduleNextRound(info.roomId, state);
   scheduleDefensePrompt(info.roomId, state);
@@ -958,6 +958,24 @@ io.on('connection', (socket) => {
   }));
 
   socket.on('startGame', withSocketGuard(socket, 'startGame', () => handleAction(socket, startGame)));
+  socket.on('removePlayerFromLobby', withSocketGuard(socket, 'removePlayerFromLobby', async (payload) => {
+    const targetPlayerId = objectPayload(payload, ['playerId']).playerId;
+    const info = socketToPlayer.get(socket.id);
+    const targetSocketIds = info ? socketIdsForPlayer(info.roomId, targetPlayerId) : [];
+    await handleAction(
+      socket,
+      (state, playerId) => removeLobbyPlayer(state, playerId, targetPlayerId),
+      { removePlayerId: targetPlayerId },
+    );
+    if (!info) return;
+    clearDisconnectTimer(info.roomId, targetPlayerId);
+    for (const targetSocketId of targetSocketIds) {
+      const targetSocket = io.sockets.sockets.get(targetSocketId);
+      socketToPlayer.delete(targetSocketId);
+      targetSocket?.leave(info.roomId);
+      targetSocket?.emit('removedFromRoom');
+    }
+  }));
   socket.on('returnToLobby', withSocketGuard(socket, 'returnToLobby', () => handleAction(socket, returnToLobby)));
   socket.on('setGameMode', withSocketGuard(socket, 'setGameMode', (payload) => handleAction(socket, (s, p) => setGameMode(s, p, objectPayload(payload, ['gameMode']).gameMode))));
   socket.on('flipInitial', withSocketGuard(socket, 'flipInitial', (payload) => handleAction(socket, (s, p) => flipInitialCard(s, p, objectPayload(payload, ['slotIndex']).slotIndex))));
@@ -985,6 +1003,9 @@ io.on('connection', (socket) => {
     if (!info || socketIdsForPlayer(info.roomId, info.playerId).length) return;
     const key = connectionKey(info.roomId, info.playerId);
     clearDisconnectTimer(info.roomId, info.playerId);
+    void mutateRoom(info.roomId, (draft) => removePlayer(draft, info.playerId))
+      .then(() => broadcastRoom(info.roomId))
+      .catch((error) => logInternal('disconnect_mark_offline', error));
     const timer = setTimeout(async () => {
       disconnectTimers.delete(key);
       if (socketIdsForPlayer(info.roomId, info.playerId).length) return;

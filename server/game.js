@@ -131,6 +131,22 @@ export function removePlayer(state, id) {
   }
 }
 
+export function removeLobbyPlayer(state, playerId, targetPlayerId) {
+  assertCreator(state, playerId);
+  if (state.phase !== 'lobby') {
+    throw new Error('Un joueur ne peut être retiré que depuis la salle d’attente.');
+  }
+  if (typeof targetPlayerId !== 'string' || !/^[A-Za-z0-9_-]{12}$/.test(targetPlayerId)) {
+    throw new Error('Joueur invalide.');
+  }
+  if (targetPlayerId === playerId) {
+    throw new Error('Vous ne pouvez pas vous retirer avec cette action.');
+  }
+  const target = state.playersById[targetPlayerId];
+  if (!target) throw new Error('Ce joueur n’est plus dans la salle.');
+  leavePlayer(state, targetPlayerId);
+}
+
 function startRoundIfReady(state) {
   const playerIds = state.order.filter(id => state.playersById[id]);
   if (playerIds.length < 2) return false;
@@ -281,7 +297,11 @@ export function startGame(state, playerId) {
   if (state.order.length > MAX_PLAYERS_PER_ROOM) {
     throw new Error(`Une partie est limitée à ${MAX_PLAYERS_PER_ROOM} joueurs.`);
   }
-  if (state.order.filter(id => state.playersById[id].connected).length < 2) {
+  const playerIds = state.order.filter(id => state.playersById[id]);
+  if (playerIds.some(id => !state.playersById[id].connected)) {
+    throw new Error('Tous les joueurs doivent être connectés avant de lancer la partie.');
+  }
+  if (playerIds.length < 2) {
     throw new Error('Il faut au moins 2 joueurs.');
   }
   const currentGameSerial = Number.isSafeInteger(state.gameSerial) && state.gameSerial >= 0
