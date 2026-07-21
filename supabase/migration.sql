@@ -440,16 +440,24 @@ SECURITY DEFINER
 SET search_path = ''
 AS $$
   SELECT
-    COUNT(*) AS games_played,
+    COUNT(*) FILTER (WHERE outcome IN ('won', 'lost', 'abandoned')) AS games_played,
     COUNT(*) FILTER (WHERE outcome = 'won') AS games_won,
     COUNT(*) FILTER (WHERE outcome = 'lost') AS games_lost,
     COUNT(*) FILTER (WHERE outcome = 'abandoned') AS games_abandoned,
     COUNT(*) FILTER (WHERE outcome = 'active') AS games_in_progress,
-    COUNT(*) FILTER (WHERE game_mode = 'classic') AS classic_games,
-    COUNT(*) FILTER (WHERE game_mode = 'action') AS action_games,
-    COALESCE(SUM(rounds_played), 0) AS rounds_played,
+    COUNT(*) FILTER (
+      WHERE game_mode = 'classic' AND outcome IN ('won', 'lost', 'abandoned')
+    ) AS classic_games,
+    COUNT(*) FILTER (
+      WHERE game_mode = 'action' AND outcome IN ('won', 'lost', 'abandoned')
+    ) AS action_games,
+    COALESCE(SUM(rounds_played) FILTER (
+      WHERE outcome IN ('won', 'lost', 'abandoned')
+    ), 0) AS rounds_played,
     MIN(final_score) FILTER (WHERE outcome IN ('won', 'lost')) AS best_score,
-    MAX(started_at) AS last_game_at
+    MAX(COALESCE(finished_at, started_at)) FILTER (
+      WHERE outcome IN ('won', 'lost', 'abandoned')
+    ) AS last_game_at
   FROM public.user_game_participations
   WHERE user_id = p_user_id;
 $$;
