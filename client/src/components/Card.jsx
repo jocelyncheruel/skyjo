@@ -6,8 +6,9 @@ const CARD_RADIUS = 11;
 const CARD_FRAME_INSET = 1.2;
 const CARD_PILE_FRAME_INSET = 1.2;
 const CORNER_VALUE_INSET = 7;
-const CORNER_VALUE_BOTTOM_OFFSET = 3;
+const CORNER_VALUE_CENTER_Y = 13.5;
 const CORNER_VALUE_SIZE = 13;
+const FACET_OPACITY = 0.32;
 
 function cardRect(inset = 0) {
   const radius = Math.max(0, CARD_RADIUS - inset);
@@ -50,7 +51,9 @@ function buildFacets(seed) {
     for (let c = 0; c <= cols; c++) {
       const jitterX = (rand() - 0.5) * (CARD_W / cols) * 0.55;
       const jitterY = (rand() - 0.5) * (CARD_H / rows) * 0.55;
-      pts.push({ x: (c / cols) * CARD_W + jitterX, y: (r / rows) * CARD_H + jitterY });
+      const x = c === 0 ? 0 : c === cols ? CARD_W : (c / cols) * CARD_W + jitterX;
+      const y = r === 0 ? 0 : r === rows ? CARD_H : (r / rows) * CARD_H + jitterY;
+      pts.push({ id: r * (cols + 1) + c, x, y });
     }
   }
 
@@ -72,14 +75,65 @@ function buildFacets(seed) {
     }
   }
 
-  return tris.map((triangle) => ({
+  const neighbors = tris.map(() => new Set());
+  const edgeOwners = new Map();
+
+  tris.forEach((triangle, triangleIndex) => {
+    [[0, 1], [1, 2], [2, 0]].forEach(([first, second]) => {
+      const edge = [triangle[first].id, triangle[second].id].sort((a, b) => a - b).join(':');
+      const owner = edgeOwners.get(edge);
+
+      if (owner === undefined) {
+        edgeOwners.set(edge, triangleIndex);
+      } else {
+        neighbors[triangleIndex].add(owner);
+        neighbors[owner].add(triangleIndex);
+      }
+    });
+  });
+
+  const order = tris.map((_, index) => index);
+  for (let index = order.length - 1; index > 0; index -= 1) {
+    const other = Math.floor(rand() * (index + 1));
+    [order[index], order[other]] = [order[other], order[index]];
+  }
+
+  const shadeLevels = [0.02, 0.34, 0.66, 0.98];
+  const assignedLevels = Array(tris.length).fill(null);
+  const shades = Array(tris.length).fill(0);
+
+  order.forEach((triangleIndex) => {
+    const unavailable = new Set(
+      [...neighbors[triangleIndex]]
+        .map((neighborIndex) => assignedLevels[neighborIndex])
+        .filter((level) => level !== null),
+    );
+    const available = shadeLevels
+      .map((_, level) => level)
+      .filter((level) => !unavailable.has(level));
+    const level = available[Math.floor(rand() * available.length)];
+
+    assignedLevels[triangleIndex] = level;
+    shades[triangleIndex] = Math.max(0, Math.min(1, shadeLevels[level] + (rand() - 0.5) * 0.04));
+  });
+
+  return tris.map((triangle, index) => ({
     points: triangle.map((point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(' '),
-    shade: rand(),
+    shade: shades[index],
   }));
+}
+
+function facetBalanceFor(value) {
+  if (value <= -1) return { light: 1.45, dark: 1.15 };
+  if (value === 0) return { light: 1.12, dark: 1.12 };
+  if (value <= 4) return { light: 1.14, dark: 1.12 };
+  if (value <= 8) return { light: 0.92, dark: 1.35 };
+  return { light: 1.3, dark: 1.15 };
 }
 
 function FacetedBackground({ value, rid, inset }) {
   const palette = paletteFor(value);
+  const balance = facetBalanceFor(value);
   const facets = useMemo(() => buildFacets(value), [value]);
   const gradId = `sj-card-grad-${rid}`;
   const clipId = `sj-card-clip-${rid}`;
@@ -97,17 +151,39 @@ function FacetedBackground({ value, rid, inset }) {
           <rect {...surface} />
         </clipPath>
       </defs>
-      <g clipPath={`url(#${clipId})`}>
+      <g className="sj-card-facets" clipPath={`url(#${clipId})`}>
         <rect {...surface} fill={`url(#${gradId})`} />
         {facets.map((facet, index) => (
-          <polygon key={index} points={facet.points} fill="#ffffff" opacity={(facet.shade * 0.14).toFixed(3)} />
+          <polygon
+            className="sj-card-facet sj-card-facet-light"
+            key={index}
+            points={facet.points}
+            fill="#ffffff"
+            opacity={((0.012 + facet.shade * 0.168) * balance.light * FACET_OPACITY).toFixed(3)}
+          />
         ))}
         {facets.map((facet, index) => (
-          <polygon key={`d-${index}`} points={facet.points} fill="#000000" opacity={(0.1 - facet.shade * 0.08).toFixed(3)} />
+          <polygon
+            className="sj-card-facet sj-card-facet-dark"
+            key={`d-${index}`}
+            points={facet.points}
+            fill="#000000"
+            opacity={((0.012 + (1 - facet.shade) * 0.118) * balance.dark * FACET_OPACITY).toFixed(3)}
+          />
         ))}
       </g>
     </g>
   );
+}
+
+function haloFor(ink) {
+  return ink === '#ffffff' ? 'rgba(0, 0, 0, 0.38)' : 'rgba(255, 255, 255, 0.4)';
+}
+
+function centerValueSize(value) {
+  if (value < 0) return 46;
+  if (value >= 10) return 45;
+  return 50;
 }
 
 function CardBack({ rid, inset }) {
@@ -237,8 +313,7 @@ export default function Card({
   const hasNumberValue = kind !== 'star' && Number.isFinite(numericValue);
   const displayValue = hasNumberValue ? numericValue : '';
   const palette = paletteFor(hasNumberValue ? numericValue : 0);
-  const textHalo = palette.ink === '#ffffff' ? 'rgba(0, 0, 0, 0.32)' : 'rgba(255, 255, 255, 0.34)';
-  const centerSize = String(displayValue).length > 1 ? 42 : 50;
+  const centerSize = centerValueSize(numericValue);
 
   return (
     <svg
@@ -268,21 +343,36 @@ export default function Card({
       )}
       {hasNumberValue && <text
         x={CORNER_VALUE_INSET}
-        y={CORNER_VALUE_INSET}
+        y={CORNER_VALUE_CENTER_Y}
         textAnchor="start"
-        dominantBaseline="hanging"
+        dominantBaseline="central"
         fontFamily="Arial, sans-serif"
         fontWeight="900"
         fontSize={CORNER_VALUE_SIZE}
         fill={palette.ink}
-        stroke={textHalo}
+        stroke={haloFor(palette.ink)}
         strokeWidth="2"
         paintOrder="stroke"
       >
         {displayValue}
       </text>}
       {kind === 'star' ? (
-        <text x={CARD_W / 2} y={CARD_H / 2 + 2} textAnchor="middle" dominantBaseline="central" fontFamily="Arial, sans-serif" fontWeight="900" fontSize="58" fill="#ffffff">★</text>
+        <text
+          x={CARD_W / 2}
+          y={CARD_H / 2 + 1}
+          textAnchor="middle"
+          dominantBaseline="central"
+          fontFamily="Arial, sans-serif"
+          fontWeight="900"
+          fontSize="56"
+          fill="#ffffff"
+          stroke="rgba(23, 42, 59, 0.64)"
+          strokeWidth="3.5"
+          strokeLinejoin="round"
+          paintOrder="stroke"
+        >
+          ★
+        </text>
       ) : (
         <text
           x={CARD_W / 2}
@@ -293,7 +383,7 @@ export default function Card({
           fontWeight="900"
           fontSize={centerSize}
           fill={palette.ink}
-          stroke={textHalo}
+          stroke={haloFor(palette.ink)}
           strokeWidth="4"
           paintOrder="stroke"
         >
@@ -302,14 +392,14 @@ export default function Card({
       )}
       {hasNumberValue && <text
         x={CARD_W - CORNER_VALUE_INSET}
-        y={CARD_H - CORNER_VALUE_INSET + CORNER_VALUE_BOTTOM_OFFSET}
+        y={CARD_H - CORNER_VALUE_CENTER_Y}
         textAnchor="end"
-        dominantBaseline="text-after-edge"
+        dominantBaseline="central"
         fontFamily="Arial, sans-serif"
         fontWeight="900"
         fontSize={CORNER_VALUE_SIZE}
         fill={palette.ink}
-        stroke={textHalo}
+        stroke={haloFor(palette.ink)}
         strokeWidth="2"
         paintOrder="stroke"
       >
