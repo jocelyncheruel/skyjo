@@ -44,10 +44,16 @@ function playersById(state) {
   return new Map((state?.players || []).map((player) => [player.id, player]));
 }
 
-function freshCardMove(previousState, nextState) {
-  const move = nextState?.lastCardMove;
-  if (!move?.id || move.id === previousState?.lastCardMove?.id) return null;
-  return move;
+function stateCardMoves(state) {
+  if (Array.isArray(state?.cardMoves) && state.cardMoves.length > 0) {
+    return state.cardMoves.filter((move) => move?.id);
+  }
+  return state?.lastCardMove?.id ? [state.lastCardMove] : [];
+}
+
+function freshCardMoves(previousState, nextState) {
+  const previousIds = new Set(stateCardMoves(previousState).map((move) => move.id));
+  return stateCardMoves(nextState).filter((move) => !previousIds.has(move.id));
 }
 
 function changedSlots(previousState, nextState, playerId) {
@@ -76,20 +82,27 @@ function addMotion(motions, seen, motion) {
   motions.push(motion);
 }
 
-function addKnownBoardMoves(previousState, nextState, motions, seen, cardMove) {
-  if (cardMove?.type === 'swap' && Array.isArray(cardMove.moves)) {
-    cardMove.moves.forEach((move, swapIndex) => {
-      const destinationSlot = playersById(nextState)
-        .get(move.toPlayerId)?.board?.[move.toSlotIndex];
-      addMotion(motions, seen, {
-        from: boardAnchor(move.fromPlayerId, move.fromSlotIndex),
-        to: boardAnchor(move.toPlayerId, move.toSlotIndex),
-        card: cardVisual(move.card, !!move.faceUp),
-        tone: 'swap',
-        stack: swapIndex % 2 === 0 ? 'front' : 'back',
-        clearedOnArrival: !!destinationSlot?.removed,
+function addKnownBoardMoves(previousState, nextState, motions, seen, cardMoves) {
+  const swapMoves = cardMoves.filter((cardMove) => (
+    cardMove.type === 'swap' && Array.isArray(cardMove.moves)
+  ));
+  if (swapMoves.length > 0) {
+    let swapIndex = 0;
+    for (const cardMove of swapMoves) {
+      cardMove.moves.forEach((move) => {
+        const destinationSlot = playersById(nextState)
+          .get(move.toPlayerId)?.board?.[move.toSlotIndex];
+        addMotion(motions, seen, {
+          from: boardAnchor(move.fromPlayerId, move.fromSlotIndex),
+          to: boardAnchor(move.toPlayerId, move.toSlotIndex),
+          card: cardVisual(move.card, !!move.faceUp),
+          tone: 'swap',
+          stack: swapIndex % 2 === 0 ? 'front' : 'back',
+          clearedOnArrival: !!destinationSlot?.removed,
+        });
+        swapIndex += 1;
       });
-    });
+    }
     return;
   }
 
@@ -126,7 +139,7 @@ function addKnownBoardMoves(previousState, nextState, motions, seen, cardMove) {
   }
 }
 
-function addDrawResolution(previousState, nextState, motions, seen, cardMove) {
+function addDrawResolution(previousState, nextState, motions, seen, cardMoves) {
   const drawn = previousState.drawnCard;
   if (!drawn || nextState.drawnCard) return;
 
@@ -134,11 +147,10 @@ function addDrawResolution(previousState, nextState, motions, seen, cardMove) {
   const actorId = previousState.currentPlayerId;
   const changes = changedSlots(previousState, nextState, actorId);
   const drawnId = drawn.card?.id || '';
-  const recordedMove = cardMove
-    && (!cardMove.type || cardMove.type === 'placement')
+  const recordedMove = [...cardMoves].reverse().find((cardMove) => (
+    (!cardMove.type || cardMove.type === 'placement')
     && cardMove.playerId === actorId
-    ? cardMove
-    : null;
+  )) || null;
   const recordedDestination = recordedMove
     ? changes.find(({ slotIndex }) => slotIndex === recordedMove.slotIndex)
     : null;
@@ -191,43 +203,46 @@ function addDrawResolution(previousState, nextState, motions, seen, cardMove) {
   });
 }
 
-function addActionReplacement(previousState, nextState, motions, seen, cardMove) {
+function addActionReplacement(previousState, nextState, motions, seen, cardMoves) {
   if (previousState.drawnCard) return;
-  if (cardMove?.type === 'replacement') {
-    const previousPlayer = playersById(previousState).get(cardMove.playerId);
-    const nextPlayer = playersById(nextState).get(cardMove.playerId);
-    const previousSlot = previousPlayer?.board?.[cardMove.slotIndex];
-    const nextSlot = nextPlayer?.board?.[cardMove.slotIndex];
-    if (!previousSlot || !nextSlot) return;
+  const replacementMoves = cardMoves.filter((cardMove) => cardMove.type === 'replacement');
+  if (replacementMoves.length > 0) {
+    for (const cardMove of replacementMoves) {
+      const previousPlayer = playersById(previousState).get(cardMove.playerId);
+      const nextPlayer = playersById(nextState).get(cardMove.playerId);
+      const previousSlot = previousPlayer?.board?.[cardMove.slotIndex];
+      const nextSlot = nextPlayer?.board?.[cardMove.slotIndex];
+      if (!previousSlot || !nextSlot) continue;
 
-    const target = boardAnchor(cardMove.playerId, cardMove.slotIndex);
-    const placedCard = cardVisual(cardMove.newCard || nextSlot, true);
-    const handoffGroup = `action:${cardMove.playerId}:${cardMove.slotIndex}:${placedCard.id || 'hidden'}`;
-    if (!previousSlot.removed) {
-      const revealBeforeMove = !previousSlot.faceUp
-        && !!cardMove.oldCard
-        && !!cardMove.revealOldCard;
+      const target = boardAnchor(cardMove.playerId, cardMove.slotIndex);
+      const placedCard = cardVisual(cardMove.newCard || nextSlot, true);
+      const handoffGroup = `action:${cardMove.playerId}:${cardMove.slotIndex}:${placedCard.id || 'hidden'}`;
+      if (!previousSlot.removed) {
+        const revealBeforeMove = !previousSlot.faceUp
+          && !!cardMove.oldCard
+          && !!cardMove.revealOldCard;
+        addMotion(motions, seen, {
+          from: target,
+          to: pileAnchor('discard'),
+          card: cardMove.oldCard
+            ? cardVisual(cardMove.oldCard, previousSlot.faceUp || revealBeforeMove)
+            : slotVisual(previousSlot),
+          tone: 'discard',
+          handoffGroup,
+          handoffRole: 'outgoing',
+          flipBeforeMove: revealBeforeMove,
+        });
+      }
       addMotion(motions, seen, {
-        from: target,
-        to: pileAnchor('discard'),
-        card: cardMove.oldCard
-          ? cardVisual(cardMove.oldCard, previousSlot.faceUp || revealBeforeMove)
-          : slotVisual(previousSlot),
-        tone: 'discard',
+        from: pileAnchor(cardMove.source || 'deck'),
+        to: target,
+        card: placedCard,
+        tone: 'place',
         handoffGroup,
-        handoffRole: 'outgoing',
-        flipBeforeMove: revealBeforeMove,
+        handoffRole: 'incoming',
+        clearedOnArrival: !!nextSlot.removed,
       });
     }
-    addMotion(motions, seen, {
-      from: pileAnchor(cardMove.source || 'deck'),
-      to: target,
-      card: placedCard,
-      tone: 'place',
-      handoffGroup,
-      handoffRole: 'incoming',
-      clearedOnArrival: !!nextSlot.removed,
-    });
     return;
   }
 
@@ -270,9 +285,58 @@ function addActionReplacement(previousState, nextState, motions, seen, cardMove)
   }
 }
 
-function addRemovedCards(previousState, nextState, motions, seen, cardMove) {
+function addDrawThreeDiscards(motions, seen, cardMoves) {
+  const resolutionMoves = cardMoves.filter((cardMove) => (
+    ['replacement', 'reveal'].includes(cardMove.type)
+    && Array.isArray(cardMove.discardedCards)
+    && cardMove.discardedCards.length > 0
+  ));
+
+  for (const cardMove of resolutionMoves) {
+    cardMove.discardedCards.forEach((card, index) => {
+      addMotion(motions, seen, {
+        from: pileAnchor('deck'),
+        to: pileAnchor('discard'),
+        card: cardVisual(card, true),
+        tone: 'discard',
+        delay: index * MOTION_STAGGER_MS,
+        afterPlacement: cardMove.type === 'replacement',
+      });
+    });
+  }
+}
+
+function addRemovedCards(previousState, nextState, motions, seen, cardMoves) {
+  const revealedCards = new Map();
+  const clearedCards = new Map();
+  const clearOrder = new Map();
+  let clearIndex = 0;
+
+  for (const cardMove of cardMoves) {
+    if (!['reveal', 'roundReveal', 'clear'].includes(cardMove.type)) continue;
+    for (const entry of cardMove.cards || []) {
+      const key = `${entry.playerId}:${entry.slotIndex}`;
+      if (['reveal', 'roundReveal'].includes(cardMove.type)) {
+        revealedCards.set(key, entry.card);
+      }
+      if (cardMove.type === 'clear') {
+        clearedCards.set(key, entry.card);
+        clearOrder.set(key, clearIndex);
+        clearIndex += 1;
+      }
+    }
+  }
+
   const removedCards = allChangedSlots(previousState, nextState)
     .filter(({ previousSlot, nextSlot }) => !previousSlot?.removed && nextSlot?.removed);
+  removedCards.sort((first, second) => {
+    const firstOrder = clearOrder.get(`${first.playerId}:${first.slotIndex}`);
+    const secondOrder = clearOrder.get(`${second.playerId}:${second.slotIndex}`);
+    if (firstOrder == null && secondOrder == null) return 0;
+    if (firstOrder == null) return 1;
+    if (secondOrder == null) return -1;
+    return firstOrder - secondOrder;
+  });
 
   removedCards.forEach((removedCard, index) => {
     const source = boardAnchor(removedCard.playerId, removedCard.slotIndex);
@@ -280,21 +344,19 @@ function addRemovedCards(previousState, nextState, motions, seen, cardMove) {
       motion.to === source
       && motion.clearedOnArrival
     ));
-    const revealedCard = cardMove?.type === 'reveal'
-      ? cardMove.cards?.find((entry) => (
-        entry.playerId === removedCard.playerId
-        && entry.slotIndex === removedCard.slotIndex
-      ))
-      : null;
+    const key = `${removedCard.playerId}:${removedCard.slotIndex}`;
+    const revealedCard = revealedCards.get(key);
+    const clearedCard = clearedCards.get(key);
+    const recordedCard = clearedCard || revealedCard;
     addMotion(motions, seen, {
       from: source,
       to: pileAnchor('discard'),
       card: placedCard?.card
-        || (revealedCard ? cardVisual(revealedCard.card, true) : slotVisual(removedCard.previousSlot)),
+        || (recordedCard ? cardVisual(recordedCard, true) : slotVisual(removedCard.previousSlot)),
       tone: 'clear',
       delay: index * MOTION_STAGGER_MS,
       clearAfterPlacement: !!placedCard,
-      flipBeforeMove: !placedCard && !removedCard.previousSlot.faceUp && !!revealedCard,
+      flipBeforeMove: !placedCard && !removedCard.previousSlot.faceUp && !!recordedCard,
     });
   });
 }
@@ -305,11 +367,12 @@ function buildCardMotions(previousState, nextState) {
 
   const motions = [];
   const seen = new Set();
-  const cardMove = freshCardMove(previousState, nextState);
-  addKnownBoardMoves(previousState, nextState, motions, seen, cardMove);
-  addDrawResolution(previousState, nextState, motions, seen, cardMove);
-  addActionReplacement(previousState, nextState, motions, seen, cardMove);
-  addRemovedCards(previousState, nextState, motions, seen, cardMove);
+  const cardMoves = freshCardMoves(previousState, nextState);
+  addKnownBoardMoves(previousState, nextState, motions, seen, cardMoves);
+  addDrawResolution(previousState, nextState, motions, seen, cardMoves);
+  addActionReplacement(previousState, nextState, motions, seen, cardMoves);
+  addDrawThreeDiscards(motions, seen, cardMoves);
+  addRemovedCards(previousState, nextState, motions, seen, cardMoves);
   const previousDiscard = previousState.discardTop
     ? cardVisual(previousState.discardTop, true)
     : null;
@@ -392,7 +455,7 @@ function prepareDestinationSnapshots(flights) {
   return flightsByDestination;
 }
 
-export default function CardMotionLayer({ state, enabled }) {
+export default function CardMotionLayer({ state, enabled, onMotionBatch }) {
   const previousStateRef = useRef(state);
   const sequenceRef = useRef(0);
   const timersRef = useRef(new Set());
@@ -412,9 +475,11 @@ export default function CardMotionLayer({ state, enabled }) {
 
   useLayoutEffect(() => {
     const previousState = previousStateRef.current;
+    if (!enabled) return;
+
     previousStateRef.current = state;
     const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-    if (!enabled || reducedMotion) return;
+    if (reducedMotion) return;
 
     const specifications = buildCardMotions(previousState, state);
     if (!specifications.length) return;
@@ -442,6 +507,17 @@ export default function CardMotionLayer({ state, enabled }) {
         : handoffDelay;
       if (flight.flipBeforeMove) {
         if (incoming) incoming.lateHandoff = true;
+      }
+    }
+    if (nextFlights.some((flight) => flight.afterPlacement)) {
+      const placementEnd = Math.max(
+        0,
+        ...nextFlights
+          .filter((flight) => !flight.afterPlacement && flight.tone !== 'clear')
+          .map((flight) => flight.delay + flight.duration),
+      );
+      for (const flight of nextFlights) {
+        if (flight.afterPlacement) flight.delay += placementEnd + MOTION_STAGGER_MS;
       }
     }
     if (nextFlights.some((flight) => flight.tone === 'clear' && flight.flipBeforeMove)) {
@@ -479,6 +555,7 @@ export default function CardMotionLayer({ state, enabled }) {
     setFlights((current) => [...current, ...nextFlights]);
 
     const lifetime = Math.max(...nextFlights.map((flight) => flight.duration + flight.delay)) + 80;
+    onMotionBatch?.(Date.now() + lifetime);
     const timer = window.setTimeout(() => {
       timersRef.current.delete(timer);
       setFlights((current) => current.filter((flight) => !nextFlights.some(({ id }) => id === flight.id)));
@@ -493,7 +570,7 @@ export default function CardMotionLayer({ state, enabled }) {
       }
     }, lifetime);
     timersRef.current.add(timer);
-  }, [enabled, state]);
+  }, [enabled, onMotionBatch, state]);
 
   if (!flights.length) return null;
 

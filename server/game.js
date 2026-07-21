@@ -28,6 +28,7 @@ const COLUMNS = [
 const ROUND_BREAK_MS = 10_000;
 const ROUND_SCORE_PREVIEW_MS = 3_000;
 const BOARD_SLOT_COUNT = 12;
+const CARD_MOVE_HISTORY_LIMIT = 64;
 export const MAX_PLAYERS_PER_ROOM = 8;
 
 function assertBoardSlotIndex(slotIndex) {
@@ -46,10 +47,13 @@ function getBoardSlot(player, slotIndex) {
 
 function recordCardMove(state, move) {
   state.cardMoveSerial = (state.cardMoveSerial || 0) + 1;
-  state.lastCardMove = {
+  const entry = {
     id: `${state.roundNumber}:${state.cardMoveSerial}`,
     ...move,
   };
+  state.lastCardMove = entry;
+  state.cardMoves = [...(Array.isArray(state.cardMoves) ? state.cardMoves : []), entry]
+    .slice(-CARD_MOVE_HISTORY_LIMIT);
 }
 
 function revealRemainingCards(player) {
@@ -90,6 +94,7 @@ export function newRoomState(roomId) {
     turnStage: null,
     drawnCard: null,
     lastCardMove: null,
+    cardMoves: [],
     cardMoveSerial: 0,
     roundEnderId: null,
     roundNumber: 0,
@@ -261,6 +266,7 @@ function dealNewRound(state) {
   state.turnStage = null;
   state.drawnCard = null;
   state.lastCardMove = null;
+  state.cardMoves = [];
   state.nextRoundAt = null;
   state.roundScoresAt = null;
   state.starterTieNotice = null;
@@ -316,11 +322,17 @@ function checkAndClearColumns(state, player) {
     if (slots.every(s => s.faceUp && !s.removed)) {
       const values = slots.map(s => s.card.value);
       if (values[0] === values[1] && values[1] === values[2]) {
+        const cards = slots.map((slot, index) => ({
+          playerId: player.id,
+          slotIndex: col[index],
+          card: slot.card,
+        }));
         for (const s of slots) {
           state.discard.push(s.card);
           s.removed = true;
           s.card = null;
         }
+        recordCardMove(state, { type: 'clear', cards });
         log(state, `${player.name} a complété une colonne identique !`);
       }
     }
@@ -470,7 +482,7 @@ function endRound(state, revealedBeforeRoundEnd = []) {
   for (const id of state.order) {
     revealed.push(...revealRemainingCards(state.playersById[id]));
   }
-  if (revealed.length > 0) recordCardMove(state, { type: 'reveal', cards: revealed });
+  if (revealed.length > 0) recordCardMove(state, { type: 'roundReveal', cards: revealed });
   for (const id of state.order) {
     checkAndClearColumns(state, state.playersById[id]);
   }
@@ -523,6 +535,9 @@ function publicCardMove(move) {
     cards: Array.isArray(move.cards)
       ? move.cards.map((entry) => ({ ...entry, card: cloneCard(entry.card) }))
       : undefined,
+    discardedCards: Array.isArray(move.discardedCards)
+      ? move.discardedCards.map(cloneCard)
+      : undefined,
     moves: Array.isArray(move.moves)
       ? move.moves.map((entry) => ({
         ...entry,
@@ -540,6 +555,12 @@ export function publicState(state, forPlayerId) {
       ? 1
       : 0
   );
+
+  const cardMoves = (Array.isArray(state.cardMoves) && state.cardMoves.length > 0
+    ? state.cardMoves
+    : state.lastCardMove ? [state.lastCardMove] : [])
+    .slice(-CARD_MOVE_HISTORY_LIMIT)
+    .map(publicCardMove);
 
   return {
     roomId: state.roomId,
@@ -569,6 +590,7 @@ export function publicState(state, forPlayerId) {
       }
       : null,
     lastCardMove: publicCardMove(state.lastCardMove),
+    cardMoves,
     winnerId: state.winnerId,
     log: state.log.slice(-20),
     players: state.order.map(id => {

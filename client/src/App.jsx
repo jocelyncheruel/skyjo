@@ -1928,6 +1928,20 @@ function ActionTile({ card, onClick, disabled = false, compact = false, interact
   );
 }
 
+const CARD_REVEAL_SETTLE_MS = 380;
+const CARD_MOTION_SETTLE_BUFFER_MS = 40;
+
+function getCardMotionSettleDelay(moveType, motionEndsAt) {
+  const fallbackDelay = ['reveal', 'roundReveal'].includes(moveType)
+    ? CARD_REVEAL_SETTLE_MS
+    : 120;
+  const remainingMotion = Math.max(
+    0,
+    Math.ceil(motionEndsAt - Date.now()) + CARD_MOTION_SETTLE_BUFFER_MS,
+  );
+  return Math.max(fallbackDelay, remainingMotion);
+}
+
 function GameScreen({
   socket, state, myId, roomId, error, errorSerial, onLeaveRoom,
   chatMessages = [], chatHasMore = false, onLoadOlderChat,
@@ -1944,23 +1958,61 @@ function GameScreen({
   const [lastSeenChatMessageId, setLastSeenChatMessageId] = useState(null);
   const [visibleLastTurnNoticeId, setVisibleLastTurnNoticeId] = useState(null);
   const [roundCountdown, setRoundCountdown] = useState(10);
+  const [starClaimModalReady, setStarClaimModalReady] = useState(false);
+  const [groupChoiceModalReadyId, setGroupChoiceModalReadyId] = useState(null);
+  const [cardMotionEndsAt, setCardMotionEndsAt] = useState(0);
+  const [visibleRoundRevealId, setVisibleRoundRevealId] = useState(null);
+  const [roundRevealEndsAt, setRoundRevealEndsAt] = useState(0);
   const initializedChatRoomRef = useRef('');
   const closeChatModal = useCallback(() => setChatModalOpen(false), []);
+  const handleCardMotionBatch = useCallback((endsAt) => {
+    if (!Number.isFinite(endsAt)) return;
+    setCardMotionEndsAt((current) => Math.max(current, endsAt));
+  }, []);
+
+  const cardMoves = state.cardMoves?.length > 0
+    ? state.cardMoves
+    : state.lastCardMove ? [state.lastCardMove] : [];
+  const latestCardMove = cardMoves.at(-1) || null;
+  const latestCardMoveType = latestCardMove?.type || null;
+  const roundRevealMove = [...cardMoves]
+    .reverse()
+    .find((move) => move.type === 'roundReveal') || null;
+  const roundRevealId = roundRevealMove?.id || null;
+  const concealedRoundRevealSlots = new Set(
+    (roundRevealMove?.cards || []).map((entry) => `${entry.playerId}:${entry.slotIndex}`),
+  );
+  const concealRoundReveal = !!roundRevealId && visibleRoundRevealId !== roundRevealId;
+  const motionSequenceEndsAt = Math.max(cardMotionEndsAt, roundRevealEndsAt);
 
   const roundScorePhase = ['roundEnd', 'gameEnd'].includes(state.phase);
-  const roundScoreDeadlineReached = !state.roundScoresAt || Date.now() >= state.roundScoresAt;
+  const roundScoreDeadline = Math.max(state.roundScoresAt || 0, motionSequenceEndsAt);
+  const roundScoreDeadlineReached = !roundScoreDeadline || Date.now() >= roundScoreDeadline;
   const roundScoresVisible = !roundScorePhase
     || !state.roundScoresAt
     || (roundScoresReady && roundScoreDeadlineReached);
   const roundScorePreviewActive = roundScorePhase && !roundScoresVisible;
-  const boardPlayers = roundScorePreviewActive
-    ? state.players.map((player) => ({
-      ...player,
+  const boardPlayers = state.players.map((player) => ({
+    ...player,
+    ...(roundScorePreviewActive ? {
       hasTotalScore: false,
       hideTotalScore: true,
       lastRoundScore: null,
-    }))
-    : state.players;
+    } : {}),
+    board: concealRoundReveal
+      ? player.board.map((slot, slotIndex) => (
+        !slot.removed && concealedRoundRevealSlots.has(`${player.id}:${slotIndex}`)
+          ? {
+            ...slot,
+            cardId: null,
+            value: null,
+            kind: null,
+            faceUp: false,
+          }
+          : slot
+      ))
+      : player.board,
+  }));
   const me = boardPlayers.find((player) => player.id === myId);
   const others = boardPlayers.filter((player) => player.id !== myId);
   const isCreator = state.creatorId === myId;
@@ -2179,20 +2231,20 @@ function GameScreen({
   }, [lastTurnNoticeId, state.phase]);
 
   useEffect(() => {
-    if (!['roundEnd', 'gameEnd'].includes(state.phase) || !state.roundScoresAt) {
+    if (!['roundEnd', 'gameEnd'].includes(state.phase) || !roundScoreDeadline) {
       setRoundScoresReady(true);
       return undefined;
     }
 
     const updateScoresReady = () => {
-      setRoundScoresReady(Date.now() >= state.roundScoresAt);
+      setRoundScoresReady(Date.now() >= roundScoreDeadline);
     };
 
     updateScoresReady();
-    const delay = Math.max(0, state.roundScoresAt - Date.now());
+    const delay = Math.max(0, roundScoreDeadline - Date.now());
     const timeout = window.setTimeout(updateScoresReady, delay);
     return () => window.clearTimeout(timeout);
-  }, [state.phase, state.roundScoresAt]);
+  }, [roundScoreDeadline, state.phase]);
 
   useEffect(() => {
     if (!myActionState.peek?.expiresAt) return undefined;
@@ -2214,20 +2266,74 @@ function GameScreen({
   }, [autoStealTargetId, pendingAction?.mustRespond, pendingAction?.type, socket]);
 
   useEffect(() => {
+    if (!roundRevealId) {
+      setVisibleRoundRevealId(null);
+      setRoundRevealEndsAt(0);
+      return undefined;
+    }
+    if (visibleRoundRevealId === roundRevealId) return undefined;
+
+    const revealDelay = getCardMotionSettleDelay('roundReveal', cardMotionEndsAt);
+    setRoundRevealEndsAt(Date.now() + revealDelay + CARD_REVEAL_SETTLE_MS);
+    const timeout = window.setTimeout(
+      () => setVisibleRoundRevealId(roundRevealId),
+      revealDelay,
+    );
+    return () => window.clearTimeout(timeout);
+  }, [cardMotionEndsAt, roundRevealId, visibleRoundRevealId]);
+
+  useEffect(() => {
+    setStarClaimModalReady(false);
+    if (!state.pendingStarClaim) return undefined;
+
+    const cardMotionSettleDelay = getCardMotionSettleDelay(
+      latestCardMoveType,
+      motionSequenceEndsAt,
+    );
+    const timeout = window.setTimeout(() => setStarClaimModalReady(true), cardMotionSettleDelay);
+    return () => window.clearTimeout(timeout);
+  }, [latestCardMoveType, motionSequenceEndsAt, state.pendingStarClaim]);
+
+  useEffect(() => {
+    setGroupChoiceModalReadyId(null);
+    if (!pendingGroupChoice?.id) return undefined;
+
+    const cardMotionSettleDelay = getCardMotionSettleDelay(
+      latestCardMoveType,
+      motionSequenceEndsAt,
+    );
+    const timeout = window.setTimeout(
+      () => setGroupChoiceModalReadyId(pendingGroupChoice.id),
+      cardMotionSettleDelay,
+    );
+    return () => window.clearTimeout(timeout);
+  }, [latestCardMoveType, motionSequenceEndsAt, pendingGroupChoice?.id]);
+
+  useEffect(() => {
     if (state.phase !== 'playing' || state.currentPlayerId === myId) return undefined;
 
-    const frame = window.requestAnimationFrame(() => {
-      const activeBoard = opponentsRef.current?.querySelector('.sj-board-active');
-      if (!activeBoard) return;
-      activeBoard.scrollIntoView({
-        behavior: 'smooth',
-        block: 'nearest',
-        inline: 'center',
+    let frame = null;
+    const cardMotionSettleDelay = getCardMotionSettleDelay(
+      latestCardMoveType,
+      motionSequenceEndsAt,
+    );
+    const timeout = window.setTimeout(() => {
+      frame = window.requestAnimationFrame(() => {
+        const activeBoard = opponentsRef.current?.querySelector('.sj-board-active');
+        if (!activeBoard) return;
+        activeBoard.scrollIntoView({
+          behavior: 'smooth',
+          block: 'nearest',
+          inline: 'center',
+        });
       });
-    });
+    }, cardMotionSettleDelay);
 
-    return () => window.cancelAnimationFrame(frame);
-  }, [myId, opponentsRef, state.currentPlayerId, state.phase, state.players.length]);
+    return () => {
+      window.clearTimeout(timeout);
+      if (frame !== null) window.cancelAnimationFrame(frame);
+    };
+  }, [latestCardMoveType, motionSequenceEndsAt, myId, opponentsRef, state.currentPlayerId, state.phase, state.players.length]);
 
   useEffect(() => {
     if (
@@ -2522,7 +2628,7 @@ function GameScreen({
   );
   const actionDrawModal = (
     <ActionDrawModal
-      open={!!state.pendingStarClaim}
+      open={!!state.pendingStarClaim && starClaimModalReady}
       market={state.actionMarket}
       canDrawDeck={state.canDrawActionDeck}
       title="Choisir une carte Action"
@@ -2564,7 +2670,7 @@ function GameScreen({
   );
   const starGroupChoiceModal = (
     <StarGroupChoiceModal
-      choice={pendingGroupChoice}
+      choice={pendingGroupChoice?.id === groupChoiceModalReadyId ? pendingGroupChoice : null}
       onResolve={handleStarGroupChoice}
     />
   );
@@ -2725,7 +2831,11 @@ function GameScreen({
       ref={shellRef}
       className={`sj-app-shell ${state.players.length === 2 ? 'sj-two-player-game' : ''} ${isActionMode ? 'sj-action-game' : ''} ${layoutClassName} ${layoutReady ? '' : 'sj-layout-pending'}`}
     >
-      <CardMotionLayer state={state} enabled={layoutReady} />
+      <CardMotionLayer
+        state={state}
+        enabled={layoutReady}
+        onMotionBatch={handleCardMotionBatch}
+      />
       <div className="sj-game-controls" aria-label="Contrôles de la partie">
         {chatButton}
         {leaveButton}

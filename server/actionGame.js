@@ -12,6 +12,7 @@ const PEEK_PREVIEW_MS = 12_000;
 const TEMP_GRANT_ALL_ACTION_CARDS = false;
 const ACTION_MARKET_SIZE = 4;
 const ACTION_DECK_SIZE = ACTION_TYPES.length * 3;
+const CARD_MOVE_HISTORY_LIMIT = 64;
 
 function log(state, msg) {
   state.log.push({ t: Date.now(), msg });
@@ -20,10 +21,13 @@ function log(state, msg) {
 
 function recordCardMove(state, move) {
   state.cardMoveSerial = (state.cardMoveSerial || 0) + 1;
-  state.lastCardMove = {
+  const entry = {
     id: `${state.roundNumber}:${state.cardMoveSerial}`,
     ...move,
   };
+  state.lastCardMove = entry;
+  state.cardMoves = [...(Array.isArray(state.cardMoves) ? state.cardMoves : []), entry]
+    .slice(-CARD_MOVE_HISTORY_LIMIT);
 }
 
 function connectedIds(state) {
@@ -238,7 +242,12 @@ function beginStarClaim(state, playerId, resume) {
 function resumeAfterStarClaim(state) {
   const resume = state.pendingStarClaim?.resume;
   state.pendingStarClaim = null;
-  if (resume === 'advance') advanceTurn(state);
+  if (resume?.type === 'clearGroups') {
+    const player = state.playersById[resume.playerId];
+    const next = resume.resume || { type: 'none' };
+    if (player && clearCompletedGroups(state, player, next)) return;
+    continueAfterGroupChoice(state, next);
+  } else if (resume === 'advance') advanceTurn(state);
   else if (resume === 'finishAction') finishAction(state);
   else if (resume === 'initial') {
     state.turnStage = null;
@@ -282,18 +291,21 @@ function groupSnapshot(indexes, slots) {
 function removeCompletedGroup(state, player, indexes, starBonus) {
   const slots = indexes.map((index) => player.board[index]);
   const allStars = slots.every((slot) => isStar(slot.card));
-  const cards = slots.map((slot) => slot.card).filter(Boolean);
-  const starCards = cards.filter(isStar);
-  const nonStarCards = cards.filter((card) => !isStar(card));
-  const discardOrder = allStars
-    ? cards
-    : [...starCards, ...nonStarCards];
+  const cards = indexes.map((slotIndex, index) => ({
+    playerId: player.id,
+    slotIndex,
+    card: slots[index].card,
+  })).filter((entry) => entry.card);
+  const starCards = cards.filter((entry) => isStar(entry.card));
+  const nonStarCards = cards.filter((entry) => !isStar(entry.card));
+  const discardOrder = allStars ? cards : [...starCards, ...nonStarCards];
 
-  state.discard.push(...discardOrder);
+  state.discard.push(...discardOrder.map((entry) => entry.card));
   for (const slot of slots) {
     slot.card = null;
     slot.removed = true;
   }
+  recordCardMove(state, { type: 'clear', cards: discardOrder });
   if (allStars) player.starBonus += starBonus;
   log(state, `${player.name} réalise un Skyjo.`);
 }
@@ -525,6 +537,7 @@ function dealRound(state) {
   state.turnStage = null;
   state.drawnCard = null;
   state.lastCardMove = null;
+  state.cardMoves = [];
   state.nextRoundAt = null;
   state.roundScoresAt = null;
   state.starterTieNotice = null;
@@ -550,9 +563,13 @@ export function flipInitialActionCard(state, playerId, slotIndex) {
   slot.faceUp = true;
   player.flippedCount += 1;
   const star = isStar(slot.card);
-  if (clearCompletedGroups(state, player, { type: 'initial', playerId, star })) return;
-  if (star) beginStarClaim(state, playerId, 'initial');
-  else startRoundIfReady(state);
+  const resume = { type: 'initial', playerId, star: false };
+  if (star) {
+    beginStarClaim(state, playerId, { type: 'clearGroups', playerId, resume });
+    return;
+  }
+  if (clearCompletedGroups(state, player, resume)) return;
+  startRoundIfReady(state);
 }
 
 function advanceTurn(state) {
@@ -639,11 +656,13 @@ export function placeActionGameCard(state, playerId, slotIndex) {
     revealOldCard: true,
   });
   if (oldCard) state.discard.push(oldCard);
-  if (clearCompletedGroups(state, player, isStar(newCard)
-    ? { type: 'starClaim', playerId, claimResume: 'advance' }
-    : { type: 'advance' })) return;
-  if (isStar(newCard)) beginStarClaim(state, playerId, 'advance');
-  else advanceTurn(state);
+  const resume = { type: 'advance' };
+  if (isStar(newCard)) {
+    beginStarClaim(state, playerId, { type: 'clearGroups', playerId, resume });
+    return;
+  }
+  if (clearCompletedGroups(state, player, resume)) return;
+  advanceTurn(state);
 }
 
 export function revealActionGameCard(state, playerId, slotIndex) {
@@ -656,11 +675,13 @@ export function revealActionGameCard(state, playerId, slotIndex) {
     cards: [{ playerId, slotIndex, card: slot.card }],
   });
   slot.faceUp = true;
-  if (clearCompletedGroups(state, player, isStar(slot.card)
-    ? { type: 'starClaim', playerId, claimResume: 'advance' }
-    : { type: 'advance' })) return;
-  if (isStar(slot.card)) beginStarClaim(state, playerId, 'advance');
-  else advanceTurn(state);
+  const resume = { type: 'advance' };
+  if (isStar(slot.card)) {
+    beginStarClaim(state, playerId, { type: 'clearGroups', playerId, resume });
+    return;
+  }
+  if (clearCompletedGroups(state, player, resume)) return;
+  advanceTurn(state);
 }
 
 export function claimStarAction(state, playerId, source, marketIndex) {
@@ -756,7 +777,15 @@ function resolveRemoveEachTarget(state, pending, targetId, { slotIndex, actionCa
   }
 
   pending.remaining = pending.remaining.filter((id) => id !== targetId);
-  const resume = { type: 'removeEachAfterTarget', targetId, replacementIsStar };
+  const resume = { type: 'removeEachAfterTarget', targetId, replacementIsStar: false };
+  if (replacementIsStar) {
+    beginStarClaim(state, targetId, {
+      type: 'clearGroups',
+      playerId: targetId,
+      resume,
+    });
+    return;
+  }
   if (Number.isInteger(slotIndex) && clearCompletedGroups(state, target, resume)) return;
   continueAfterGroupChoice(state, resume);
 }
@@ -1282,6 +1311,7 @@ export function resolveActionInput(state, playerId, payload = {}) {
       recordCardMove(state, {
         type: 'reveal',
         cards: [{ playerId: actorId, slotIndex: revealSlotIndex, card: slot.card }],
+        discardedCards: [...pending.drawn],
       });
       slot.faceUp = true;
       claimedStar = isStar(slot.card);
@@ -1292,6 +1322,7 @@ export function resolveActionInput(state, playerId, payload = {}) {
       const slot = validateSlot(state, actorId, payload.slotIndex);
       const oldCard = slot.card;
       const oldFaceUp = slot.faceUp;
+      const discardedCards = pending.drawn.filter((_, index) => index !== choiceIndex);
       if (slot.card) state.discard.push(slot.card);
       slot.card = chosen;
       slot.faceUp = true;
@@ -1305,17 +1336,22 @@ export function resolveActionInput(state, playerId, payload = {}) {
         oldCard,
         oldFaceUp,
         revealOldCard: true,
+        discardedCards,
       });
       claimedStar = isStar(chosen);
-      pending.drawn.filter((_, index) => index !== choiceIndex).forEach((card) => state.discard.push(card));
+      discardedCards.forEach((card) => state.discard.push(card));
     }
-    if (clearCompletedGroups(state, actor, { type: 'pendingActionAfterResolve', claimedStar, starPlayerId: actorId })) return;
     if (claimedStar) {
       discardPlayedAction(state, pending.card);
       state.pendingAction = null;
-      beginStarClaim(state, actorId, 'advance');
+      beginStarClaim(state, actorId, {
+        type: 'clearGroups',
+        playerId: actorId,
+        resume: { type: 'advance' },
+      });
       return;
     }
+    if (clearCompletedGroups(state, actor, { type: 'pendingActionAfterResolve', claimedStar: false })) return;
   } else if (pending.type === 'peekLine') {
     const storedFirst = pending.selection?.peekFirst;
     const targetPlayerId = payload.targetPlayerId || storedFirst?.playerId;
@@ -1460,7 +1496,7 @@ function endActionRound(state, revealedBeforeRoundEnd = []) {
   for (const id of state.order) {
     revealed.push(...revealRemainingCards(state.playersById[id]));
   }
-  if (revealed.length > 0) recordCardMove(state, { type: 'reveal', cards: revealed });
+  if (revealed.length > 0) recordCardMove(state, { type: 'roundReveal', cards: revealed });
   continueActionRoundEnd(state, [...state.order]);
 }
 
