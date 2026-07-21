@@ -322,7 +322,7 @@ button {
 }
 
 @keyframes sjFlipIn {
-  0% { transform: rotateY(90deg) scale(0.92); opacity: 0.35; }
+  0% { transform: rotateY(90deg) scale(1); opacity: 1; }
   100% { transform: rotateY(0deg) scale(1); opacity: 1; }
 }
 
@@ -368,8 +368,8 @@ button {
 }
 
 @keyframes sjCardMotionDestination {
-  0%, 83.9% { opacity: 0; }
-  84%, 100% { opacity: 1; }
+  0%, 84% { opacity: 0; }
+  100% { opacity: 1; }
 }
 
 @keyframes sjCardMotionDestinationLate {
@@ -2339,6 +2339,7 @@ input:focus {
 }
 
 .sj-card-flight-card > .sj-card {
+  transform-box: view-box;
   filter: none;
 }
 
@@ -2721,7 +2722,7 @@ button.sj-action-count-badge:focus-visible {
   filter: drop-shadow(0 4px 5px rgba(0, 0, 0, 0.38));
   transition: none;
   shape-rendering: geometricPrecision;
-  transform-box: fill-box;
+  transform-box: view-box;
   transform-origin: center;
   backface-visibility: hidden;
 }
@@ -2810,7 +2811,7 @@ button.sj-action-count-badge:focus-visible {
 .sj-card-flip,
 .sj-card-reveal {
   animation: sjFlipIn 0.32s ease both;
-  transform-box: fill-box;
+  transform-box: view-box;
   transform-origin: center;
   transform-style: preserve-3d;
   will-change: transform, opacity;

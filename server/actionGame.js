@@ -95,6 +95,8 @@ function ensureActionFields(state) {
     return;
   }
 
+  if (resolveFinalTurnStarClaim(state)) return;
+
   if (state.pendingStarClaim && !prepareActionClaimChoices(state)) {
     log(state, 'Aucune carte Action n’est disponible : le bonus Étoile est ignoré.');
     resumeAfterStarClaim(state);
@@ -230,9 +232,26 @@ function giveActionCard(state, playerId, source, marketIndex) {
   return card;
 }
 
+function resolveFinalTurnStarClaim(state) {
+  const playerId = state.pendingStarClaim?.playerId;
+  if (!playerId || !state.roundEnderId) return false;
+
+  if (!prepareActionClaimChoices(state)) {
+    log(state, 'Aucune carte Action n’est disponible : le bonus Étoile est ignoré.');
+  } else {
+    const source = availableActionDeckCount(state) > 0 ? 'deck' : 'market';
+    giveActionCard(state, playerId, source, source === 'market' ? 0 : undefined);
+    log(state, `${state.playersById[playerId].name} reçoit automatiquement une carte Action grâce à son Étoile.`);
+  }
+
+  resumeAfterStarClaim(state);
+  return true;
+}
+
 function beginStarClaim(state, playerId, resume) {
   state.pendingStarClaim = { playerId, resume };
   state.turnStage = 'starClaim';
+  if (resolveFinalTurnStarClaim(state)) return;
   if (!prepareActionClaimChoices(state)) {
     log(state, 'Aucune carte Action n’est disponible : le bonus Étoile est ignoré.');
     resumeAfterStarClaim(state);
