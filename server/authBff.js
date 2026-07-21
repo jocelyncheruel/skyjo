@@ -229,7 +229,7 @@ export function publicSupabaseError(error) {
   if (code === 'email_not_confirmed' || message.includes('email not confirmed')) {
     return new PublicError(
       'email_not_confirmed',
-      "Ton adresse e-mail n'est pas encore confirmée.",
+      "Votre adresse e-mail n'est pas encore confirmée.",
       403,
     );
   }
@@ -240,7 +240,7 @@ export function publicSupabaseError(error) {
     return new PublicError('weak_password', "Ce mot de passe n'est pas assez robuste.", 400);
   }
   if (code === 'same_password') {
-    return new PublicError('same_password', "Choisis un mot de passe différent de l'ancien.", 400);
+    return new PublicError('same_password', "Choisissez un mot de passe différent de l'ancien.", 400);
   }
   if (code === 'otp_expired') {
     return new PublicError('otp_expired', 'Ce lien a expiré ou a déjà été utilisé.', 400);
@@ -528,7 +528,7 @@ export function createAuthBff({
       next();
       return;
     }
-    next(new PublicError('password_update_required', 'Choisis un nouveau mot de passe avant de continuer.', 403));
+    next(new PublicError('password_update_required', 'Choisissez un nouveau mot de passe avant de continuer.', 403));
   }
 
   async function verifyTurnstile(token, remoteIp) {
@@ -888,12 +888,12 @@ export function createAuthBff({
   router.post('/password/update', rateLimit('auth-password-update', 5, 10 * 60_000), requireAuth, requireCsrf, async (req, res, next) => {
     try {
       if (req.auth.authContext !== 'recovery' || req.auth.createdAt < Date.now() - 15 * 60_000) {
-        throw new PublicError('recent_recovery_required', 'Demande un nouveau lien de réinitialisation.', 403);
+        throw new PublicError('recent_recovery_required', 'Demandez un nouveau lien de réinitialisation.', 403);
       }
       const body = objectPayload(req.body, ['password']);
       const password = String(body.password || '');
       if (password.length < 12 || password.length > 128) {
-        throw new PublicError('invalid_password', 'Choisis un mot de passe de 12 à 128 caractères.', 400);
+        throw new PublicError('invalid_password', 'Choisissez un mot de passe de 12 à 128 caractères.', 400);
       }
       const client = buildAuthClient();
       const current = await client.auth.setSession({

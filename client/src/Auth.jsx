@@ -93,7 +93,7 @@ function getAuthErrorMessage(error) {
   const message = String(error?.message || "").toLowerCase();
 
   if (code === "email_not_confirmed" || message.includes("email not confirmed")) {
-    return "Ton adresse e-mail n'est pas encore confirmée.";
+    return "Votre adresse e-mail n'est pas encore confirmée.";
   }
   if (
     code === "authentication_failed" || code === "invalid_credentials"
@@ -113,22 +113,22 @@ function getAuthErrorMessage(error) {
     return "La connexion avec Google n'est pas disponible pour le moment.";
   }
   if (code === "bad_oauth_state") {
-    return "La connexion avec Google a expiré. Réessaie.";
+    return "La connexion avec Google a expiré. Réessayez.";
   }
   if (code === "rate_limited" || code === "over_request_rate_limit" || message.includes("rate limit")) {
-    return "Trop de tentatives. Réessaie dans quelques minutes.";
+    return "Trop de tentatives. Réessayez dans quelques minutes.";
   }
   if (code === "captcha_failed" || code === "csrf_failed") {
-    return "La vérification de sécurité a échoué. Recharge la page puis réessaie.";
+    return "La vérification de sécurité a échoué. Rechargez la page puis réessayez.";
   }
   if (code === "weak_password") {
     return "Ce mot de passe n'est pas assez robuste.";
   }
   if (code === "same_password") {
-    return "Choisis un mot de passe différent de l'ancien.";
+    return "Choisissez un mot de passe différent de l'ancien.";
   }
   if (code === "invalid_profile") {
-    return String(error?.message || "Vérifie les informations de ton profil.").slice(0, 200);
+    return String(error?.message || "Vérifiez les informations de votre profil.").slice(0, 200);
   }
   if ([
     "active_rooms",
@@ -139,13 +139,13 @@ function getAuthErrorMessage(error) {
     return String(error?.message || "Cette action ne peut pas être effectuée.").slice(0, 200);
   }
   if (code === "invalid_password" || code === "recent_recovery_required") {
-    return String(error?.message || "Demande un nouveau lien de réinitialisation.").slice(0, 200);
+    return String(error?.message || "Demandez un nouveau lien de réinitialisation.").slice(0, 200);
   }
   if (code === "otp_expired") {
-    return "Ce lien a expiré. Demande un nouvel e-mail de réinitialisation.";
+    return "Ce lien a expiré. Demandez un nouvel e-mail de réinitialisation.";
   }
 
-  return "Une erreur d'authentification est survenue. Réessaie dans un instant.";
+  return "Une erreur d'authentification est survenue. Réessayez dans un instant.";
 }
 
 async function authApi(path, options, fallback = "Une erreur d'authentification est survenue.") {
@@ -208,7 +208,7 @@ export function AuthProvider({ children }) {
           setCsrfToken(data?.csrfToken);
           setUser(data?.user || null);
           setRecoveryMode(data?.recovery === true);
-          if (oauthResult === "failed") setError("La connexion avec Google a échoué. Réessaie.");
+          if (oauthResult === "failed") setError("La connexion avec Google a échoué. Réessayez.");
         }
       } catch (authError) {
         if (!cancelled) {
@@ -359,7 +359,7 @@ export function AuthProvider({ children }) {
       });
     } catch (requestError) {
       const message = requestError instanceof TypeError
-        ? "Impossible de contacter le service d'authentification. Vérifie ta connexion."
+        ? "Impossible de contacter le service d'authentification. Vérifiez votre connexion."
         : getAuthErrorMessage(requestError);
       setError(message);
       throw requestError;
@@ -399,7 +399,7 @@ export function AuthProvider({ children }) {
       return data.user;
     } catch (profileError) {
       const message = profileError instanceof TypeError
-        ? "Impossible de contacter le service d'authentification. Vérifie ta connexion."
+        ? "Impossible de contacter le service d'authentification. Vérifiez votre connexion."
         : getAuthErrorMessage(profileError);
       throw new Error(message);
     }
@@ -429,7 +429,7 @@ export function AuthProvider({ children }) {
         return data.stats;
       } catch (statsError) {
         const message = statsError instanceof TypeError
-          ? "Impossible de contacter le serveur. Vérifie ta connexion."
+          ? "Impossible de contacter le serveur. Vérifiez votre connexion."
           : String(statsError?.message || 'Impossible de charger les statistiques.');
         if (profileStatsRequestRef.current.promise === requestPromise) {
           commitProfileStatsState({
@@ -468,7 +468,7 @@ export function AuthProvider({ children }) {
       await authApi('/api/auth/password/change-request', { method: 'POST' }, "Impossible d'envoyer l'e-mail de modification.");
     } catch (requestError) {
       const message = requestError instanceof TypeError
-        ? "Impossible de contacter le service d'authentification. Vérifie ta connexion."
+        ? "Impossible de contacter le service d'authentification. Vérifiez votre connexion."
         : getAuthErrorMessage(requestError);
       throw new Error(message);
     }
@@ -487,7 +487,7 @@ export function AuthProvider({ children }) {
       setRecoveryMode(false);
     } catch (deleteError) {
       const message = deleteError instanceof TypeError
-        ? "Impossible de contacter le service d'authentification. Vérifie ta connexion."
+        ? "Impossible de contacter le service d'authentification. Vérifiez votre connexion."
         : getAuthErrorMessage(deleteError);
       const profileError = new Error(message);
       profileError.code = String(deleteError?.code || '');
@@ -776,15 +776,15 @@ const LEGAL_DOCUMENTS = {
       ],
       [
         "Compte et accès",
-        "Tu peux créer ton compte avec une adresse e-mail et un mot de passe ou continuer avec ton compte Google. Tu dois fournir des informations exactes, protéger tes moyens de connexion et ne pas utiliser le compte ou la place de jeu d'une autre personne. Tu es responsable des actions réalisées depuis ta session.",
+        "Vous pouvez créer votre compte avec une adresse e-mail et un mot de passe ou continuer avec votre compte Google. Vous devez fournir des informations exactes, protéger vos moyens de connexion et ne pas utiliser le compte ou la place de jeu d'une autre personne. Vous êtes responsable des actions réalisées depuis votre session.",
       ],
       [
         "Salles publiques et privées",
-        "Une salle publique apparaît dans la recherche avec le pseudonyme de son créateur, son mode et son nombre de joueurs. Une salle privée est accessible avec son code d'invitation aléatoire : partage ce code uniquement avec les personnes que tu souhaites inviter.",
+        "Une salle publique apparaît dans la recherche avec le pseudonyme de son créateur, son mode et son nombre de joueurs. Une salle privée est accessible avec son code d'invitation aléatoire : partagez ce code uniquement avec les personnes que vous souhaitez inviter.",
       ],
       [
         "Messages et pseudonymes",
-        "Les pseudonymes et messages du chat sont visibles par les participants de la salle. Tous les messages acceptés sont enregistrés séparément de l'état du jeu jusqu'à la suppression de la salle. Tu restes responsable de leur contenu. Les propos illicites, injurieux, menaçants, discriminatoires, le harcèlement et l'usurpation d'identité sont interdits.",
+        "Les pseudonymes et messages du chat sont visibles par les participants de la salle. Tous les messages acceptés sont enregistrés séparément de l'état du jeu jusqu'à la suppression de la salle. Vous restez responsable de leur contenu. Les propos illicites, injurieux, menaçants, discriminatoires, le harcèlement et l'usurpation d'identité sont interdits.",
       ],
       [
         "Utilisation loyale",
@@ -801,13 +801,13 @@ const LEGAL_DOCUMENTS = {
     ],
   },
   privacy: {
-    eyebrow: "Tes données",
+    eyebrow: "Vos données",
     title: "Politique de confidentialité",
     updatedAt: "20 juillet 2026",
     sections: [
       [
         "Données du compte",
-        "Le service traite ton adresse e-mail, ton prénom, ton nom, ton pseudonyme de jeu par défaut, ton identifiant Supabase et les informations techniques de ta session d'authentification. Render transmet les identifiants de connexion à Supabase Auth sans enregistrer le mot de passe. Si tu continues avec Google, Google transmet à Supabase les informations de base autorisées pour ton compte, notamment ton identité et ton adresse e-mail. Le mot de passe n'est jamais enregistré dans l'état des salles.",
+        "Le service traite votre adresse e-mail, votre prénom, votre nom, votre pseudonyme de jeu par défaut, votre identifiant Supabase et les informations techniques de votre session d'authentification. Render transmet les identifiants de connexion à Supabase Auth sans enregistrer le mot de passe. Si vous continuez avec Google, Google transmet à Supabase les informations de base autorisées pour votre compte, notamment votre identité et votre adresse e-mail. Le mot de passe n'est jamais enregistré dans l'état des salles.",
       ],
       [
         "Données de jeu",
@@ -815,7 +815,7 @@ const LEGAL_DOCUMENTS = {
       ],
       [
         "Données techniques et stockage local",
-        "L'adresse IP est utilisée temporairement en mémoire pour limiter les requêtes abusives. Le navigateur reçoit uniquement un identifiant de session aléatoire dans un cookie HttpOnly, Secure et SameSite, inaccessible au JavaScript. Les jetons Supabase restent chiffrés côté serveur. Si tu choisis « Se souvenir de moi », le cookie peut persister jusqu'à sept jours ; sinon il disparaît à la fermeture du navigateur. Le navigateur peut conserver la préférence, le pseudonyme et le code de la dernière salle. Aucun jeton de reconnexion joueur distinct n'est utilisé.",
+        "L'adresse IP est utilisée temporairement en mémoire pour limiter les requêtes abusives. Le navigateur reçoit uniquement un identifiant de session aléatoire dans un cookie HttpOnly, Secure et SameSite, inaccessible au JavaScript. Les jetons Supabase restent chiffrés côté serveur. Si vous choisissez « Rester connecté », le cookie peut persister jusqu'à sept jours ; sinon il disparaît à la fermeture du navigateur. Le navigateur peut conserver la préférence, le pseudonyme et le code de la dernière salle. Aucun jeton de reconnexion joueur distinct n'est utilisé.",
       ],
       [
         "Finalités",
@@ -838,16 +838,16 @@ const LEGAL_DOCUMENTS = {
       ],
       [
         "Visibilité et destinataires",
-        "Les participants d'une salle reçoivent les informations nécessaires à la partie et les messages du chat. Pour une salle publique, les utilisateurs authentifiés peuvent voir le pseudonyme du créateur, le mode et le nombre de joueurs. Supabase, Render et Cloudflare traitent les données techniques nécessaires à leurs services. Google intervient uniquement lorsque tu choisis cette méthode de connexion. Les données ne sont pas vendues.",
+        "Les participants d'une salle reçoivent les informations nécessaires à la partie et les messages du chat. Pour une salle publique, les utilisateurs authentifiés peuvent voir le pseudonyme du créateur, le mode et le nombre de joueurs. Supabase, Render et Cloudflare traitent les données techniques nécessaires à leurs services. Google intervient uniquement lorsque vous choisissez cette méthode de connexion. Les données ne sont pas vendues.",
       ],
       [
         "Sécurité",
         "Les accès au jeu exigent une session BFF encore valide, adossée à une session Supabase confirmée et active. Chaque place est liée côté serveur à l'identifiant du compte ; les rôles ou identifiants transmis par le navigateur ne font pas autorité.",
       ],
       [
-        "Tes choix et tes droits",
+        "Vos choix et vos droits",
         <>
-          Tu peux modifier les informations de ton profil et supprimer ton compte directement depuis l'application après avoir quitté tes salles. Tu peux également refuser la mémorisation durable de ta session ou te déconnecter. Pour toute autre demande d'accès, de rectification, de limitation ou d'opposition lorsque ces droits s'appliquent, écris à{" "}
+          Vous pouvez modifier les informations de votre profil et supprimer votre compte directement depuis l'application après avoir quitté vos salles. Vous pouvez également refuser la mémorisation durable de votre session ou vous déconnecter. Pour toute autre demande d'accès, de rectification, de limitation ou d'opposition lorsque ces droits s'appliquent, écrivez à{" "}
           <a href="mailto:support@jocelyncheruel.dev">support@jocelyncheruel.dev</a>.
         </>,
       ],
@@ -1163,7 +1163,7 @@ export function AuthView() {
   function goNext() {
     if (!canContinue)
       return setLocalError(
-        "Renseigne ton prénom, ton nom et une adresse e-mail valide.",
+        "Renseignez votre prénom, votre nom et une adresse e-mail valide.",
       );
     setLocalError("");
     setStep(2);
@@ -1189,7 +1189,7 @@ export function AuthView() {
       setForm(submittedForm);
     }
     if (mode === "register" && (submittedForm.password.length < 12 || submittedForm.password.length > 128))
-      return setLocalError("Choisis un mot de passe de 12 à 128 caractères.");
+      return setLocalError("Choisissez un mot de passe de 12 à 128 caractères.");
     if (
       mode === "register" &&
       submittedForm.password !== submittedForm.confirmPassword
@@ -1197,16 +1197,16 @@ export function AuthView() {
       return setLocalError("Les mots de passe ne correspondent pas.");
     if (mode === "register" && !canAcceptTerms)
       return setLocalError(
-        "Lis les conditions d'utilisation et la politique de confidentialité.",
+        "Lisez les conditions d'utilisation et la politique de confidentialité.",
       );
     if (mode === "register" && !form.acceptTerms)
       return setLocalError(
-        "Tu dois accepter les conditions pour créer ton compte.",
+        "Vous devez accepter les conditions pour créer votre compte.",
       );
     if (import.meta.env.PROD && !TURNSTILE_SITE_KEY)
       return setLocalError(TURNSTILE_CONFIGURATION_ERROR);
     if (TURNSTILE_SITE_KEY && !captchaToken)
-      return setLocalError("Termine la vérification anti-robot.");
+      return setLocalError("Terminez la vérification anti-robot.");
     setBusy(true);
     try {
       if (mode === "login")
@@ -1238,12 +1238,12 @@ export function AuthView() {
     setNotice("");
     if (!/^\S+@\S+\.\S+$/.test(form.email))
       return setLocalError(
-        "Indique ton adresse e-mail.",
+        "Indiquez votre adresse e-mail.",
       );
     if (import.meta.env.PROD && !TURNSTILE_SITE_KEY)
       return setLocalError(TURNSTILE_CONFIGURATION_ERROR);
     if (TURNSTILE_SITE_KEY && !captchaToken)
-      return setLocalError("Termine la vérification anti-robot.");
+      return setLocalError("Terminez la vérification anti-robot.");
     setBusy(true);
     try {
       await requestPasswordReset(normalizeEmail(form.email), captchaToken);
@@ -1290,14 +1290,14 @@ export function AuthView() {
           <div className="auth-heading">
             <p className="auth-eyebrow">Lien personnel</p>
             <h2>{pendingEmailAction.type === "recovery" ? "Réinitialiser le mot de passe" : "Confirmer l'adresse e-mail"}</h2>
-            <p>Le lien ne sera utilisé qu'après ta confirmation.</p>
+            <p>Le lien ne sera utilisé qu'après votre confirmation.</p>
           </div>
           <button className="auth-submit" type="button" disabled={busy || pendingEmailAction.invalid} onClick={async () => {
             setBusy(true);
             try { await confirmEmailAction(); } catch { return; }
             finally { setBusy(false); }
           }}>
-            {busy ? "Vérification..." : pendingEmailAction.type === "recovery" ? "Continuer" : "Confirmer mon adresse"}
+            {busy ? "Vérification..." : pendingEmailAction.type === "recovery" ? "Continuer" : "Confirmer votre adresse"}
           </button>
           {pendingEmailAction.invalid && <p className="auth-switch">Ce lien est invalide ou incomplet.</p>}
         </section>
@@ -1334,11 +1334,11 @@ export function AuthView() {
               <p className="auth-eyebrow">
                 {mode === "register"
                   ? "Bienvenue dans l'aventure"
-                  : "Heureux de te revoir"}
+                  : "Heureux de vous revoir"}
               </p>
               <h2>
                 {mode === "register"
-                  ? "Crée ton compte"
+                  ? "Créez votre compte"
                   : "Bon retour parmi nous"}
               </h2>
             </div>
@@ -1399,7 +1399,7 @@ export function AuthView() {
                       type="email"
                       value={form.email}
                       onChange={updateField}
-                      placeholder="toi@exemple.fr"
+                      placeholder="nom@exemple.fr"
                       autoComplete="email"
                       maxLength={254}
                       data-prefilled={emailPrefilled || undefined}
@@ -1436,7 +1436,7 @@ export function AuthView() {
                         type="email"
                         value={form.email}
                         onChange={updateField}
-                        placeholder="toi@exemple.fr"
+                        placeholder="nom@exemple.fr"
                         autoComplete="username"
                         maxLength={254}
                         data-prefilled={emailPrefilled || undefined}
@@ -1543,7 +1543,7 @@ export function AuthView() {
                             checked={form.remember}
                             onChange={updateField}
                           />
-                          <span>Se souvenir de moi</span>
+                          <span>Rester connecté</span>
                         </label>
                         <button
                           type="button"
@@ -1576,7 +1576,7 @@ export function AuthView() {
                           type="submit"
                           disabled={busy || googleBusy || !securityReady}
                         >
-                          {busy ? "Un instant..." : "Créer mon compte"}
+                          {busy ? "Un instant..." : "Créer un compte"}
                         </button>
                       </div>
                     ) : (
@@ -1594,8 +1594,8 @@ export function AuthView() {
               </div>
               <p className="auth-switch">
                 {mode === "register"
-                  ? "Tu as déjà un compte ?"
-                  : "Nouveau sur Skyjo ?"}{" "}
+                  ? "Vous avez déjà un compte ?"
+                  : "Vous découvrez Skyjo ?"}{" "}
                 <button
                   type="button"
                   onClick={() =>
@@ -1640,7 +1640,7 @@ export function ResetPasswordView() {
     clearError();
     setLocalError("");
     if (password.length < 12 || password.length > 128)
-      return setLocalError("Choisis un mot de passe de 12 à 128 caractères.");
+      return setLocalError("Choisissez un mot de passe de 12 à 128 caractères.");
     if (password !== confirmation)
       return setLocalError("Les mots de passe ne correspondent pas.");
     setBusy(true);
@@ -1664,9 +1664,9 @@ export function ResetPasswordView() {
       <section className="auth-reset-card">
         <AuthMobileBrand />
         <div className="auth-heading">
-          <p className="auth-eyebrow">Sécurise ton compte</p>
+          <p className="auth-eyebrow">Sécurisez votre compte</p>
           <h2>Nouveau mot de passe</h2>
-          <p>Choisis un nouveau mot de passe pour retrouver tes parties.</p>
+          <p>Choisissez un nouveau mot de passe pour retrouver vos parties.</p>
         </div>
         <form className="auth-form" onSubmit={submit}>
           <input

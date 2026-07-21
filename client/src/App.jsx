@@ -203,7 +203,7 @@ function SkyjoApp() {
   if (consent === null) return <AuthLoadingView label="Vérification du consentement" />;
   if (!consent) return <ConsentGate busy={consentBusy} error={consentError} onLogout={logout} onAccept={async () => {
     if (!consentVersions) {
-      setConsentError('Impossible de vérifier la version des documents. Recharge la page.');
+      setConsentError('Impossible de vérifier la version des documents. Rechargez la page.');
       return;
     }
     setConsentBusy(true);

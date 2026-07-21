@@ -86,9 +86,9 @@ export function ProfileButton({ onClick }) {
       type="button"
       className="sj-account-profile-trigger"
       onClick={onClick}
-      aria-label="Ouvrir mon profil"
+      aria-label="Ouvrir votre profil"
       aria-haspopup="dialog"
-      title="Mon profil"
+      title="Votre profil"
     >
       <UserRound aria-hidden="true" size={17} />
     </button>
@@ -455,7 +455,7 @@ export default function ProfileModal({ open, onClose, onProfileUpdated }) {
         <header className="sj-profile-head">
           <div>
             <span>Votre compte</span>
-            <h2 id="profile-title">Mon profil</h2>
+            <h2 id="profile-title">Votre profil</h2>
           </div>
           <button
             type="button"
@@ -482,7 +482,7 @@ export default function ProfileModal({ open, onClose, onProfileUpdated }) {
             >
               <span className="sj-profile-accordion-icon"><IdCard aria-hidden="true" size={17} /></span>
               <span className="sj-profile-accordion-copy">
-                <strong>Mon compte</strong>
+                <strong>Votre compte</strong>
                 <small>Identité et activité</small>
               </span>
               <ChevronDown className="sj-profile-accordion-chevron" aria-hidden="true" size={17} />
@@ -619,7 +619,7 @@ export default function ProfileModal({ open, onClose, onProfileUpdated }) {
                       </dl>
                       {!statisticsLoading && (statistics?.gamesPlayed || 0) === 0 && (
                         <p className="sj-profile-statistics-empty">
-                          <Trophy aria-hidden="true" size={15} /> Tes prochaines parties apparaîtront ici.
+                          <Trophy aria-hidden="true" size={15} /> Vos prochaines parties apparaîtront ici.
                         </p>
                       )}
                     </>
@@ -641,7 +641,7 @@ export default function ProfileModal({ open, onClose, onProfileUpdated }) {
               >
                 <span className="sj-profile-accordion-icon"><UserPen aria-hidden="true" size={17} /></span>
                 <span className="sj-profile-accordion-copy">
-                  <strong>Mes informations</strong>
+                  <strong>Vos informations</strong>
                   <small>Pseudonyme et identité</small>
                 </span>
                 <ChevronDown className="sj-profile-accordion-chevron" aria-hidden="true" size={17} />
