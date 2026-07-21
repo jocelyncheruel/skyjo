@@ -2809,14 +2809,12 @@ function GameScreen({
           <section className="sj-lobby-card sj-pop-in">
             <div className="sj-brand-mark"><SkyjoLogo label={`${winner?.name || 'Joueur'} gagne`} /></div>
             <ScoreTable players={state.players} />
-            {isCreator && connectedPlayerCount >= 2 ? (
-              <button className="sj-btn sj-btn-primary" onClick={() => socket.emit('startGame')}>
+            {isCreator ? (
+              <button className="sj-btn sj-btn-primary" onClick={() => socket.emit('returnToLobby')}>
                 Nouvelle partie
               </button>
-            ) : connectedPlayerCount < 2 ? (
-              <p className="sj-hint">Les autres joueurs ont quitté la salle</p>
             ) : (
-              <p className="sj-hint">En attente du créateur pour relancer une partie</p>
+              <p className="sj-hint">En attente du créateur pour ouvrir une nouvelle partie</p>
             )}
           </section>
         </div>

@@ -298,6 +298,58 @@ export function startGame(state, playerId) {
   dealNewRound(state);
 }
 
+export function returnToLobby(state, playerId) {
+  assertCreator(state, playerId);
+  if (state.phase !== 'gameEnd') throw new Error('La partie n’est pas terminée.');
+
+  state.phase = 'lobby';
+  state.deck = [];
+  state.discard = [];
+  state.turnIndex = 0;
+  state.turnStage = null;
+  state.drawnCard = null;
+  state.lastCardMove = null;
+  state.cardMoves = [];
+  state.cardMoveSerial = 0;
+  state.roundEnderId = null;
+  state.roundNumber = 0;
+  state.completedRounds = 0;
+  state.nextRoundAt = null;
+  state.roundScoresAt = null;
+  state.starterTieNotice = null;
+  state.winnerId = null;
+  state.actionDeck = [];
+  state.actionDiscard = [];
+  state.actionMarket = [];
+  state.lastPlayedAction = null;
+  state.pendingAction = null;
+  state.pendingStarClaim = null;
+  state.pendingGroupChoice = null;
+  state.extraTurns = {};
+  state.actionNextStarterId = null;
+  state.turnSerial = 0;
+  state.temporaryActionCardSerial = 0;
+
+  for (const id of state.order) {
+    const player = state.playersById[id];
+    player.board = Array.from({ length: BOARD_SLOT_COUNT }, () => ({
+      card: null,
+      faceUp: false,
+      removed: false,
+    }));
+    player.totalScore = 0;
+    player.lastRoundScore = null;
+    player.flippedCount = 0;
+    player.actionCards = [];
+    player.starBonus = 0;
+    player.peek = null;
+    player.groupChoiceSkips = {};
+  }
+
+  state.log = [];
+  log(state, `${state.playersById[playerId].name} ouvre une nouvelle partie.`);
+}
+
 export function flipInitialCard(state, playerId, slotIndex) {
   if (state.gameMode === 'action') return flipInitialActionCard(state, playerId, slotIndex);
   if (state.phase !== 'initialFlip') throw new Error('Pas la phase de retournement initial.');

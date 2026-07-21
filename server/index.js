@@ -9,7 +9,7 @@ import { createAuthBff } from './authBff.js';
 import {
   newRoomState, addPlayer, leavePlayer, startGame, flipInitialCard,
   drawCard, decideDrawnCard, keepDrawnAndPlace, placeDrawnCard, revealHiddenCard, nextRound,
-  publicState, setGameMode, playOwnedAction, resolveActionInput, claimStarAction,
+  publicState, setGameMode, returnToLobby, playOwnedAction, resolveActionInput, claimStarAction,
   discardOwnedAction, resolveDefensePrompt, expireDefensePrompt,
   resolveGroupChoice, assertActionCardIntegrity, MAX_PLAYERS_PER_ROOM,
 } from './game.js';
@@ -958,6 +958,7 @@ io.on('connection', (socket) => {
   }));
 
   socket.on('startGame', withSocketGuard(socket, 'startGame', () => handleAction(socket, startGame)));
+  socket.on('returnToLobby', withSocketGuard(socket, 'returnToLobby', () => handleAction(socket, returnToLobby)));
   socket.on('setGameMode', withSocketGuard(socket, 'setGameMode', (payload) => handleAction(socket, (s, p) => setGameMode(s, p, objectPayload(payload, ['gameMode']).gameMode))));
   socket.on('flipInitial', withSocketGuard(socket, 'flipInitial', (payload) => handleAction(socket, (s, p) => flipInitialCard(s, p, objectPayload(payload, ['slotIndex']).slotIndex))));
   socket.on('drawCard', withSocketGuard(socket, 'drawCard', (payload) => handleAction(socket, (s, p) => drawCard(s, p, objectPayload(payload, ['source']).source))));
