@@ -12,7 +12,7 @@ import {
 } from './components/GameTablePieces.jsx';
 import PlayerBoard from './components/PlayerBoard.jsx';
 import RoomInviteModal from './components/RoomInviteModal.jsx';
-import RoomQrScannerModal, { supportsNativeQrScanner } from './components/RoomQrScannerModal.jsx';
+import RoomQrScannerModal, { supportsQrScanner } from './components/RoomQrScannerModal.jsx';
 import ProfileModal, { ProfileButton } from './ProfileModal.jsx';
 import { AuthView, ConsentGate, LegalPage, ResetPasswordView } from './Auth.jsx';
 import { useAuth } from './authContext.js';
@@ -402,7 +402,7 @@ function GameApp() {
 
   useEffect(() => {
     let active = true;
-    supportsNativeQrScanner().then((supported) => {
+    supportsQrScanner().then((supported) => {
       if (active) setQrScannerSupported(supported);
     });
     return () => {

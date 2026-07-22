@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { loadEnv } from "vite";
 
@@ -67,3 +67,21 @@ const headers = `/*
 
 await mkdir(resolve(root, "dist"), { recursive: true });
 await writeFile(resolve(root, "dist/_headers"), headers, "utf8");
+
+const jsQrRoot = resolve(root, "node_modules/jsqr");
+const jsQrPackage = JSON.parse(await readFile(resolve(jsQrRoot, "package.json"), "utf8"));
+if (jsQrPackage.name !== "jsqr" || jsQrPackage.license !== "Apache-2.0") {
+  throw new Error("Les informations de licence de jsQR sont invalides.");
+}
+const jsQrLicense = await readFile(resolve(jsQrRoot, "LICENSE"), "utf8");
+const thirdPartyLicenses = [
+  "THIRD-PARTY SOFTWARE LICENSES",
+  "",
+  `jsQR ${jsQrPackage.version}`,
+  "https://github.com/cozmo/jsQR",
+  "Licensed under the Apache License, Version 2.0.",
+  "",
+  jsQrLicense.trimEnd(),
+  "",
+].join("\n");
+await writeFile(resolve(root, "dist/THIRD_PARTY_LICENSES.txt"), thirdPartyLicenses, "utf8");

@@ -2,20 +2,62 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Camera, X } from 'lucide-react';
 
 const SCAN_INTERVAL_MS = 140;
+const FALLBACK_SCAN_INTERVAL_MS = 220;
 
-export async function supportsNativeQrScanner() {
+export async function supportsQrScanner() {
   if (typeof window === 'undefined'
     || !window.isSecureContext
-    || typeof globalThis.BarcodeDetector !== 'function'
-    || typeof globalThis.BarcodeDetector.getSupportedFormats !== 'function'
     || typeof navigator.mediaDevices?.getUserMedia !== 'function') return false;
 
-  try {
-    const formats = await globalThis.BarcodeDetector.getSupportedFormats();
-    return formats.includes('qr_code');
-  } catch {
-    return false;
+  return true;
+}
+
+function isAppleMobileDevice() {
+  if (typeof navigator === 'undefined') return false;
+  return /iPad|iPhone|iPod/.test(navigator.userAgent)
+    || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+}
+
+async function createQrDecoder() {
+  if (!isAppleMobileDevice()
+    && typeof globalThis.BarcodeDetector === 'function'
+    && typeof globalThis.BarcodeDetector.getSupportedFormats === 'function') {
+    let nativeQrSupported = false;
+    try {
+      const formats = await globalThis.BarcodeDetector.getSupportedFormats();
+      nativeQrSupported = formats.includes('qr_code');
+    } catch {
+      nativeQrSupported = false;
+    }
+    if (nativeQrSupported) {
+      const detector = new globalThis.BarcodeDetector({ formats: ['qr_code'] });
+      return {
+        interval: SCAN_INTERVAL_MS,
+        async decode(canvas) {
+          const detectedCodes = await detector.detect(canvas);
+          const qrCode = detectedCodes.find((code) => (
+            code.format === 'qr_code' && typeof code.rawValue === 'string'
+          ));
+          return qrCode?.rawValue || '';
+        },
+      };
+    }
   }
+
+  const qrModule = await import('jsqr');
+  const decodeQr = qrModule.default || qrModule;
+  return {
+    interval: FALLBACK_SCAN_INTERVAL_MS,
+    decode(canvas) {
+      const context = canvas.getContext('2d', { alpha: false, willReadFrequently: true });
+      if (!context) return '';
+      const image = context.getImageData(0, 0, canvas.width, canvas.height);
+      const result = decodeQr(image.data, image.width, image.height, {
+        inversionAttempts: 'dontInvert',
+      });
+      return result?.data || '';
+    },
+  };
 }
 
 function cameraErrorMessage(error) {
@@ -62,7 +104,7 @@ function captureScannerFrame(video, frame, canvas) {
   const outputScale = Math.min(1, 640 / Math.max(sourceWidth, sourceHeight));
   canvas.width = Math.max(1, Math.round(sourceWidth * outputScale));
   canvas.height = Math.max(1, Math.round(sourceHeight * outputScale));
-  const context = canvas.getContext('2d', { alpha: false });
+  const context = canvas.getContext('2d', { alpha: false, willReadFrequently: true });
   if (!context) return false;
   context.drawImage(
     video,
@@ -121,6 +163,7 @@ export default function RoomQrScannerModal({ open, onScan, onClose }) {
 
     const startScanner = async () => {
       try {
+        const decoder = await createQrDecoder();
         stream = await navigator.mediaDevices.getUserMedia({
           audio: false,
           video: {
@@ -146,7 +189,6 @@ export default function RoomQrScannerModal({ open, onScan, onClose }) {
           return;
         }
 
-        const detector = new globalThis.BarcodeDetector({ formats: ['qr_code'] });
         setCameraReady(true);
         setStatus('Placez entièrement le QR code dans le cadre.');
 
@@ -155,7 +197,7 @@ export default function RoomQrScannerModal({ open, onScan, onClose }) {
           animationFrame = window.requestAnimationFrame(scanFrame);
           if (detectionPending
             || timestamp < rejectedUntil
-            || timestamp - lastScanAt < SCAN_INTERVAL_MS
+            || timestamp - lastScanAt < decoder.interval
             || video.readyState < 2) return;
 
           const frame = frameRef.current;
@@ -164,14 +206,11 @@ export default function RoomQrScannerModal({ open, onScan, onClose }) {
           detectionPending = true;
           lastScanAt = timestamp;
           try {
-            const detectedCodes = await detector.detect(scanCanvas);
+            const rawValue = await decoder.decode(scanCanvas);
             if (!active) return;
-            const qrCode = detectedCodes.find((code) => (
-              code.format === 'qr_code' && typeof code.rawValue === 'string'
-            ));
-            if (!qrCode) return;
+            if (!rawValue) return;
 
-            const accepted = onScan(qrCode.rawValue) !== false;
+            const accepted = onScan(rawValue) !== false;
             if (accepted) {
               active = false;
               stopCamera();
