@@ -803,7 +803,7 @@ const LEGAL_DOCUMENTS = {
   privacy: {
     eyebrow: "Vos données",
     title: "Politique de confidentialité",
-    updatedAt: "20 juillet 2026",
+    updatedAt: "22 juillet 2026",
     sections: [
       [
         "Données du compte",
@@ -816,6 +816,10 @@ const LEGAL_DOCUMENTS = {
       [
         "Données techniques et stockage local",
         "L'adresse IP est utilisée temporairement en mémoire pour limiter les requêtes abusives. Le navigateur reçoit uniquement un identifiant de session aléatoire dans un cookie HttpOnly, Secure et SameSite, inaccessible au JavaScript. Les jetons Supabase restent chiffrés côté serveur. Si vous choisissez « Rester connecté », le cookie peut persister jusqu'à sept jours ; sinon il disparaît à la fermeture du navigateur. Le navigateur peut conserver la préférence, le pseudonyme et le code de la dernière salle. Aucun jeton de reconnexion joueur distinct n'est utilisé.",
+      ],
+      [
+        "Caméra et QR codes",
+        "Si vous choisissez de scanner une invitation, le navigateur vous demande l'autorisation d'accéder à la caméra. Les images du flux sont analysées uniquement sur votre appareil, dans la zone du cadre affiché, afin d'extraire le code de la salle. Elles ne sont ni envoyées au serveur ni enregistrées. Seul le code de salle extrait est utilisé pour rejoindre la partie, et la caméra est arrêtée dès que le scan aboutit ou que vous fermez la fenêtre.",
       ],
       [
         "Finalités",

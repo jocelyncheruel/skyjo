@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { io } from 'socket.io-client';
-import { LogOut, MessageCircle, Send, Trash2, X } from 'lucide-react';
+import { LogOut, MessageCircle, QrCode, ScanLine, Send, Trash2, X } from 'lucide-react';
 import Card from './components/Card.jsx';
 import CardMotionLayer from './components/CardMotionLayer.jsx';
 import { GameGuideButton, GameGuideModal, GameTutorial } from './components/GameGuide.jsx';
@@ -11,12 +11,18 @@ import {
   PileButton,
 } from './components/GameTablePieces.jsx';
 import PlayerBoard from './components/PlayerBoard.jsx';
+import RoomInviteModal from './components/RoomInviteModal.jsx';
+import RoomQrScannerModal, { supportsNativeQrScanner } from './components/RoomQrScannerModal.jsx';
 import ProfileModal, { ProfileButton } from './ProfileModal.jsx';
-import { AuthLoadingView, AuthView, ConsentGate, LegalPage, ResetPasswordView } from './Auth.jsx';
+import { AuthView, ConsentGate, LegalPage, ResetPasswordView } from './Auth.jsx';
 import { useAuth } from './authContext.js';
 import { apiFetch, AUTH_REMEMBER_KEY, SERVER_URL } from './apiClient.js';
 import { connectErrorUserMessage } from './connectionError.js';
-import { extractRoomCodeFromInvite, ROOM_CODE_PATTERN } from './inviteCode.js';
+import {
+  createRoomInviteUrl,
+  extractRoomCodeFromInvite,
+  ROOM_CODE_PATTERN,
+} from './inviteCode.js';
 import { useAdaptiveBoardSizing } from './useAdaptiveBoardSizing.js';
 import {
   ACTION_ART_URLS,
@@ -52,13 +58,11 @@ async function serverErrorMessage(response, fallback) {
   }
 }
 
-function takeRoomInviteFromFragment() {
+function readRoomInviteFromFragment() {
   if (typeof window === 'undefined') return '';
   const params = new URLSearchParams(window.location.hash.replace(/^#/, ''));
   const candidate = params.get('room') || '';
-  const room = ROOM_CODE_PATTERN.test(candidate) ? candidate : '';
-  if (window.location.hash) window.history.replaceState({}, document.title, `${window.location.pathname}${window.location.search}`);
-  return room;
+  return ROOM_CODE_PATTERN.test(candidate) ? candidate : '';
 }
 const BOARD_COLUMNS = 4;
 const BOARD_ROWS = [
@@ -130,6 +134,38 @@ function SkyjoLogo({ label = 'Skyjo', connectionBadge = null }) {
   );
 }
 
+function RoomConnectionView({
+  connected = false,
+  error = '',
+  errorSerial = 0,
+  reconnectRoomId = '',
+  title = '',
+  description = '',
+  status = '',
+}) {
+  const reconnecting = Boolean(reconnectRoomId);
+  const resolvedTitle = title || (reconnecting ? 'Reconnexion' : 'Connexion à la salle');
+  const resolvedDescription = description || (
+    reconnecting ? `Retour dans la salle ${reconnectRoomId}...` : 'Ouverture de votre invitation...'
+  );
+  return (
+    <div className="sj-lobby">
+      <GameToast key={errorSerial} message={error} />
+      <section className="sj-lobby-card sj-reconnect-card">
+        <div className="sj-brand-mark">
+          <SkyjoLogo connectionBadge={<ConnectionBadge connected={connected} />} />
+        </div>
+        <div className="sj-reconnect-spinner" aria-hidden="true" />
+        <h1>{resolvedTitle}</h1>
+        <p className="sj-lobby-copy">{resolvedDescription}</p>
+        <p className="sj-reconnect-status">
+          {status || (connected ? 'Accès à la salle' : 'Connexion au serveur')}
+        </p>
+      </section>
+    </div>
+  );
+}
+
 function readGameValue(key) {
   return localStorage.getItem(key) || sessionStorage.getItem(key) || '';
 }
@@ -158,6 +194,7 @@ export default function App() {
 
 function SkyjoApp() {
   const { user, ready, recoveryMode, logout } = useAuth();
+  const [initialRoomInvite] = useState(() => readRoomInviteFromFragment());
   const [consent, setConsent] = useState(null);
   const [consentVersions, setConsentVersions] = useState(null);
   const [consentBusy, setConsentBusy] = useState(false);
@@ -198,10 +235,30 @@ function SkyjoApp() {
     return () => { cancelled = true; };
   }, [recoveryMode, user]);
 
-  if (!ready) return <AuthLoadingView />;
+  if (!ready) {
+    return initialRoomInvite
+      ? <RoomConnectionView status="Vérification de votre session" />
+      : (
+        <RoomConnectionView
+          title="Préparation du jeu"
+          description="Chargement de votre espace Skyjo..."
+          status="Vérification de votre session"
+        />
+      );
+  }
   if (recoveryMode) return <ResetPasswordView />;
   if (!user) return <AuthView />;
-  if (consent === null) return <AuthLoadingView label="Vérification du consentement" />;
+  if (consent === null) {
+    return initialRoomInvite
+      ? <RoomConnectionView status="Préparation de la salle" />
+      : (
+        <RoomConnectionView
+          title="Préparation du jeu"
+          description="Chargement de votre espace Skyjo..."
+          status="Finalisation de votre session"
+        />
+      );
+  }
   if (!consent) return <ConsentGate busy={consentBusy} error={consentError} onLogout={logout} onAccept={async () => {
     if (!consentVersions) {
       setConsentError('Impossible de vérifier la version des documents. Rechargez la page.');
@@ -229,33 +286,46 @@ function SkyjoApp() {
 function GameApp() {
   const { user, logout } = useAuth();
   const accountPlayerName = normalizePlayerNameInput(user?.playerName || user?.firstName || user?.displayName || '');
+  const [initialRoomInvite] = useState(() => readRoomInviteFromFragment());
   const [socket, setSocket] = useState(null);
   const [connected, setConnected] = useState(false);
-  const [roomId, setRoomId] = useState(() => readGameValue('sj-room-id'));
+  const [roomId, setRoomId] = useState(() => (
+    initialRoomInvite ? '' : readGameValue('sj-room-id')
+  ));
   const [playerName, setPlayerName] = useState(() => normalizePlayerNameInput(readGameValue('sj-player-name') || accountPlayerName));
   const [playerId, setPlayerId] = useState('');
   const [autoReconnectPending, setAutoReconnectPending] = useState(() => {
+    if (initialRoomInvite) return false;
     const savedRoomId = readGameValue('sj-room-id');
     return !!savedRoomId;
   });
-  const [joinRoomInput, setJoinRoomInput] = useState(() => takeRoomInviteFromFragment());
+  const [joinRoomInput, setJoinRoomInput] = useState(initialRoomInvite);
   const [nameInput, setNameInput] = useState(accountPlayerName || playerName);
   const [roomVisibilityInput, setRoomVisibilityInput] = useState('private');
   const [publicRooms, setPublicRooms] = useState([]);
   const [publicRoomsLoading, setPublicRoomsLoading] = useState(false);
   const [homePanel, setHomePanel] = useState('home');
   const [profileOpen, setProfileOpen] = useState(false);
+  const [qrScannerSupported, setQrScannerSupported] = useState(false);
+  const [qrScannerOpen, setQrScannerOpen] = useState(false);
   const [state, setState] = useState(null);
   const [chatMessages, setChatMessages] = useState([]);
   const [chatHasMore, setChatHasMore] = useState(false);
   const [chatBefore, setChatBefore] = useState(null);
   const [pendingReconnectState, setPendingReconnectState] = useState(null);
+  const [inviteJoinPending, setInviteJoinPending] = useState(() => Boolean(
+    initialRoomInvite && normalizePlayerNameInput(accountPlayerName || playerName),
+  ));
   const [error, setError] = useState('');
   const [errorSerial, setErrorSerial] = useState(0);
   const autoReconnectPendingRef = useRef(autoReconnectPending);
   const autoReconnectStartedAtRef = useRef(0);
   const errorTimerRef = useRef(null);
   const publicRoomsRequestRef = useRef(0);
+  const inviteJoinAttemptedRef = useRef(false);
+  const inviteJoinPendingRef = useRef(inviteJoinPending);
+  const initialInvitePlayerNameRef = useRef(normalizePlayerNameInput(accountPlayerName || playerName));
+  const closeQrScanner = useCallback(() => setQrScannerOpen(false), []);
 
   const clearError = useCallback(() => {
     if (errorTimerRef.current) {
@@ -312,6 +382,34 @@ function GameApp() {
   }, []);
 
   useEffect(() => {
+    let active = true;
+    supportsNativeQrScanner().then((supported) => {
+      if (active) setQrScannerSupported(supported);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!initialRoomInvite || !window.location.hash) return;
+    window.history.replaceState(
+      {},
+      document.title,
+      `${window.location.pathname}${window.location.search}`,
+    );
+  }, [initialRoomInvite]);
+
+  useEffect(() => {
+    const handleRoomInviteNavigation = () => {
+      const invitedRoomId = extractRoomCodeFromInvite(window.location.hash);
+      if (invitedRoomId) window.location.reload();
+    };
+    window.addEventListener('hashchange', handleRoomInviteNavigation);
+    return () => window.removeEventListener('hashchange', handleRoomInviteNavigation);
+  }, []);
+
+  useEffect(() => {
     autoReconnectPendingRef.current = autoReconnectPending;
     if (autoReconnectPending && !autoReconnectStartedAtRef.current) {
       autoReconnectStartedAtRef.current = Date.now();
@@ -340,7 +438,7 @@ function GameApp() {
   }, [pendingReconnectState]);
 
   useEffect(() => {
-    const savedRoomId = readGameValue('sj-room-id');
+    const savedRoomId = initialRoomInvite ? '' : readGameValue('sj-room-id');
     const savedPlayerName = normalizePlayerNameInput(readGameValue('sj-player-name'));
     let nextSocket;
     let reconnectTimeout;
@@ -391,6 +489,10 @@ function GameApp() {
       const message = requestId ? `${baseMessage} Référence : ${requestId}` : baseMessage;
       const code = typeof payload === 'object' ? payload?.code : '';
       showError(message);
+      if (inviteJoinPendingRef.current && inviteJoinAttemptedRef.current) {
+        inviteJoinPendingRef.current = false;
+        setInviteJoinPending(false);
+      }
       if (code === 'invalid_session') {
         void logout();
         return;
@@ -416,6 +518,10 @@ function GameApp() {
       };
     });
     nextSocket.on(SOCKET_EVENTS.STATE, (nextState) => {
+      if (inviteJoinPendingRef.current) {
+        inviteJoinPendingRef.current = false;
+        setInviteJoinPending(false);
+      }
       if (autoReconnectPendingRef.current) {
         setPendingReconnectState(nextState);
       } else {
@@ -463,7 +569,7 @@ function GameApp() {
       if (reconnectTimeout) window.clearTimeout(reconnectTimeout);
       nextSocket?.disconnect();
     };
-  }, [logout, showError]);
+  }, [initialRoomInvite, logout, showError]);
 
   async function createRoom() {
     if (!socket || !connected) return;
@@ -491,7 +597,7 @@ function GameApp() {
     }
   }
 
-  function joinRoomById(targetRoomId) {
+  const joinRoomById = useCallback((targetRoomId) => {
     if (!socket || !connected) return;
     const name = normalizePlayerNameInput(nameInput);
     if (!name) {
@@ -509,7 +615,7 @@ function GameApp() {
     setPlayerName(name);
     saveGameValue('sj-player-name', name);
     emitSocket(socket, SOCKET_EVENTS.JOIN_ROOM, { roomId: normalizedRoomId, playerName: name });
-  }
+  }, [connected, nameInput, showError, socket]);
 
   function joinRoom() {
     joinRoomById(joinRoomInput);
@@ -526,6 +632,35 @@ function GameApp() {
     event.preventDefault();
     setJoinRoomInput(roomCode);
   }
+
+  const handleRoomQrScan = useCallback((scannedValue) => {
+    const roomCode = extractRoomCodeFromInvite(scannedValue);
+    if (!roomCode) return false;
+    setJoinRoomInput(roomCode);
+    setQrScannerOpen(false);
+    joinRoomById(roomCode);
+    return true;
+  }, [joinRoomById]);
+
+  useEffect(() => {
+    const invitePlayerName = initialInvitePlayerNameRef.current;
+    if (!initialRoomInvite
+      || !invitePlayerName
+      || inviteJoinAttemptedRef.current
+      || !socket
+      || !connected
+      || state
+      || autoReconnectPending) return;
+
+    inviteJoinAttemptedRef.current = true;
+    clearError();
+    setPlayerName(invitePlayerName);
+    saveGameValue('sj-player-name', invitePlayerName);
+    emitSocket(socket, SOCKET_EVENTS.JOIN_ROOM, {
+      roomId: initialRoomInvite,
+      playerName: invitePlayerName,
+    });
+  }, [autoReconnectPending, clearError, connected, initialRoomInvite, socket, state]);
 
   function openPublicRoomsPanel() {
     const name = normalizePlayerNameInput(nameInput);
@@ -560,22 +695,15 @@ function GameApp() {
   }
 
   if (!state) {
-    if (autoReconnectPending && roomId) {
+    if ((autoReconnectPending && roomId) || inviteJoinPending) {
       return (
-        <div className="sj-lobby">
-          <GameToast key={errorSerial} message={error} />
-          <section className="sj-lobby-card sj-reconnect-card sj-pop-in">
-            <div className="sj-brand-mark">
-              <SkyjoLogo connectionBadge={<ConnectionBadge connected={connected} />} />
-            </div>
-            <div className="sj-reconnect-spinner" aria-hidden="true" />
-            <h1>Reconnexion</h1>
-            <p className="sj-lobby-copy">Retour dans la salle {roomId}...</p>
-            <p className="sj-reconnect-status">
-              {connected ? 'Synchronisation de la partie' : 'Connexion au serveur'}
-            </p>
-          </section>
-        </div>
+        <RoomConnectionView
+          connected={connected}
+          error={error}
+          errorSerial={errorSerial}
+          reconnectRoomId={inviteJoinPending ? '' : roomId}
+          status={connected && !inviteJoinPending ? 'Synchronisation de la partie' : ''}
+        />
       );
     }
 
@@ -710,17 +838,30 @@ function GameApp() {
               <div className="sj-divider"><span>ou</span></div>
 
               <label htmlFor="room-code">Code de la salle à 6 chiffres</label>
-              <input
-                id="room-code"
-                value={joinRoomInput}
-                onChange={(event) => setJoinRoomInput(event.target.value.replace(/[^0-9]/g, '').slice(0, 6))}
-                onPaste={handleRoomCodePaste}
-                placeholder="123456"
-                inputMode="numeric"
-                pattern="[0-9]{6}"
-                maxLength={6}
-                autoComplete="off"
-              />
+              <div className={`sj-room-code-field ${qrScannerSupported ? 'sj-room-code-field-scannable' : ''}`}>
+                <input
+                  id="room-code"
+                  value={joinRoomInput}
+                  onChange={(event) => setJoinRoomInput(event.target.value.replace(/[^0-9]/g, '').slice(0, 6))}
+                  onPaste={handleRoomCodePaste}
+                  placeholder="123456"
+                  inputMode="numeric"
+                  pattern="[0-9]{6}"
+                  maxLength={6}
+                  autoComplete="off"
+                />
+                {qrScannerSupported && (
+                  <button
+                    type="button"
+                    className="sj-room-scan-trigger"
+                    aria-label="Scanner le QR code d’une salle"
+                    title="Scanner une invitation"
+                    onClick={() => setQrScannerOpen(true)}
+                  >
+                    <ScanLine aria-hidden="true" size={21} />
+                  </button>
+                )}
+              </div>
               <button className="sj-btn" disabled={!canJoinRoom} onClick={joinRoom}>
                 Rejoindre
               </button>
@@ -744,6 +885,11 @@ function GameApp() {
           setPlayerName(nextPlayerName);
           saveGameValue('sj-player-name', nextPlayerName);
         }}
+      />
+      <RoomQrScannerModal
+        open={qrScannerOpen}
+        onScan={handleRoomQrScan}
+        onClose={closeQrScanner}
       />
       </>
     );
@@ -1881,6 +2027,7 @@ function GameScreen({
   chatMessages = [], chatHasMore = false, onLoadOlderChat,
 }) {
   const [copied, setCopied] = useState(false);
+  const [inviteModalOpen, setInviteModalOpen] = useState(false);
   const [leaveModalOpen, setLeaveModalOpen] = useState(false);
   const [disconnectedPlayersModalOpen, setDisconnectedPlayersModalOpen] = useState(false);
   const [gameGuideOpen, setGameGuideOpen] = useState(false);
@@ -1903,10 +2050,14 @@ function GameScreen({
   const [roundRevealEndsAt, setRoundRevealEndsAt] = useState(0);
   const initializedChatRoomRef = useRef('');
   const closeChatModal = useCallback(() => setChatModalOpen(false), []);
+  const closeInviteModal = useCallback(() => setInviteModalOpen(false), []);
   const handleCardMotionBatch = useCallback((endsAt) => {
     if (!Number.isFinite(endsAt)) return;
     setCardMotionEndsAt((current) => Math.max(current, endsAt));
   }, []);
+  const inviteUrl = typeof window === 'undefined'
+    ? ''
+    : createRoomInviteUrl(roomId, window.location.origin);
 
   const cardMoves = state.cardMoves?.length > 0
     ? state.cardMoves
@@ -2332,7 +2483,7 @@ function GameScreen({
   }, [chatModalOpen, latestChatMessageId]);
 
   async function copyRoomCode() {
-    const text = roomId ? `${window.location.origin}/#room=${encodeURIComponent(roomId)}` : '';
+    const text = inviteUrl;
     if (!text) return;
 
     let copiedSuccessfully = false;
@@ -2381,6 +2532,35 @@ function GameScreen({
 
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1400);
+  }
+
+  async function shareRoomInvite() {
+    if (!inviteUrl) return;
+    const shareData = {
+      title: 'Invitation Skyjo',
+      text: `Rejoignez ma salle Skyjo ${roomId}.`,
+      url: inviteUrl,
+    };
+
+    let canUseNativeShare = typeof navigator.share === 'function';
+    if (canUseNativeShare && typeof navigator.canShare === 'function') {
+      try {
+        canUseNativeShare = navigator.canShare(shareData);
+      } catch {
+        canUseNativeShare = false;
+      }
+    }
+
+    if (canUseNativeShare) {
+      try {
+        await navigator.share(shareData);
+        return;
+      } catch (shareError) {
+        if (shareError?.name === 'AbortError') return;
+      }
+    }
+
+    await copyRoomCode();
   }
 
   function handleBoardSlotClick(playerId, slotIndex) {
@@ -2724,12 +2904,23 @@ function GameScreen({
             <div className="sj-room-head">
               <span>Salle</span>
               <span className="sj-room-copy-wrap">
-                <button type="button" className={`sj-room-copy ${copied ? 'sj-room-copy-copied' : ''}`} onClick={copyRoomCode}>{roomId}</button>
-                {copied && (
-                  <span className="sj-copy-toast" role="status" aria-live="polite" aria-label="Code copié">
-                    ✓
-                  </span>
-                )}
+                <span className="sj-room-code-copy">
+                  <button type="button" className={`sj-room-copy ${copied ? 'sj-room-copy-copied' : ''}`} onClick={copyRoomCode}>{roomId}</button>
+                  {copied && (
+                    <span className="sj-copy-toast" role="status" aria-live="polite" aria-label="Lien d’invitation copié">
+                      ✓
+                    </span>
+                  )}
+                </span>
+                <button
+                  type="button"
+                  className="sj-room-qr-trigger"
+                  aria-label="Afficher le QR code d’invitation"
+                  title="Afficher le QR code d’invitation"
+                  onClick={() => setInviteModalOpen(true)}
+                >
+                  <QrCode aria-hidden="true" size={20} />
+                </button>
               </span>
             </div>
             <p className={`sj-room-visibility-badge ${state.roomVisibility === 'public' ? 'sj-room-visibility-badge-public' : ''}`}>
@@ -2807,6 +2998,15 @@ function GameScreen({
         {disconnectedPlayersModal}
         {gameGuideModal}
         {gameTutorial}
+        <RoomInviteModal
+          open={inviteModalOpen}
+          roomId={roomId}
+          inviteUrl={inviteUrl}
+          copied={copied}
+          onCopy={copyRoomCode}
+          onShare={shareRoomInvite}
+          onClose={closeInviteModal}
+        />
       </>
     );
   }
