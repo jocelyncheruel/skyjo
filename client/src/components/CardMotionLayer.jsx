@@ -290,6 +290,7 @@ function addDrawThreeDiscards(motions, seen, cardMoves) {
     ['replacement', 'reveal'].includes(cardMove.type)
     && Array.isArray(cardMove.discardedCards)
     && cardMove.discardedCards.length > 0
+    && cardMove.animateDiscardedCards !== false
   ));
 
   for (const cardMove of resolutionMoves) {
@@ -384,14 +385,15 @@ function buildCardMotions(previousState, nextState) {
   return motions;
 }
 
-function findAnchor(anchor) {
-  return [...document.querySelectorAll('[data-sj-card-anchor]')]
+function findAnchor(anchor, anchorRoot) {
+  const root = anchorRoot || document;
+  return [...root.querySelectorAll('[data-sj-card-anchor]')]
     .find((element) => element.dataset.sjCardAnchor === anchor) || null;
 }
 
-function measuredFlight(specification, sequence) {
-  const source = findAnchor(specification.from);
-  const destination = findAnchor(specification.to);
+function measuredFlight(specification, sequence, anchorRoot) {
+  const source = findAnchor(specification.from, anchorRoot);
+  const destination = findAnchor(specification.to, anchorRoot);
   if (!source || !destination) return null;
 
   const from = source.getBoundingClientRect();
@@ -455,7 +457,7 @@ function prepareDestinationSnapshots(flights) {
   return flightsByDestination;
 }
 
-export default function CardMotionLayer({ state, enabled, onMotionBatch }) {
+export default function CardMotionLayer({ state, enabled, onMotionBatch, anchorRootRef, layerClassName = '' }) {
   const previousStateRef = useRef(state);
   const sequenceRef = useRef(0);
   const timersRef = useRef(new Set());
@@ -489,6 +491,7 @@ export default function CardMotionLayer({ state, enabled, onMotionBatch }) {
       .map((specification, index) => measuredFlight(
         specification,
         `${sequenceRef.current}-${index}`,
+        anchorRootRef?.current,
       ))
       .filter(Boolean);
     const incomingByHandoff = new Map(
@@ -570,12 +573,12 @@ export default function CardMotionLayer({ state, enabled, onMotionBatch }) {
       }
     }, lifetime);
     timersRef.current.add(timer);
-  }, [enabled, onMotionBatch, state]);
+  }, [anchorRootRef, enabled, onMotionBatch, state]);
 
   if (!flights.length) return null;
 
   return createPortal(
-    <div className="sj-card-motion-layer" aria-hidden="true">
+    <div className={`sj-card-motion-layer ${layerClassName}`.trim()} aria-hidden="true">
       {flights.map((flight) => (
         <React.Fragment key={flight.id}>
           {flight.targetCard && (

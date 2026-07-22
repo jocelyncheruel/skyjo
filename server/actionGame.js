@@ -232,18 +232,31 @@ function giveActionCard(state, playerId, source, marketIndex) {
   return card;
 }
 
+function grantAutomaticStarAction(state, playerId) {
+  if (!prepareActionClaimChoices(state)) {
+    log(state, 'Aucune carte Action n’est disponible : le bonus Étoile est ignoré.');
+    return false;
+  }
+
+  const source = availableActionDeckCount(state) > 0 ? 'deck' : 'market';
+  giveActionCard(state, playerId, source, source === 'market' ? 0 : undefined);
+  log(state, `${state.playersById[playerId].name} reçoit automatiquement une carte Action grâce à son Étoile.`);
+  return true;
+}
+
+function resolveAutomaticReveals(state, revealed) {
+  if (revealed.length === 0) return;
+  recordCardMove(state, { type: 'roundReveal', cards: revealed });
+  for (const { playerId, card } of revealed) {
+    if (isStar(card)) grantAutomaticStarAction(state, playerId);
+  }
+}
+
 function resolveFinalTurnStarClaim(state) {
   const playerId = state.pendingStarClaim?.playerId;
   if (!playerId || !state.roundEnderId) return false;
 
-  if (!prepareActionClaimChoices(state)) {
-    log(state, 'Aucune carte Action n’est disponible : le bonus Étoile est ignoré.');
-  } else {
-    const source = availableActionDeckCount(state) > 0 ? 'deck' : 'market';
-    giveActionCard(state, playerId, source, source === 'market' ? 0 : undefined);
-    log(state, `${state.playersById[playerId].name} reçoit automatiquement une carte Action grâce à son Étoile.`);
-  }
-
+  grantAutomaticStarAction(state, playerId);
   resumeAfterStarClaim(state);
   return true;
 }
@@ -611,9 +624,10 @@ function advanceTurn(state) {
     return;
   }
   const revealedBeforeRoundEnd = isFinalTurn ? revealRemainingCards(player) : [];
+  resolveAutomaticReveals(state, revealedBeforeRoundEnd);
   const next = (state.turnIndex + 1) % state.order.length;
   if (state.roundEnderId && state.order[next] === state.roundEnderId) {
-    endActionRound(state, revealedBeforeRoundEnd);
+    endActionRound(state);
     return;
   }
   state.turnIndex = next;
@@ -1510,12 +1524,12 @@ function completeActionRoundEnd(state) {
   }
 }
 
-function endActionRound(state, revealedBeforeRoundEnd = []) {
-  const revealed = [...revealedBeforeRoundEnd];
+function endActionRound(state) {
+  const revealed = [];
   for (const id of state.order) {
     revealed.push(...revealRemainingCards(state.playersById[id]));
   }
-  if (revealed.length > 0) recordCardMove(state, { type: 'roundReveal', cards: revealed });
+  resolveAutomaticReveals(state, revealed);
   continueActionRoundEnd(state, [...state.order]);
 }
 

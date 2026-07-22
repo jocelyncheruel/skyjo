@@ -3,6 +3,13 @@ import { io } from 'socket.io-client';
 import { LogOut, MessageCircle, Send, Trash2, X } from 'lucide-react';
 import Card from './components/Card.jsx';
 import CardMotionLayer from './components/CardMotionLayer.jsx';
+import { GameGuideButton, GameGuideModal, GameTutorial } from './components/GameGuide.jsx';
+import {
+  ActionDrawModal,
+  ActionHandDock,
+  ActionTile,
+  PileButton,
+} from './components/GameTablePieces.jsx';
 import PlayerBoard from './components/PlayerBoard.jsx';
 import ProfileModal, { ProfileButton } from './ProfileModal.jsx';
 import { AuthLoadingView, AuthView, ConsentGate, LegalPage, ResetPasswordView } from './Auth.jsx';
@@ -11,6 +18,12 @@ import { apiFetch, AUTH_REMEMBER_KEY, SERVER_URL } from './apiClient.js';
 import { connectErrorUserMessage } from './connectionError.js';
 import { extractRoomCodeFromInvite, ROOM_CODE_PATTERN } from './inviteCode.js';
 import { useAdaptiveBoardSizing } from './useAdaptiveBoardSizing.js';
+import {
+  ACTION_ART_URLS,
+  ACTION_LABELS,
+  completeGameTutorial,
+  hasCompletedGameTutorial,
+} from './gameGuide.js';
 import {
   SOCKET_EVENTS,
   SOCKET_PROTOCOL_VERSION,
@@ -59,30 +72,6 @@ const BOARD_COLUMN_GROUPS = [
   [2, 6, 10],
   [3, 7, 11],
 ];
-const ACTION_LABELS = {
-  removeEach: 'Retirer une carte à chaque joueur',
-  swapOwn: 'Échanger deux de vos cartes',
-  extraTurns: 'Jouer deux tours supplémentaires',
-  drawThree: 'Piocher trois cartes',
-  peekLine: 'Regarder une ligne ou une colonne',
-  defense: 'Défense et tour supplémentaire',
-  playDiscard: 'Jouer une Action défaussée',
-  stealAction: 'Voler et jouer une Action',
-  swapPlayers: 'Échanger des cartes entre joueurs',
-};
-
-const ACTION_ART_URLS = {
-  removeEach: '/action-cards/remove-each.jpg',
-  swapOwn: '/action-cards/swap-own.jpg',
-  extraTurns: '/action-cards/extra-turns.jpg',
-  drawThree: '/action-cards/draw-three.jpg',
-  peekLine: '/action-cards/peek-line.jpg',
-  defense: '/action-cards/defense.jpg',
-  playDiscard: '/action-cards/play-discard.jpg',
-  stealAction: '/action-cards/steal-action.jpg',
-  swapPlayers: '/action-cards/swap-players.jpg',
-};
-
 const SHOW_ALL_ACTION_CARDS_PREVIEW = false;
 const MIN_RECONNECT_SCREEN_MS = 1000;
 const CHAT_GROUP_WINDOW_MS = 2 * 60 * 1000;
@@ -1421,103 +1410,6 @@ function PeekResultModal({ peek, targetPlayer, isOwnBoard, onClose }) {
   );
 }
 
-function ActionDrawModal({
-  open,
-  market = [],
-  canDrawDeck = true,
-  onSelect,
-  onClose,
-  title = 'Choisir une carte Action',
-}) {
-  const modalRef = useRef(null);
-
-  useEffect(() => {
-    if (!open) return undefined;
-    modalRef.current?.focus({ preventScroll: true });
-    return undefined;
-  }, [open]);
-
-  if (!open) return null;
-
-  return (
-    <div className="sj-modal-overlay sj-fade-in">
-      <section
-        ref={modalRef}
-        className="sj-action-draw-modal sj-pop-in"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="action-draw-title"
-        tabIndex={-1}
-      >
-        <div className="sj-action-draw-modal-head">
-          <div>
-            <h2 id="action-draw-title">{title}</h2>
-          </div>
-          {onClose && (
-            <button
-              type="button"
-              className="sj-action-hand-modal-close"
-              aria-label="Fermer la pioche Action"
-              onClick={onClose}
-            >
-              ×
-            </button>
-          )}
-        </div>
-        <div className="sj-action-hand-modal-scroll">
-          <div className="sj-action-hand-modal-grid sj-action-draw-modal-grid" aria-label="Cartes Action disponibles">
-            {canDrawDeck && (
-              <div className="sj-action-hand-modal-item">
-                <button
-                  type="button"
-                  className="sj-action-deck"
-                  onClick={() => onSelect({ source: 'deck' })}
-                >
-                  <span>Face cachée</span>
-                  <strong>Pioche Action</strong>
-                </button>
-              </div>
-            )}
-            {market.map((card, index) => (
-              <div key={card.id} className="sj-action-hand-modal-item">
-                <ActionTile
-                  card={card}
-                  onClick={() => onSelect({ source: 'market', marketIndex: index })}
-                />
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-    </div>
-  );
-}
-
-function ActionHandDock({ cards, onClick }) {
-  const visibleCards = cards.slice(0, 7);
-
-  if (cards.length === 0) return null;
-
-  return (
-    <button
-      type="button"
-      className={`sj-action-hand-dock sj-action-hand-dock-${visibleCards.length}`}
-      aria-label={`Ouvrir vos ${cards.length} carte${cards.length > 1 ? 's' : ''} Action`}
-      aria-haspopup="dialog"
-      onClick={onClick}
-    >
-      {visibleCards.map((card, index) => (
-        <span
-          key={card.id}
-          className={`sj-action-hand-tab sj-action-hand-tab-${index}`}
-          aria-hidden="true"
-        />
-      ))}
-      <strong className="sj-action-hand-count">{cards.length}</strong>
-    </button>
-  );
-}
-
 function ActionHandModal({
   open,
   cards,
@@ -1970,47 +1862,6 @@ function PlayDiscardActionModal({
   );
 }
 
-function ActionTile({ card, onClick, disabled = false, compact = false, interactive = true }) {
-  const artType = Object.hasOwn(ACTION_ART_URLS, card.type) ? card.type : 'drawThree';
-  const className = `sj-action-card ${compact ? 'sj-action-card-compact' : ''} ${!interactive ? 'sj-action-card-static' : ''}`.trim();
-  const content = (
-    <>
-      <span
-        className={`sj-action-card-art sj-action-art-${artType}`}
-        aria-hidden="true"
-      />
-      <span className="sj-action-card-copy">
-        <strong>{ACTION_LABELS[card.type] || 'Carte Action'}</strong>
-      </span>
-    </>
-  );
-
-  if (!interactive) {
-    return (
-      <div
-        className={className}
-        role="img"
-        aria-label={ACTION_LABELS[card.type] || 'Carte Action'}
-      >
-        {content}
-      </div>
-    );
-  }
-
-  return (
-    <button
-      type="button"
-      className={className}
-      disabled={disabled}
-      onClick={onClick}
-      aria-label={ACTION_LABELS[card.type] || 'Carte Action'}
-      title={disabled ? card.unavailableReason : undefined}
-    >
-      {content}
-    </button>
-  );
-}
-
 const CARD_REVEAL_SETTLE_MS = 380;
 const CARD_MOTION_SETTLE_BUFFER_MS = 40;
 
@@ -2032,6 +1883,8 @@ function GameScreen({
   const [copied, setCopied] = useState(false);
   const [leaveModalOpen, setLeaveModalOpen] = useState(false);
   const [disconnectedPlayersModalOpen, setDisconnectedPlayersModalOpen] = useState(false);
+  const [gameGuideOpen, setGameGuideOpen] = useState(false);
+  const [tutorialStep, setTutorialStep] = useState(null);
   const [actionHandModalOpen, setActionHandModalOpen] = useState(false);
   const [viewedActionPlayerId, setViewedActionPlayerId] = useState(null);
   const [chatModalOpen, setChatModalOpen] = useState(false);
@@ -2043,6 +1896,7 @@ function GameScreen({
   const [visibleLastTurnNoticeId, setVisibleLastTurnNoticeId] = useState(null);
   const [roundCountdown, setRoundCountdown] = useState(10);
   const [starClaimModalReady, setStarClaimModalReady] = useState(false);
+  const tutorialCheckedRef = useRef(false);
   const [groupChoiceModalReadyId, setGroupChoiceModalReadyId] = useState(null);
   const [cardMotionEndsAt, setCardMotionEndsAt] = useState(0);
   const [visibleRoundRevealId, setVisibleRoundRevealId] = useState(null);
@@ -2281,6 +2135,12 @@ function GameScreen({
     layoutReady,
     layoutClassName,
   } = useAdaptiveBoardSizing(state.players.length, layoutKey, isActionMode);
+
+  useEffect(() => {
+    if (!['initialFlip', 'playing'].includes(state.phase) || tutorialCheckedRef.current) return;
+    tutorialCheckedRef.current = true;
+    if (!hasCompletedGameTutorial()) setTutorialStep(0);
+  }, [state.phase]);
 
   useEffect(() => {
     if (!actionPlayId) {
@@ -2825,6 +2685,34 @@ function GameScreen({
       onClose={() => setDismissedPeekId(activePeek?.id || null)}
     />
   );
+  const startTutorial = () => {
+    setGameGuideOpen(false);
+    setTutorialStep(0);
+  };
+  const finishTutorial = () => {
+    completeGameTutorial();
+    setTutorialStep(null);
+  };
+  const closeTutorialToGuide = () => {
+    setTutorialStep(null);
+    setGameGuideOpen(true);
+  };
+  const gameGuideModal = (
+    <GameGuideModal
+      open={gameGuideOpen}
+      gameMode={state.gameMode}
+      onClose={() => setGameGuideOpen(false)}
+      onStartTutorial={startTutorial}
+    />
+  );
+  const gameTutorial = (
+    <GameTutorial
+      open={tutorialStep !== null}
+      gameMode={state.gameMode}
+      onClose={closeTutorialToGuide}
+      onFinish={finishTutorial}
+    />
+  );
 
   if (state.phase === 'lobby') {
     return (
@@ -2891,28 +2779,34 @@ function GameScreen({
                 ))}
               </div>
             </section>
-            {isCreator && state.players.length >= 2 ? (
-              <button
-                className="sj-btn sj-btn-primary"
-                onClick={() => {
-                  if (disconnectedPlayers.length > 0) {
-                    setDisconnectedPlayersModalOpen(true);
-                    return;
-                  }
-                  emitSocket(socket, SOCKET_EVENTS.START_GAME);
-                }}
-              >
-                Lancer la partie
-              </button>
-            ) : state.players.length < 2 ? (
+            <div className="sj-lobby-start-actions">
+              <GameGuideButton onClick={() => setGameGuideOpen(true)} />
+              {isCreator && state.players.length >= 2 && (
+                <button
+                  className="sj-btn sj-btn-primary"
+                  onClick={() => {
+                    if (disconnectedPlayers.length > 0) {
+                      setDisconnectedPlayersModalOpen(true);
+                      return;
+                    }
+                    emitSocket(socket, SOCKET_EVENTS.START_GAME);
+                  }}
+                >
+                  Lancer la partie
+                </button>
+              )}
+            </div>
+            {state.players.length < 2 ? (
               <p className="sj-hint">En attente d'au moins 2 joueurs</p>
-            ) : (
+            ) : !isCreator && (
               <p className="sj-hint">En attente de lancement par le créateur</p>
             )}
           </section>
         </div>
         {leaveModal}
         {disconnectedPlayersModal}
+        {gameGuideModal}
+        {gameTutorial}
       </>
     );
   }
@@ -3090,34 +2984,9 @@ function GameScreen({
       {peekResultModal}
       {playerActionCardsModal}
       {actionHandModal}
+      {gameGuideModal}
+      {gameTutorial}
     </div>
-  );
-}
-
-function PileButton({ ariaLabel, enabled, active, tone = 'default', drawnCard, drawnFrom, drawnPulse = false, onClick, children }) {
-  return (
-    <button
-      type="button"
-      className={`sj-pile-button sj-pile-${tone} ${active ? 'sj-pile-active' : ''} ${drawnCard ? 'sj-pile-has-drawn' : ''}`}
-      disabled={!enabled}
-      onClick={onClick}
-      aria-label={ariaLabel}
-    >
-      {children}
-      {drawnCard && (
-        <span className={`sj-drawn-card-overlay sj-drawn-from-${drawnFrom}`}>
-          <Card
-            value={drawnCard.value}
-            kind={drawnCard.kind}
-            faceUp={!drawnCard.hidden}
-            size="pile"
-            pulse={drawnPulse && drawnFrom === 'deck'}
-            tone={tone === 'danger' ? 'danger' : undefined}
-            animateFlip={drawnFrom === 'deck' && !drawnCard.hidden}
-          />
-        </span>
-      )}
-    </button>
   );
 }
 

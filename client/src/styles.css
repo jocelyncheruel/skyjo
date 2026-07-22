@@ -1639,15 +1639,15 @@ input:focus {
 }
 
 .sj-player-list li {
-  height: 50px;
-  min-height: 50px;
+  height: 44px;
+  min-height: 44px;
   display: flex;
   align-items: center;
   gap: 8px;
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid var(--line);
   border-radius: 8px;
-  padding: 8px 10px;
+  padding: 5px 10px;
 }
 
 .sj-player-list li.sj-player-list-current {
@@ -3590,7 +3590,7 @@ button.sj-action-count-badge:focus-visible {
   }
 
   .sj-profile-statistics-grid {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     gap: 12px;
   }
 
@@ -6825,4 +6825,1300 @@ select:focus {
       max(1.25rem, env(safe-area-inset-bottom))
       max(1.1rem, env(safe-area-inset-left));
   }
+}
+
+.sj-tutorial-overlay {
+  z-index: 140;
+  padding:
+    max(12px, env(safe-area-inset-top))
+    max(12px, env(safe-area-inset-right))
+    max(12px, env(safe-area-inset-bottom))
+    max(12px, env(safe-area-inset-left));
+  background:
+    radial-gradient(circle at 50% 20%, rgba(63, 170, 201, 0.2), transparent 38%),
+    rgba(5, 9, 15, 0.9);
+  backdrop-filter: blur(10px);
+}
+
+.sj-card-motion-layer-tutorial {
+  z-index: 170;
+}
+
+.sj-tutorial-game {
+  --sj-tutorial-head-offset: clamp(8px, 1.4dvh, 14px);
+  --sj-tutorial-head-zone: 164px;
+  position: relative;
+  width: min(1180px, 100%);
+  height: calc(100dvh - max(24px, env(safe-area-inset-top) + env(safe-area-inset-bottom)));
+  max-height: calc(100dvh - max(24px, env(safe-area-inset-top) + env(safe-area-inset-bottom)));
+  min-height: 0;
+  display: grid;
+  grid-template-rows: var(--sj-tutorial-head-zone) minmax(0, 1fr);
+  overflow: hidden;
+  border: 1px solid rgba(112, 208, 224, 0.34);
+  border-radius: 22px;
+  background:
+    radial-gradient(circle at 35% 72%, rgba(83, 47, 87, 0.34), transparent 42%),
+    linear-gradient(180deg, rgba(17, 37, 49, 0.99), rgba(12, 18, 29, 0.99));
+  box-shadow: 0 34px 100px rgba(0, 0, 0, 0.68);
+}
+
+.sj-tutorial-head {
+  grid-column: 1;
+  grid-row: 1;
+  align-self: start;
+  min-width: 0;
+  display: grid;
+  gap: 0;
+  padding: 0;
+  transform: translateY(var(--sj-tutorial-head-offset));
+}
+
+.sj-tutorial-copy {
+  width: 100%;
+  min-height: 0;
+  padding: 18px 138px 15px 22px;
+  text-align: left;
+}
+
+.sj-tutorial-copy > span {
+  color: #82d6e6;
+  font-size: 10px;
+  font-weight: 950;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+
+.sj-tutorial-copy h2 {
+  margin: 4px 0 6px;
+  color: #fff;
+  font-size: clamp(21px, 3vw, 29px);
+  line-height: 1.08;
+}
+
+.sj-tutorial-copy p {
+  max-width: 720px;
+  margin: 0;
+  color: #b8c8d1;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.sj-tutorial-head-actions {
+  position: absolute;
+  top: 18px;
+  right: 22px;
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 7px;
+  transform: translateY(var(--sj-tutorial-head-offset));
+}
+
+.sj-tutorial-restart,
+.sj-tutorial-skip {
+  position: static;
+  min-height: 34px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #c3d0d7;
+  padding: 7px 11px;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.sj-tutorial-restart {
+  width: 34px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+}
+
+.sj-tutorial-restart:hover,
+.sj-tutorial-skip:hover {
+  border-color: rgba(130, 214, 230, 0.4);
+  background: rgba(130, 214, 230, 0.1);
+  color: #fff;
+}
+
+.sj-tutorial-progress {
+  width: auto;
+  height: auto;
+  min-height: 20px;
+  display: grid;
+  grid-template-columns: auto minmax(120px, 1fr);
+  align-items: center;
+  gap: 12px;
+  margin: 0;
+  padding: 0 22px 10px;
+}
+
+.sj-tutorial-progress-label {
+  margin: 0;
+  color: #8299a4;
+  font-size: 11px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.sj-tutorial-progress-label strong {
+  color: #d9f6fa;
+  font-size: inherit;
+  font-weight: 850;
+  font-variant-numeric: tabular-nums;
+}
+
+.sj-tutorial-progress progress {
+  width: 100%;
+  height: 6px;
+  display: block;
+  overflow: hidden;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  padding: 0;
+  appearance: none;
+}
+
+.sj-tutorial-progress progress::-webkit-progress-bar {
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.sj-tutorial-progress progress::-webkit-progress-value {
+  border-radius: 999px;
+  background: linear-gradient(90deg, #4abbd0, #78d09a);
+  box-shadow: 0 0 8px rgba(74, 187, 208, 0.28);
+  transition: inline-size 0.28s ease;
+}
+
+.sj-tutorial-progress progress::-moz-progress-bar {
+  border-radius: 999px;
+  background: linear-gradient(90deg, #4abbd0, #78d09a);
+  box-shadow: 0 0 8px rgba(74, 187, 208, 0.28);
+  transition: width 0.28s ease;
+}
+
+.sj-tutorial-table {
+  --sj-tutorial-play-area-offset: clamp(8px, 1.2dvh, 14px);
+  grid-column: 1;
+  grid-row: 2;
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: max-content;
+  place-content: center;
+  place-items: center;
+  container-type: size;
+  container-name: tutorial-table;
+  overflow: auto;
+  padding: 16px 24px 12px;
+  scrollbar-width: thin;
+}
+
+.sj-tutorial-player {
+  grid-column: 1;
+  grid-row: 1;
+  min-width: 0;
+  display: grid;
+  place-items: center;
+  padding: 6px;
+  translate: 0 var(--sj-tutorial-play-area-offset);
+}
+
+.sj-tutorial-player .sj-board-me {
+  --sj-me-card-width: clamp(32px, min(16vw, 20vh), 128px);
+  --sj-me-card-width: clamp(32px, min(16cqw, 20cqh), 128px);
+  --sj-me-board-pad: clamp(5px, calc(var(--sj-me-card-width) * 0.14), 12px);
+  --sj-me-grid-gap: clamp(3px, calc(var(--sj-me-card-width) * 0.08), 7px);
+  --sj-me-board-block-gap: clamp(4px, calc(var(--sj-me-card-width) * 0.08), 7px);
+  --sj-me-board-header-height: clamp(25px, calc(var(--sj-me-card-width) * 0.42), 36px);
+}
+
+.sj-tutorial-game .sj-card-highlighted {
+  animation: none;
+}
+
+.sj-tutorial-pile-zone {
+  --sj-pile-card-width: clamp(36px, min(14vw, 20vh), 140px);
+  --sj-pile-card-width: clamp(36px, min(14cqw, 20cqh), 140px);
+  --pile-effect-space: clamp(6px, 1.8cqh, 12px);
+  position: absolute;
+  top: 50%;
+  right: auto;
+  bottom: auto;
+  left: calc(50% + clamp(170px, 26cqw, 285px));
+  z-index: 6;
+  width: auto;
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  translate: 0 var(--sj-tutorial-play-area-offset);
+  transform: translateY(-50%);
+  overflow: visible;
+}
+
+.sj-tutorial-pile-zone .sj-action-panel {
+  width: var(--pile-item-width);
+  min-height: 0;
+}
+
+.sj-tutorial-pile-zone .sj-pile-group {
+  width: 100%;
+  grid-template-columns: 1fr;
+  gap: clamp(5px, calc(var(--sj-pile-card-width) * 0.16), 13px);
+}
+
+.sj-tutorial-resume-modal {
+  position: absolute;
+  bottom: clamp(10px, 2cqh, 18px);
+  left: 50%;
+  z-index: 9;
+  min-height: 38px;
+  border: 1px solid rgba(130, 214, 230, 0.42);
+  border-radius: 999px;
+  background: rgba(22, 64, 78, 0.94);
+  color: #e6fbff;
+  padding: 8px 15px;
+  font-size: 11px;
+  font-weight: 850;
+  cursor: pointer;
+  transform: translateX(-50%);
+  box-shadow: 0 9px 24px rgba(0, 0, 0, 0.3);
+}
+
+.sj-tutorial-resume-modal:hover {
+  border-color: rgba(155, 232, 242, 0.72);
+  background: rgba(28, 82, 98, 0.98);
+}
+
+.sj-tutorial-game > .sj-action-hand-dock {
+  position: absolute;
+  right: 0;
+  bottom: 82px;
+  z-index: 18;
+}
+
+.sj-tutorial-action-overlay {
+  z-index: 180;
+}
+
+.sj-tutorial-action-overlay .sj-action-draw-three-choice {
+  --sj-pile-card-width: clamp(72px, min(18vw, 20vh), 128px);
+}
+
+.sj-tutorial-completion {
+  position: relative;
+  isolation: isolate;
+  z-index: 1;
+  box-sizing: border-box;
+  width: min(620px, calc(100% - 40px));
+  max-height: calc(100% - 40px);
+  min-width: 0;
+  display: grid;
+  justify-items: center;
+  gap: 13px;
+  overflow: auto;
+  border: 1px solid rgba(126, 218, 184, 0.3);
+  border-radius: 24px;
+  background:
+    radial-gradient(circle at 50% 0%, rgba(102, 214, 166, 0.2), transparent 42%),
+    linear-gradient(155deg, rgba(28, 49, 55, 0.96), rgba(18, 27, 39, 0.98));
+  padding: clamp(28px, 5dvh, 48px) clamp(22px, 5vw, 48px);
+  text-align: center;
+  box-shadow:
+    0 24px 70px rgba(0, 0, 0, 0.36),
+    inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  scrollbar-width: thin;
+}
+
+.sj-tutorial-completion-icon {
+  width: 72px;
+  height: 72px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(159, 239, 203, 0.38);
+  border-radius: 50%;
+  background: linear-gradient(145deg, rgba(92, 211, 157, 0.3), rgba(60, 156, 167, 0.2));
+  color: #c9ffe1;
+  box-shadow:
+    0 14px 34px rgba(35, 139, 104, 0.22),
+    0 0 0 8px rgba(96, 211, 162, 0.06);
+}
+
+.sj-tutorial-completion h2 {
+  margin: 0;
+  color: #fff;
+  font-size: clamp(28px, 5vw, 42px);
+  line-height: 1.05;
+}
+
+.sj-tutorial-completion > p {
+  max-width: 500px;
+  margin: 0;
+  color: #bbcad1;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.sj-tutorial-completion-actions {
+  width: min(440px, 100%);
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+  padding-top: 6px;
+}
+
+.sj-tutorial-completion-actions .sj-btn {
+  width: 100%;
+  min-width: 0;
+  min-height: 46px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.sj-tutorial-completion-restart {
+  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.055);
+  color: #c8d5da;
+}
+
+.sj-tutorial-completion-start {
+  box-shadow: 0 12px 28px rgba(240, 189, 87, 0.18);
+}
+
+@media (max-width: 700px) and (orientation: portrait) {
+  .sj-tutorial-table {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: max-content max-content;
+    align-content: center;
+    row-gap: clamp(6px, 2dvh, 18px);
+  }
+
+  .sj-tutorial-player {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  .sj-tutorial-pile-zone {
+    position: static;
+    grid-column: 1;
+    grid-row: 1;
+    justify-self: center;
+    transform: none;
+  }
+
+  .sj-tutorial-pile-zone .sj-action-panel {
+    width: min(
+      calc(var(--pile-item-width) * 2 + clamp(5px, calc(var(--sj-pile-card-width) * 0.12), 10px)),
+      92cqw
+    );
+  }
+
+  .sj-tutorial-pile-zone .sj-pile-group {
+    grid-template-columns: repeat(2, max-content);
+    justify-content: center;
+    gap: clamp(5px, calc(var(--sj-pile-card-width) * 0.12), 10px);
+  }
+}
+
+@media (max-width: 640px) {
+  .sj-tutorial-overlay {
+    padding:
+      max(8px, env(safe-area-inset-top))
+      max(8px, env(safe-area-inset-right))
+      max(8px, env(safe-area-inset-bottom))
+      max(8px, env(safe-area-inset-left));
+  }
+
+  .sj-tutorial-game {
+    --sj-tutorial-head-zone: 176px;
+    width: 100%;
+    height: calc(100dvh - max(16px, env(safe-area-inset-top) + env(safe-area-inset-bottom)));
+    max-height: calc(100dvh - max(16px, env(safe-area-inset-top) + env(safe-area-inset-bottom)));
+    border: 1px solid rgba(112, 208, 224, 0.34);
+    border-radius: 16px;
+  }
+
+  .sj-tutorial-head {
+    gap: 10px;
+  }
+
+  .sj-tutorial-copy {
+    padding:
+      max(18px, env(safe-area-inset-top))
+      112px
+      15px
+      max(14px, env(safe-area-inset-left));
+  }
+
+  .sj-tutorial-head-actions {
+    top: max(18px, env(safe-area-inset-top));
+    right: max(14px, env(safe-area-inset-right));
+    gap: 4px;
+  }
+
+  .sj-tutorial-copy > span {
+    display: block;
+    line-height: 1.25;
+  }
+
+  .sj-tutorial-copy h2 {
+    margin: 6px 0 8px;
+    font-size: clamp(18px, 5.8vw, 23px);
+  }
+
+  .sj-tutorial-copy p {
+    font-size: 11px;
+    line-height: 1.35;
+  }
+
+  .sj-tutorial-progress {
+    grid-template-columns: auto minmax(120px, 1fr);
+    gap: 10px;
+    padding: 3px 14px 15px;
+  }
+
+  .sj-tutorial-progress-label {
+    font-size: 10px;
+  }
+
+  .sj-tutorial-table {
+    padding: 8px 9px 5px;
+  }
+
+  .sj-tutorial-player {
+    padding: 2px;
+  }
+
+  .sj-tutorial-action-overlay .sj-action-draw-three-choice {
+    --sj-pile-card-width: clamp(64px, 22vw, 96px);
+  }
+
+  .sj-tutorial-completion {
+    width: calc(100% - 20px);
+    max-height: calc(100% - 20px);
+    gap: 10px;
+    border-radius: 18px;
+    padding: 24px 16px;
+  }
+
+  .sj-tutorial-completion-icon {
+    width: 62px;
+    height: 62px;
+  }
+
+  .sj-tutorial-completion h2 {
+    font-size: clamp(25px, 8vw, 34px);
+  }
+
+  .sj-tutorial-completion > p {
+    font-size: 12px;
+  }
+
+}
+
+@media (max-width: 420px) {
+  .sj-tutorial-head-actions {
+    gap: 3px;
+  }
+
+  .sj-tutorial-restart,
+  .sj-tutorial-skip {
+    min-height: 27px;
+  }
+
+  .sj-tutorial-restart {
+    width: 27px;
+  }
+
+  .sj-tutorial-skip {
+    padding: 3px 7px;
+  }
+
+}
+
+@media (max-height: 620px) {
+  .sj-tutorial-game {
+    --sj-tutorial-head-zone: 146px;
+  }
+
+  .sj-tutorial-copy {
+    padding-block: 8px;
+  }
+
+  .sj-tutorial-copy h2 {
+    font-size: 19px;
+  }
+
+  .sj-tutorial-copy p {
+    font-size: 10px;
+  }
+
+  .sj-tutorial-completion {
+    grid-template-columns: 64px minmax(0, 1fr);
+    justify-items: start;
+    gap: 7px 16px;
+    width: min(720px, calc(100% - 24px));
+    max-height: calc(100% - 16px);
+    padding: 16px 20px;
+    text-align: left;
+  }
+
+  .sj-tutorial-completion-icon {
+    grid-column: 1;
+    grid-row: 1 / span 2;
+    width: 56px;
+    height: 56px;
+    align-self: center;
+  }
+
+  .sj-tutorial-completion h2,
+  .sj-tutorial-completion > p {
+    grid-column: 2;
+  }
+
+  .sj-tutorial-completion h2 {
+    font-size: 24px;
+  }
+
+  .sj-tutorial-completion > p {
+    font-size: 10px;
+  }
+
+  .sj-tutorial-completion-actions {
+    grid-column: 1 / -1;
+  }
+
+  .sj-tutorial-completion-actions {
+    justify-self: center;
+    padding-top: 2px;
+  }
+
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sj-tutorial-progress progress::-webkit-progress-value,
+  .sj-tutorial-progress progress::-moz-progress-bar {
+    transition: none;
+  }
+}
+.sj-rulebook-board .sj-card {
+  width: 100%;
+  height: auto;
+}
+
+.sj-rulebook-column .sj-card {
+  --sj-pile-card-width: 32px;
+}
+
+.sj-rulebook-star-rules > .sj-card {
+  --sj-pile-card-width: 82px;
+  filter: drop-shadow(0 6px 7px rgba(31, 110, 137, 0.2));
+}
+
+.sj-guide-open-button {
+  width: 100%;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  border: 1px solid rgba(113, 168, 255, 0.34);
+  border-radius: 8px;
+  background:
+    radial-gradient(circle at 15% 0%, rgba(113, 168, 255, 0.16), transparent 46%),
+    rgba(36, 48, 68, 0.54);
+  color: #dceaff;
+  font-weight: 850;
+  cursor: pointer;
+  transition: transform 0.16s ease, border-color 0.16s ease, background 0.16s ease;
+}
+
+.sj-lobby-start-actions {
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 6px;
+  padding-top: 8px;
+}
+
+.sj-lobby-start-actions > button {
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  line-height: 1.2;
+}
+
+.sj-guide-open-button:hover {
+  transform: translateY(-1px);
+  border-color: rgba(113, 168, 255, 0.68);
+  background:
+    radial-gradient(circle at 15% 0%, rgba(113, 168, 255, 0.26), transparent 48%),
+    rgba(42, 61, 88, 0.66);
+}
+
+.sj-guide-open-button:focus-visible,
+.sj-guide-tabs button:focus-visible,
+.sj-guide-cards-link:focus-visible,
+.sj-tutorial-restart:focus-visible,
+.sj-tutorial-skip:focus-visible {
+  outline: 3px solid rgba(113, 168, 255, 0.3);
+  outline-offset: 2px;
+}
+
+.sj-guide-overlay {
+  z-index: 120;
+}
+
+.sj-guide-modal {
+  width: min(860px, 100%);
+  height: min(760px, calc(100dvh - var(--sj-modal-space-top) - var(--sj-modal-space-bottom)));
+  max-height: calc(100dvh - var(--sj-modal-space-top) - var(--sj-modal-space-bottom));
+  min-height: min(540px, calc(100dvh - var(--sj-modal-space-top) - var(--sj-modal-space-bottom)));
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  overflow: hidden;
+  border: 1px solid rgba(113, 168, 255, 0.28);
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at 12% 0%, rgba(113, 168, 255, 0.13), transparent 34%),
+    radial-gradient(circle at 88% 8%, rgba(232, 137, 194, 0.1), transparent 30%),
+    rgba(19, 24, 34, 0.985);
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.58);
+}
+
+.sj-guide-head {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 18px 24px;
+}
+
+.sj-guide-head h2 {
+  margin: 3px 0 0;
+  font-size: clamp(24px, 4vw, 34px);
+  line-height: 1.05;
+}
+
+.sj-guide-kicker {
+  color: #9fc3ff;
+  font-size: 11px;
+  font-weight: 950;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.sj-guide-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin: 0 24px;
+  padding: 5px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 11px;
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.sj-guide-tabs button {
+  min-width: 0;
+  min-height: 40px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--soft);
+  padding: 7px 10px;
+  font-size: 13px;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.sj-guide-tabs button.sj-guide-tab-active {
+  border-color: rgba(113, 168, 255, 0.4);
+  background: linear-gradient(145deg, rgba(113, 168, 255, 0.21), rgba(113, 168, 255, 0.08));
+  color: #eef5ff;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+}
+
+.sj-guide-scroll {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  padding: 18px 24px 24px;
+  scrollbar-color: rgba(113, 168, 255, 0.42) transparent;
+}
+
+.sj-guide-section {
+  display: grid;
+  gap: 18px;
+  animation: sjFadeIn 0.18s ease both;
+}
+
+.sj-guide-section-intro {
+  margin: 0;
+  color: var(--soft);
+  line-height: 1.45;
+}
+
+.sj-guide-cards-link {
+  width: max-content;
+  max-width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  background: transparent;
+  color: #f0b6dd;
+  padding: 0;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.sj-guide-section-intro {
+  font-size: 13px;
+}
+
+.sj-guide-card-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: start;
+  gap: 20px 14px;
+}
+
+.sj-guide-action-card {
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  justify-items: center;
+  align-content: start;
+  gap: 9px;
+}
+
+.sj-guide-action-card > .sj-action-card {
+  --sj-action-card-width: clamp(112px, min(14vw, 20vh), 148px);
+}
+
+.sj-guide-action-description {
+  width: 100%;
+  min-height: 76px;
+  margin: 0;
+  border: 1px solid rgba(199, 225, 235, 0.92);
+  border-radius: 9px;
+  background: white;
+  padding: 9px 10px;
+  color: #415c65;
+  font-size: 12px;
+  line-height: 1.4;
+  text-align: left;
+  box-shadow: 0 3px 9px rgba(27, 92, 115, 0.07);
+}
+
+.sj-guide-footer {
+  display: flex;
+  justify-content: flex-end;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 14px 24px 18px;
+  background: rgba(8, 12, 18, 0.36);
+}
+
+.sj-guide-footer .sj-btn {
+  width: auto;
+  min-width: 210px;
+}
+
+@media (max-width: 640px) {
+  .sj-guide-overlay {
+    --sj-modal-space-top: env(safe-area-inset-top);
+    --sj-modal-space-right: env(safe-area-inset-right);
+    --sj-modal-space-bottom: env(safe-area-inset-bottom);
+    --sj-modal-space-left: env(safe-area-inset-left);
+  }
+
+  .sj-guide-modal {
+    width: 100%;
+    height: calc(100dvh - var(--sj-modal-space-top) - var(--sj-modal-space-bottom));
+    max-height: none;
+    min-height: 0;
+    border-radius: 0;
+  }
+
+  .sj-guide-head {
+    padding: 14px 16px;
+  }
+
+  .sj-guide-tabs {
+    margin: 0 16px;
+  }
+
+  .sj-guide-tabs button {
+    min-height: 38px;
+    padding-inline: 5px;
+    font-size: 11px;
+  }
+
+  .sj-guide-scroll {
+    padding: 14px 16px 20px;
+  }
+
+  .sj-guide-card-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px 10px;
+  }
+
+  .sj-guide-action-card {
+    min-height: 0;
+  }
+
+  .sj-guide-action-card > .sj-action-card {
+    --sj-action-card-width: clamp(102px, 31vw, 132px);
+  }
+
+  .sj-guide-action-description {
+    min-height: 86px;
+    padding: 8px;
+    font-size: 11px;
+  }
+
+  .sj-guide-footer {
+    padding: 12px 16px max(14px, env(safe-area-inset-bottom));
+  }
+
+  .sj-guide-footer .sj-btn {
+    width: 100%;
+  }
+}
+
+.sj-guide-modal {
+  border: 3px solid #168fc0;
+  background: #f7fbfd;
+  color: #17242b;
+  box-shadow:
+    0 30px 90px rgba(0, 0, 0, 0.58),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.8);
+}
+
+.sj-guide-head {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+  background:
+    linear-gradient(115deg, rgba(8, 110, 160, 0.94), rgba(21, 157, 190, 0.92)),
+    #168fc0;
+  color: white;
+}
+
+.sj-guide-kicker {
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.sj-guide-head .sj-profile-close {
+  border-color: rgba(255, 255, 255, 0.56);
+  background: rgba(4, 72, 105, 0.32);
+  color: #fff;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 5px 13px rgba(3, 51, 76, 0.24);
+}
+
+.sj-guide-head .sj-profile-close:hover:not(:disabled),
+.sj-guide-head .sj-profile-close:focus-visible {
+  border-color: rgba(255, 220, 139, 0.92);
+  background: rgba(240, 189, 87, 0.22);
+  color: #fff8df;
+}
+
+.sj-guide-tabs {
+  margin: 0;
+  padding: 8px 24px;
+  border: 0;
+  border-bottom: 1px solid #c9e1eb;
+  border-radius: 0;
+  background: #e5f3f8;
+}
+
+.sj-guide-tabs button {
+  border-color: transparent;
+  background: #c9e1e9;
+  color: #466d7a;
+  box-shadow: none;
+  transition:
+    transform 0.15s ease,
+    border-color 0.15s ease,
+    background 0.15s ease,
+    color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.sj-guide-tabs button:not(.sj-guide-tab-active):hover {
+  border-color: transparent;
+  background: #d7ebf1;
+  color: #236f89;
+  box-shadow: none;
+}
+
+.sj-guide-tabs button.sj-guide-tab-active {
+  transform: translateY(-1px);
+  border-color: #1697c8;
+  background: white;
+  color: #087cae;
+  box-shadow:
+    0 5px 12px rgba(13, 118, 157, 0.2),
+    inset 0 -3px 0 rgba(22, 151, 200, 0.12);
+}
+
+.sj-guide-scroll {
+  background:
+    linear-gradient(rgba(21, 146, 187, 0.025) 1px, transparent 1px),
+    #f7fbfd;
+  background-size: 100% 28px;
+  scrollbar-color: #8ac5da transparent;
+}
+
+.sj-guide-footer {
+  border-top-color: #c9e1eb;
+  background: #eaf5f9;
+}
+
+.sj-rulebook-page {
+  gap: 16px;
+}
+
+.sj-rulebook-section {
+  overflow: hidden;
+  border: 1px solid #c9e1eb;
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.93);
+  box-shadow: 0 4px 12px rgba(29, 96, 119, 0.07);
+}
+
+.sj-rulebook-section > h3 {
+  margin: 0;
+  border-bottom: 1px solid rgba(21, 145, 190, 0.2);
+  background: linear-gradient(90deg, rgba(46, 175, 211, 0.19), rgba(46, 175, 211, 0.04));
+  color: #0988b9;
+  padding: 10px 15px 8px;
+  font-size: clamp(17px, 3vw, 21px);
+  font-weight: 950;
+  letter-spacing: 0.025em;
+  text-transform: uppercase;
+}
+
+.sj-rulebook-section-accent > h3 {
+  border-bottom-color: rgba(224, 187, 45, 0.3);
+  background: linear-gradient(90deg, rgba(248, 226, 79, 0.35), rgba(248, 226, 79, 0.06));
+}
+
+.sj-rulebook-section-content {
+  display: grid;
+  gap: 10px;
+  padding: 14px 16px 16px;
+}
+
+.sj-rulebook-section p,
+.sj-rulebook-section ul {
+  margin: 0;
+  color: #24363d;
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.sj-rulebook-section ul {
+  display: grid;
+  gap: 6px;
+  padding-left: 20px;
+}
+
+.sj-rulebook-illustrated {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(190px, 0.6fr);
+  align-items: center;
+  gap: 20px;
+}
+
+.sj-rulebook-illustrated > div {
+  min-width: 0;
+  display: grid;
+  justify-items: center;
+  gap: 7px;
+}
+
+.sj-rulebook-illustrated small {
+  color: #58747e;
+  font-size: 11px;
+  font-style: italic;
+}
+
+.sj-rulebook-board {
+  width: min(210px, 100%);
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 5px;
+  border: 1px solid #b9d8e4;
+  border-radius: 9px;
+  background: #e8f4f8;
+  padding: 9px;
+}
+
+.sj-rulebook-example,
+.sj-rulebook-warning {
+  border-left: 4px solid #d94c46;
+  border-radius: 0 7px 7px 0;
+  background: #fff2f0;
+  color: #b83232;
+  padding: 9px 12px;
+  font-size: 13px;
+  font-style: italic;
+  line-height: 1.45;
+}
+
+.sj-rulebook-example strong,
+.sj-rulebook-warning strong {
+  margin-right: 5px;
+}
+
+.sj-rulebook-choices {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.sj-rulebook-choice {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 11px;
+  border: 1px solid #afd7b8;
+  border-radius: 9px;
+  background: #eefaf0;
+  padding: 12px;
+}
+
+.sj-rulebook-choice > span {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: #38a956;
+  color: white;
+  font-size: 14px;
+  font-weight: 950;
+}
+
+.sj-rulebook-choice strong {
+  display: block;
+  margin: 2px 0 4px;
+  color: #218b3f;
+  font-size: 14px;
+}
+
+.sj-rulebook-choice p {
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.sj-rulebook-choice-blue {
+  border-color: #aed6e5;
+  background: #edf8fc;
+}
+
+.sj-rulebook-choice-blue > span {
+  background: #1698c7;
+}
+
+.sj-rulebook-choice-blue strong {
+  color: #087da9;
+}
+
+.sj-rulebook-choice-pink {
+  border-color: #e6b5d4;
+  background: #fff1f9;
+}
+
+.sj-rulebook-choice-pink > span {
+  background: #c9488d;
+}
+
+.sj-rulebook-choice-pink strong {
+  color: #ad2f78;
+}
+
+.sj-rulebook-skyjo-rule,
+.sj-rulebook-star-rules {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 18px;
+}
+
+.sj-rulebook-skyjo-rule {
+  grid-template-columns: minmax(190px, 0.7fr) minmax(0, 1.3fr);
+  gap: 20px;
+}
+
+.sj-rulebook-skyjo-visual {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 13px;
+}
+
+.sj-rulebook-column {
+  display: grid;
+  gap: 3px;
+}
+
+.sj-rulebook-skyjo-result {
+  position: relative;
+  min-width: 104px;
+  display: grid;
+  gap: 3px;
+  border: 1px solid #e3aa9f;
+  border-radius: 8px;
+  background: #fff5f2;
+  color: #aa3c32;
+  padding: 10px;
+  text-align: center;
+}
+
+.sj-rulebook-skyjo-result::before {
+  content: '→';
+  position: absolute;
+  top: 50%;
+  left: -11px;
+  color: #cf6759;
+  font-size: 17px;
+  font-weight: 950;
+  transform: translate(-50%, -50%);
+}
+
+.sj-rulebook-skyjo-result strong {
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+.sj-rulebook-skyjo-result small {
+  color: #d04b3f;
+  font-size: 15px;
+  font-weight: 950;
+}
+
+.sj-rulebook-skyjo-copy {
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.sj-rulebook-skyjo-copy p {
+  margin: 0;
+}
+
+.sj-rulebook-skyjo-copy ul {
+  gap: 3px;
+  font-size: 12px;
+}
+
+.sj-rulebook-section .sj-guide-cards-link {
+  margin-top: 4px;
+  color: #a72972;
+}
+
+.sj-guide-section-intro {
+  color: #48646e;
+}
+
+.sj-guide-action-card {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+@media (max-width: 640px) {
+  .sj-guide-modal {
+    border: 0;
+  }
+
+  .sj-guide-tabs {
+    margin: 0;
+    padding: 7px 12px;
+  }
+
+  .sj-rulebook-illustrated,
+  .sj-rulebook-action-setup,
+  .sj-rulebook-choices {
+    grid-template-columns: 1fr;
+  }
+
+  .sj-rulebook-illustrated > div {
+    order: -1;
+  }
+
+  .sj-rulebook-board {
+    width: min(190px, 72vw);
+  }
+
+  .sj-rulebook-section-accent .sj-rulebook-skyjo-rule,
+  .sj-rulebook-section-accent .sj-rulebook-star-rules {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+    gap: 14px;
+  }
+
+  .sj-rulebook-skyjo-visual {
+    width: 100%;
+    gap: 10px;
+  }
+
+  .sj-rulebook-section-accent .sj-rulebook-star-rules > .sj-card {
+    justify-self: center;
+  }
+
+  .sj-rulebook-skyjo-result {
+    min-width: 88px;
+    padding: 8px 6px;
+  }
+
+  .sj-rulebook-skyjo-copy ul {
+    padding-left: 16px;
+    font-size: 11px;
+  }
+
+  .sj-rulebook-star-rules > .sj-card {
+    --sj-pile-card-width: 58px;
+  }
+
+  .sj-rulebook-column .sj-card {
+    --sj-pile-card-width: 28px;
+  }
+}
+
+@media (max-width: 390px) {
+  .sj-guide-tabs button {
+    font-size: 10px;
+  }
+
+  .sj-rulebook-section-content {
+    padding: 12px;
+  }
+
+  .sj-rulebook-section p,
+  .sj-rulebook-section ul {
+    font-size: 13px;
+  }
+
 }
