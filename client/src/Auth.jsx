@@ -1019,10 +1019,20 @@ export function AuthLoadingView({ label = "Chargement" }) {
   );
 }
 
-export function ConsentGate({ onAccept, onLogout, error = "", busy = false }) {
+export function ConsentGate({
+  onAccept,
+  onLogout,
+  error = "",
+  busy = false,
+  requiredDocuments = ["terms", "privacy"],
+}) {
   const [legalDocument, setLegalDocument] = useState(null);
   const [readDocuments, setReadDocuments] = useState({ terms: false, privacy: false });
-  const ready = readDocuments.terms && readDocuments.privacy;
+  const requiresTerms = requiredDocuments.includes("terms");
+  const requiresPrivacy = requiredDocuments.includes("privacy");
+  const requiredDocumentCount = Number(requiresTerms) + Number(requiresPrivacy);
+  const ready = (!requiresTerms || readDocuments.terms)
+    && (!requiresPrivacy || readDocuments.privacy);
   return (
     <main className="auth-page">
       <AuthMessageToast message={error} />
@@ -1035,40 +1045,48 @@ export function ConsentGate({ onAccept, onLogout, error = "", busy = false }) {
             <AuthMobileBrand />
             <div className="auth-heading auth-consent-heading">
               <p className="auth-eyebrow">Avant de rejoindre la table</p>
-              <h2>Valide les documents</h2>
-              <p>Consulte les versions actuelles pour accéder au jeu.</p>
+              <h2>{requiredDocumentCount === 1 ? "Validez le document" : "Validez les documents"}</h2>
+              <p>
+                {requiredDocumentCount === 1
+                  ? "Consultez sa nouvelle version pour accéder au jeu."
+                  : "Consultez leurs nouvelles versions pour accéder au jeu."}
+              </p>
             </div>
             <div className="auth-consent-actions">
-              <div className={`auth-consent-document${readDocuments.terms ? " is-read" : ""}`}>
-                <button type="button" onClick={() => setLegalDocument("terms")}>
-                  <span className="auth-consent-document-icon" aria-hidden="true"><FileText size={19} /></span>
-                  <span className="auth-consent-document-copy">
-                    <strong>Conditions d'utilisation</strong>
-                    {!readDocuments.terms && <small>Ouvrir et lire jusqu'en bas</small>}
-                  </span>
-                  <ArrowRight className="auth-consent-document-arrow" size={18} aria-hidden="true" />
-                </button>
-                {readDocuments.terms && (
-                  <span className="auth-consent-read-badge" aria-label="Conditions d'utilisation lues">
-                    <Check size={14} strokeWidth={3} />
-                  </span>
-                )}
-              </div>
-              <div className={`auth-consent-document${readDocuments.privacy ? " is-read" : ""}`}>
-                <button type="button" onClick={() => setLegalDocument("privacy")}>
-                  <span className="auth-consent-document-icon" aria-hidden="true"><ShieldCheck size={19} /></span>
-                  <span className="auth-consent-document-copy">
-                    <strong>Politique de confidentialité</strong>
-                    {!readDocuments.privacy && <small>Ouvrir et lire jusqu'en bas</small>}
-                  </span>
-                  <ArrowRight className="auth-consent-document-arrow" size={18} aria-hidden="true" />
-                </button>
-                {readDocuments.privacy && (
-                  <span className="auth-consent-read-badge" aria-label="Politique de confidentialité lue">
-                    <Check size={14} strokeWidth={3} />
-                  </span>
-                )}
-              </div>
+              {requiresTerms && (
+                <div className={`auth-consent-document${readDocuments.terms ? " is-read" : ""}`}>
+                  <button type="button" onClick={() => setLegalDocument("terms")}>
+                    <span className="auth-consent-document-icon" aria-hidden="true"><FileText size={19} /></span>
+                    <span className="auth-consent-document-copy">
+                      <strong>Conditions d'utilisation</strong>
+                      {!readDocuments.terms && <small>Ouvrir et lire jusqu'en bas</small>}
+                    </span>
+                    <ArrowRight className="auth-consent-document-arrow" size={18} aria-hidden="true" />
+                  </button>
+                  {readDocuments.terms && (
+                    <span className="auth-consent-read-badge" aria-label="Conditions d'utilisation lues">
+                      <Check size={14} strokeWidth={3} />
+                    </span>
+                  )}
+                </div>
+              )}
+              {requiresPrivacy && (
+                <div className={`auth-consent-document${readDocuments.privacy ? " is-read" : ""}`}>
+                  <button type="button" onClick={() => setLegalDocument("privacy")}>
+                    <span className="auth-consent-document-icon" aria-hidden="true"><ShieldCheck size={19} /></span>
+                    <span className="auth-consent-document-copy">
+                      <strong>Politique de confidentialité</strong>
+                      {!readDocuments.privacy && <small>Ouvrir et lire jusqu'en bas</small>}
+                    </span>
+                    <ArrowRight className="auth-consent-document-arrow" size={18} aria-hidden="true" />
+                  </button>
+                  {readDocuments.privacy && (
+                    <span className="auth-consent-read-badge" aria-label="Politique de confidentialité lue">
+                      <Check size={14} strokeWidth={3} />
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
             <button className="auth-submit auth-consent-submit" type="button" disabled={!ready || busy} onClick={onAccept}>
               {busy ? "Enregistrement..." : "J'accepte et j'accède au jeu"}

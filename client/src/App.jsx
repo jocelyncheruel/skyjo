@@ -220,11 +220,17 @@ function SkyjoApp() {
         throw new Error('Les versions des documents sont indisponibles.');
       }
       if (!cancelled) {
+        const termsAccepted = data.termsAccepted === true || data.accepted === true;
+        const privacyAccepted = data.privacyAccepted === true || data.accepted === true;
         setConsentVersions({
           termsVersion: data.termsVersion,
           privacyVersion: data.privacyVersion,
+          requiredDocuments: [
+            ...(!termsAccepted ? ['terms'] : []),
+            ...(!privacyAccepted ? ['privacy'] : []),
+          ],
         });
-        setConsent(data.accepted === true);
+        setConsent(termsAccepted && privacyAccepted);
       }
     }).catch(() => {
       if (!cancelled) {
@@ -259,27 +265,40 @@ function SkyjoApp() {
         />
       );
   }
-  if (!consent) return <ConsentGate busy={consentBusy} error={consentError} onLogout={logout} onAccept={async () => {
-    if (!consentVersions) {
-      setConsentError('Impossible de vérifier la version des documents. Rechargez la page.');
-      return;
-    }
-    setConsentBusy(true);
-    setConsentError('');
-    try {
-      const response = await apiFetch('/api/account/consent', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(consentVersions),
-      });
-      if (!response.ok) throw new Error(await serverErrorMessage(response, 'Impossible d\'enregistrer le consentement.'));
-      setConsent(true);
-    } catch (error) {
-      setConsentError(error.message || 'Impossible d\'enregistrer le consentement.');
-    } finally {
-      setConsentBusy(false);
-    }
-  }} />;
+  if (!consent) return <ConsentGate
+    busy={consentBusy}
+    error={consentError}
+    requiredDocuments={consentVersions?.requiredDocuments}
+    onLogout={logout}
+    onAccept={async () => {
+      if (!consentVersions) {
+        setConsentError('Impossible de vérifier la version des documents. Rechargez la page.');
+        return;
+      }
+      setConsentBusy(true);
+      setConsentError('');
+      try {
+        const response = await apiFetch('/api/account/consent', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ...(consentVersions.requiredDocuments.includes('terms')
+              ? { termsVersion: consentVersions.termsVersion }
+              : {}),
+            ...(consentVersions.requiredDocuments.includes('privacy')
+              ? { privacyVersion: consentVersions.privacyVersion }
+              : {}),
+          }),
+        });
+        if (!response.ok) throw new Error(await serverErrorMessage(response, 'Impossible d\'enregistrer le consentement.'));
+        setConsent(true);
+      } catch (error) {
+        setConsentError(error.message || 'Impossible d\'enregistrer le consentement.');
+      } finally {
+        setConsentBusy(false);
+      }
+    }}
+  />;
   return <GameApp />;
 }
 

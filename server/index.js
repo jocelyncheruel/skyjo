@@ -233,14 +233,23 @@ function cleanupRateBuckets() {
   for (const [key, bucket] of rateBuckets) if (bucket.resetAt <= now) rateBuckets.delete(key);
 }
 
-async function hasCurrentConsent(userId) {
+async function currentConsentStatus(userId) {
   const { data, error } = await supabase.from('account_consents')
     .select('terms_version, privacy_version')
     .eq('user_id', userId)
     .maybeSingle();
   if (error) throw error;
-  return data?.terms_version === TERMS_CONSENT_VERSION
-    && data?.privacy_version === PRIVACY_CONSENT_VERSION;
+  const termsAccepted = data?.terms_version === TERMS_CONSENT_VERSION;
+  const privacyAccepted = data?.privacy_version === PRIVACY_CONSENT_VERSION;
+  return {
+    accepted: termsAccepted && privacyAccepted,
+    termsAccepted,
+    privacyAccepted,
+  };
+}
+
+async function hasCurrentConsent(userId) {
+  return (await currentConsentStatus(userId)).accepted;
 }
 
 function httpRateLimit({ limit, windowMs, keyPrefix, user = false }) {
@@ -261,7 +270,7 @@ function httpRateLimit({ limit, windowMs, keyPrefix, user = false }) {
 async function requireConsent(req, res, next) {
   try {
     if (!await hasCurrentConsent(req.auth.user.id)) {
-      throw new PublicError('consent_required', 'Les conditions doivent être acceptées avant de jouer.', 403);
+      throw new PublicError('consent_required', 'Les documents requis doivent être acceptés avant de jouer.', 403);
     }
     next();
   } catch (error) {
@@ -785,8 +794,9 @@ app.use('/api/auth', authBff.router);
 
 app.get('/api/account/consent', requireHttpAuth, authBff.requireStandardSession, async (req, res, next) => {
   try {
+    const status = await currentConsentStatus(req.auth.user.id);
     res.json({
-      accepted: await hasCurrentConsent(req.auth.user.id),
+      ...status,
       termsVersion: TERMS_CONSENT_VERSION,
       privacyVersion: PRIVACY_CONSENT_VERSION,
     });
@@ -796,9 +806,12 @@ app.get('/api/account/consent', requireHttpAuth, authBff.requireStandardSession,
 app.post('/api/account/consent', requireHttpAuth, authBff.requireStandardSession, authBff.requireCsrf, httpRateLimit({ keyPrefix: 'consent', limit: 5, windowMs: 60_000, user: true }), async (req, res, next) => {
   try {
     const payload = objectPayload(req.body, ['termsVersion', 'privacyVersion']);
+    const status = await currentConsentStatus(req.auth.user.id);
     if (
-      payload.termsVersion !== TERMS_CONSENT_VERSION
-      || payload.privacyVersion !== PRIVACY_CONSENT_VERSION
+      (!status.termsAccepted && payload.termsVersion !== TERMS_CONSENT_VERSION)
+      || (!status.privacyAccepted && payload.privacyVersion !== PRIVACY_CONSENT_VERSION)
+      || (payload.termsVersion !== undefined && payload.termsVersion !== TERMS_CONSENT_VERSION)
+      || (payload.privacyVersion !== undefined && payload.privacyVersion !== PRIVACY_CONSENT_VERSION)
     ) {
       throw new PublicError('invalid_consent', 'Version de consentement invalide.', 400);
     }
@@ -810,6 +823,8 @@ app.post('/api/account/consent', requireHttpAuth, authBff.requireStandardSession
     if (error) throw error;
     res.json({
       accepted: true,
+      termsAccepted: true,
+      privacyAccepted: true,
       termsVersion: TERMS_CONSENT_VERSION,
       privacyVersion: PRIVACY_CONSENT_VERSION,
     });
