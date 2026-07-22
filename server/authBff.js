@@ -198,6 +198,7 @@ function publicGameStats(row) {
     gamesPlayed: count(row?.games_played),
     gamesWon: count(row?.games_won),
     gamesLost: count(row?.games_lost),
+    gamesDrawn: count(row?.games_drawn),
     gamesAbandoned: count(row?.games_abandoned),
     gamesInProgress: count(row?.games_in_progress),
     classicGames: count(row?.classic_games),

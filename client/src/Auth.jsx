@@ -811,7 +811,7 @@ const LEGAL_DOCUMENTS = {
       ],
       [
         "Données de jeu",
-        "Pour faire fonctionner une salle, le serveur enregistre son code, sa visibilité, son mode, les identifiants de compte et de joueur, les pseudonymes, les connexions, les cartes, les tours, les scores, l'historique nécessaire à la partie et, dans une table séparée, tous les messages acceptés pendant toute la durée de conservation de la salle. Le compte conserve également des statistiques de participation, de victoire, de défaite, d'abandon et de manches jouées.",
+        "Pour faire fonctionner une salle, le serveur enregistre son code, sa visibilité, son mode, les identifiants de compte et de joueur, les pseudonymes, les connexions, les cartes, les tours, les scores, l'historique nécessaire à la partie et, dans une table séparée, tous les messages acceptés pendant toute la durée de conservation de la salle. Le compte conserve également des statistiques de participation, de victoire, de défaite, d'égalité, d'abandon et de manches jouées.",
       ],
       [
         "Données techniques et stockage local",

@@ -105,6 +105,7 @@ export function newRoomState(roomId) {
     starterTieNotice: null,
     log: [],
     winnerId: null,
+    winnerIds: [],
   };
 }
 
@@ -209,6 +210,7 @@ export function leavePlayer(state, id) {
 
   if (state.roundEnderId === id) state.roundEnderId = null;
   if (state.winnerId === id) state.winnerId = null;
+  state.winnerIds = (state.winnerIds || []).filter((winnerId) => winnerId !== id);
 
   if (state.order.length === 0) {
     state.phase = 'lobby';
@@ -233,6 +235,7 @@ export function leavePlayer(state, id) {
   if (state.order.length === 1) {
     state.phase = 'gameEnd';
     state.winnerId = state.order[0];
+    state.winnerIds = [state.order[0]];
     state.turnIndex = 0;
     state.turnStage = null;
     state.drawnCard = null;
@@ -311,6 +314,7 @@ export function startGame(state, playerId) {
   for (const pid of state.order) state.playersById[pid].totalScore = 0;
   state.completedRounds = 0;
   state.winnerId = null;
+  state.winnerIds = [];
   if (state.gameMode === 'action') {
     startActionGame(state);
     return;
@@ -338,6 +342,7 @@ export function returnToLobby(state, playerId) {
   state.roundScoresAt = null;
   state.starterTieNotice = null;
   state.winnerId = null;
+  state.winnerIds = [];
   state.actionDeck = [];
   state.actionDiscard = [];
   state.actionMarket = [];
@@ -580,14 +585,19 @@ function endRound(state, revealedBeforeRoundEnd = []) {
 
   const reached100 = state.order.filter(id => state.playersById[id].totalScore >= 100);
   if (reached100.length > 0) {
-    let winnerId = state.order[0];
-    for (const id of state.order) {
-      if (state.playersById[id].totalScore < state.playersById[winnerId].totalScore) winnerId = id;
-    }
+    const bestTotal = Math.min(...state.order.map((id) => state.playersById[id].totalScore));
+    const winnerIds = state.order.filter((id) => state.playersById[id].totalScore === bestTotal);
+    const winnerId = winnerIds.length === 1 ? winnerIds[0] : null;
     state.phase = 'gameEnd';
     state.winnerId = winnerId;
+    state.winnerIds = winnerIds;
     state.nextRoundAt = null;
-    log(state, `Partie terminée ! ${state.playersById[winnerId].name} gagne.`);
+    if (winnerId) {
+      log(state, `Partie terminée ! ${state.playersById[winnerId].name} gagne.`);
+    } else {
+      const names = winnerIds.map((id) => state.playersById[id].name).join(', ');
+      log(state, `Partie terminée sur une égalité entre ${names}.`);
+    }
   }
 }
 
@@ -664,6 +674,9 @@ export function publicState(state, forPlayerId) {
     lastCardMove: publicCardMove(state.lastCardMove),
     cardMoves,
     winnerId: state.winnerId,
+    winnerIds: Array.isArray(state.winnerIds)
+      ? state.winnerIds
+      : state.winnerId ? [state.winnerId] : [],
     log: state.log.slice(-20),
     players: state.order.map(id => {
       const p = state.playersById[id];

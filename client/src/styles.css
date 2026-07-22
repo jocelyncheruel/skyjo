@@ -3225,6 +3225,7 @@ button.sj-action-count-badge:focus-visible {
 .sj-profile-stat-played { border-top-color: #71a8ff; }
 .sj-profile-stat-won { border-top-color: #62d27f; }
 .sj-profile-stat-lost { border-top-color: #f0bd57; }
+.sj-profile-stat-drawn { border-top-color: #b493ef; }
 .sj-profile-stat-abandoned { border-top-color: #ef6a61; }
 
 .sj-profile-statistics-grid-loading .sj-profile-stat {

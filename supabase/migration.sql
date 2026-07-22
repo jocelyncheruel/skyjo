@@ -170,9 +170,15 @@ CREATE TABLE IF NOT EXISTS public.user_game_participations (
   CONSTRAINT user_game_participations_serial_check CHECK (game_serial > 0),
   CONSTRAINT user_game_participations_player_id_check CHECK (player_id ~ '^[A-Za-z0-9_-]{10,40}$'),
   CONSTRAINT user_game_participations_mode_check CHECK (game_mode IN ('classic', 'action')),
-  CONSTRAINT user_game_participations_outcome_check CHECK (outcome IN ('active', 'won', 'lost', 'abandoned')),
+  CONSTRAINT user_game_participations_outcome_check CHECK (outcome IN ('active', 'won', 'lost', 'draw', 'abandoned')),
   CONSTRAINT user_game_participations_rounds_check CHECK (rounds_played >= 0)
 );
+
+ALTER TABLE public.user_game_participations
+  DROP CONSTRAINT IF EXISTS user_game_participations_outcome_check;
+ALTER TABLE public.user_game_participations
+  ADD CONSTRAINT user_game_participations_outcome_check
+  CHECK (outcome IN ('active', 'won', 'lost', 'draw', 'abandoned'));
 
 CREATE INDEX IF NOT EXISTS user_game_participations_user_idx
   ON public.user_game_participations (user_id, started_at DESC);
@@ -344,7 +350,11 @@ BEGIN
   IF p_phase = 'gameEnd' AND v_game_serial > 0 THEN
     UPDATE public.user_game_participations AS participation
     SET outcome = CASE
-          WHEN participation.outcome = 'abandoned' THEN 'abandoned'
+          WHEN participation.outcome <> 'active' THEN participation.outcome
+          WHEN jsonb_typeof(p_state_json -> 'winnerIds') = 'array'
+            AND (p_state_json -> 'winnerIds') ? participation.player_id
+            AND (p_state_json -> 'winnerIds') <> jsonb_build_array(participation.player_id)
+            THEN 'draw'
           WHEN participation.player_id = p_state_json ->> 'winnerId' THEN 'won'
           ELSE 'lost'
         END,
@@ -419,6 +429,8 @@ AS $$
   );
 $$;
 
+DROP FUNCTION IF EXISTS public.get_skyjo_user_stats(UUID);
+
 CREATE OR REPLACE FUNCTION public.get_skyjo_user_stats(
   p_user_id UUID
 )
@@ -426,6 +438,7 @@ RETURNS TABLE (
   games_played BIGINT,
   games_won BIGINT,
   games_lost BIGINT,
+  games_drawn BIGINT,
   games_abandoned BIGINT,
   games_in_progress BIGINT,
   classic_games BIGINT,
@@ -440,23 +453,24 @@ SECURITY DEFINER
 SET search_path = ''
 AS $$
   SELECT
-    COUNT(*) FILTER (WHERE outcome IN ('won', 'lost', 'abandoned')) AS games_played,
+    COUNT(*) FILTER (WHERE outcome IN ('won', 'lost', 'draw', 'abandoned')) AS games_played,
     COUNT(*) FILTER (WHERE outcome = 'won') AS games_won,
     COUNT(*) FILTER (WHERE outcome = 'lost') AS games_lost,
+    COUNT(*) FILTER (WHERE outcome = 'draw') AS games_drawn,
     COUNT(*) FILTER (WHERE outcome = 'abandoned') AS games_abandoned,
     COUNT(*) FILTER (WHERE outcome = 'active') AS games_in_progress,
     COUNT(*) FILTER (
-      WHERE game_mode = 'classic' AND outcome IN ('won', 'lost', 'abandoned')
+      WHERE game_mode = 'classic' AND outcome IN ('won', 'lost', 'draw', 'abandoned')
     ) AS classic_games,
     COUNT(*) FILTER (
-      WHERE game_mode = 'action' AND outcome IN ('won', 'lost', 'abandoned')
+      WHERE game_mode = 'action' AND outcome IN ('won', 'lost', 'draw', 'abandoned')
     ) AS action_games,
     COALESCE(SUM(rounds_played) FILTER (
-      WHERE outcome IN ('won', 'lost', 'abandoned')
+      WHERE outcome IN ('won', 'lost', 'draw', 'abandoned')
     ), 0) AS rounds_played,
-    MIN(final_score) FILTER (WHERE outcome IN ('won', 'lost')) AS best_score,
+    MIN(final_score) FILTER (WHERE outcome IN ('won', 'lost', 'draw')) AS best_score,
     MAX(COALESCE(finished_at, started_at)) FILTER (
-      WHERE outcome IN ('won', 'lost', 'abandoned')
+      WHERE outcome IN ('won', 'lost', 'draw', 'abandoned')
     ) AS last_game_at
   FROM public.user_game_participations
   WHERE user_id = p_user_id;

@@ -581,6 +581,7 @@ export function startActionGame(state) {
   for (const id of state.order) state.playersById[id].totalScore = 0;
   state.completedRounds = 0;
   state.winnerId = null;
+  state.winnerIds = [];
   state.actionNextStarterId = null;
   state.turnSerial = 0;
   dealRound(state);
@@ -1517,10 +1518,17 @@ function completeActionRoundEnd(state) {
   state.nextRoundAt = state.roundScoresAt + ROUND_BREAK_MS;
   const reached100 = state.order.some((id) => state.playersById[id].totalScore >= 100);
   if (reached100) {
-    state.winnerId = state.order.reduce((best, id) =>
-      state.playersById[id].totalScore < state.playersById[best].totalScore ? id : best, state.order[0]);
+    const bestTotal = Math.min(...state.order.map((id) => state.playersById[id].totalScore));
+    state.winnerIds = state.order.filter((id) => state.playersById[id].totalScore === bestTotal);
+    state.winnerId = state.winnerIds.length === 1 ? state.winnerIds[0] : null;
     state.phase = 'gameEnd';
     state.nextRoundAt = null;
+    if (state.winnerId) {
+      log(state, `Partie terminée ! ${state.playersById[state.winnerId].name} gagne.`);
+    } else {
+      const names = state.winnerIds.map((id) => state.playersById[id].name).join(', ');
+      log(state, `Partie terminée sur une égalité entre ${names}.`);
+    }
   }
 }
 

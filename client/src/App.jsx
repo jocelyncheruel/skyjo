@@ -2812,7 +2812,16 @@ function GameScreen({
   }
 
   if (state.phase === 'gameEnd' && roundScoresVisible) {
-    const winner = state.players.find((player) => player.id === state.winnerId);
+    const winnerIds = Array.isArray(state.winnerIds) && state.winnerIds.length > 0
+      ? state.winnerIds
+      : state.winnerId ? [state.winnerId] : [];
+    const winners = winnerIds
+      .map((winnerId) => state.players.find((player) => player.id === winnerId))
+      .filter(Boolean);
+    const isDraw = winnerIds.length > 1;
+    const winner = winners[0];
+    const drawNames = new Intl.ListFormat('fr-FR', { style: 'long', type: 'conjunction' })
+      .format(winners.map((player) => player.name));
     return (
       <>
         <div className="sj-app-shell sj-lobby-room">
@@ -2820,7 +2829,12 @@ function GameScreen({
           {chatButton}
           <GameToast key={errorSerial} message={error} />
           <section className="sj-lobby-card sj-pop-in">
-            <div className="sj-brand-mark"><SkyjoLogo label={`${winner?.name || 'Joueur'} gagne`} /></div>
+            <div className="sj-brand-mark"><SkyjoLogo label={isDraw ? 'Égalité' : `${winner?.name || 'Joueur'} gagne`} /></div>
+            {isDraw && (
+              <p className="sj-hint">
+                {drawNames || 'Plusieurs joueurs'} terminent avec le même plus petit score.
+              </p>
+            )}
             <ScoreTable players={state.players} />
             {isCreator ? (
               <button className="sj-btn sj-btn-primary" onClick={() => emitSocket(socket, SOCKET_EVENTS.RETURN_TO_LOBBY)}>

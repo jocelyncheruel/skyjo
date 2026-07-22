@@ -280,7 +280,9 @@ export default function ProfileModal({ open, onClose, onProfileUpdated }) {
   const statistics = profileStats;
   const statisticsLoading = profileStatsLoading && !statistics;
   const statisticsError = statistics ? '' : profileStatsError;
-  const completedGames = (statistics?.gamesWon || 0) + (statistics?.gamesLost || 0);
+  const completedGames = (statistics?.gamesWon || 0)
+    + (statistics?.gamesLost || 0)
+    + (statistics?.gamesDrawn || 0);
   const winRate = completedGames > 0
     ? Math.round(((statistics?.gamesWon || 0) / completedGames) * 100)
     : 0;
@@ -289,6 +291,7 @@ export default function ProfileModal({ open, onClose, onProfileUpdated }) {
     { label: 'Parties jouées', value: statistics?.gamesPlayed, tone: 'played' },
     { label: 'Victoires', value: statistics?.gamesWon, tone: 'won' },
     { label: 'Défaites', value: statistics?.gamesLost, tone: 'lost' },
+    { label: 'Égalités', value: statistics?.gamesDrawn, tone: 'drawn' },
     { label: 'Abandons', value: statistics?.gamesAbandoned, tone: 'abandoned' },
   ];
 
@@ -541,7 +544,7 @@ export default function ProfileModal({ open, onClose, onProfileUpdated }) {
                 <span className="sj-profile-accordion-icon"><BarChart3 aria-hidden="true" size={17} /></span>
                 <span className="sj-profile-accordion-copy">
                   <strong>Statistiques</strong>
-                  <small>Parties, victoires et abandons</small>
+                  <small>Parties, victoires et égalités</small>
                 </span>
                 <ChevronDown className="sj-profile-accordion-chevron" aria-hidden="true" size={17} />
               </button>
