@@ -145,16 +145,28 @@ export function googleProfileMetadata(user, providerProfile = null, browserLocal
   return Object.keys(update).length ? update : null;
 }
 
-function authProviders(user) {
+export function authProviders(user) {
   const declaredProviders = Array.isArray(user?.app_metadata?.providers)
     ? user.app_metadata.providers
     : [];
+  const identityProviders = Array.isArray(user?.identities)
+    ? user.identities.map((identity) => identity?.provider)
+    : [];
   const primaryProvider = String(user?.app_metadata?.provider || '').toLowerCase();
-  const providers = [...new Set([...declaredProviders, primaryProvider]
+  const providers = [...new Set([...declaredProviders, ...identityProviders, primaryProvider]
     .map((provider) => String(provider || '').toLowerCase())
     .filter((provider) => provider === 'google' || provider === 'email'))];
   if (providers.length > 0) return providers;
   return [primaryProvider === 'google' ? 'google' : 'email'];
+}
+
+export function isObfuscatedExistingSignup(data) {
+  return Boolean(
+    data?.user
+    && !data.session
+    && Array.isArray(data.user.identities)
+    && data.user.identities.length === 0
+  );
 }
 
 function publicUser(user) {
@@ -562,6 +574,35 @@ export function createAuthBff({
     return `${client.protocol}//${client.hostname}${port}/api/auth/google/callback`;
   }
 
+  async function requestPasswordSetupEmail(email, origin, intent = 'password-reset') {
+    const safeIntent = intent === 'link-email' ? 'link-email' : 'password-reset';
+    try {
+      const { error } = await serviceClient.auth.resetPasswordForEmail(email, {
+        redirectTo: `${origin}/auth/confirm?intent=${safeIntent}`,
+      });
+      if (error) logInternal('auth_register_existing_email_link', error);
+    } catch (error) {
+      logInternal('auth_register_existing_email_link', error);
+    }
+  }
+
+  async function ensureEmailIdentity(user) {
+    if (!user?.id) return user;
+    const identities = Array.isArray(user.identities) ? user.identities : null;
+    if (identities?.some((identity) => identity?.provider === 'email')
+      || (!identities && authProviders(user).includes('email'))) {
+      return user;
+    }
+    const email = normalizeEmail(user.email);
+    if (!email) throw authFailure();
+    const { data, error } = await serviceClient.auth.admin.updateUserById(user.id, {
+      email,
+      email_confirm: true,
+    });
+    if (error || !data?.user) throw error || authFailure();
+    return data.user;
+  }
+
   const router = express.Router();
 
   router.get('/session', rateLimit('auth-session', 60, 60_000), optionalAuth, (req, res) => {
@@ -636,7 +677,7 @@ export function createAuthBff({
       const email = normalizeEmail(req.auth.user.email);
       if (!email) throw authFailure();
       const { error } = await serviceClient.auth.resetPasswordForEmail(email, {
-        redirectTo: `${clientOrigin(req)}/auth/confirm`,
+        redirectTo: `${clientOrigin(req)}/auth/confirm?intent=password-reset`,
       });
       if (error) throw publicSupabaseError(error) || error;
       res.status(202).json({ accepted: true });
@@ -688,6 +729,12 @@ export function createAuthBff({
       });
       if (error || !data?.session) throw publicSupabaseError(error) || authFailure();
       let session = data.session;
+      try {
+        const linkedUser = await ensureEmailIdentity(session.user);
+        if (linkedUser !== session.user) session = { ...session, user: linkedUser };
+      } catch (linkError) {
+        logInternal('auth_password_email_identity_link', linkError);
+      }
       const currentLocale = normalizeLocale(session.user?.user_metadata?.preferred_locale);
       const preferredLocale = normalizeLocale(body.preferredLocale);
       if (!currentLocale && preferredLocale) {
@@ -726,7 +773,7 @@ export function createAuthBff({
       const { data, error } = await client.auth.signUp({
         email, password,
         options: {
-          emailRedirectTo: `${origin}/auth/confirm`,
+          emailRedirectTo: `${origin}/auth/confirm?intent=confirm-signup`,
           captchaToken: body.captchaToken ? String(body.captchaToken).slice(0, 2048) : undefined,
           data: {
             first_name: firstName,
@@ -742,6 +789,12 @@ export function createAuthBff({
         if (isTransientAuthError(error)) throw error;
         const safeError = publicSupabaseError(error);
         if (safeError) throw safeError;
+        await requestPasswordSetupEmail(email, origin);
+        res.status(202).json({ confirmationRequired: true });
+        return;
+      }
+      if (isObfuscatedExistingSignup(data)) {
+        await requestPasswordSetupEmail(email, origin, 'link-email');
         res.status(202).json({ confirmationRequired: true });
         return;
       }
@@ -763,7 +816,7 @@ export function createAuthBff({
         const origin = clientOrigin(req);
         const client = buildAuthClient();
         await client.auth.resetPasswordForEmail(email, {
-          redirectTo: `${origin}/auth/confirm`,
+          redirectTo: `${origin}/auth/confirm?intent=password-reset`,
           captchaToken: body.captchaToken ? String(body.captchaToken).slice(0, 2048) : undefined,
         });
       }
@@ -904,6 +957,11 @@ export function createAuthBff({
       if (current.error) throw isTransientAuthError(current.error) ? current.error : authFailure();
       const update = await client.auth.updateUser({ password });
       if (update.error) throw publicSupabaseError(update.error) || update.error;
+      try {
+        await ensureEmailIdentity(update.data?.user || req.auth.user);
+      } catch (linkError) {
+        logInternal('auth_password_email_identity_link', linkError);
+      }
       await client.auth.signOut({ scope: 'global' });
       await serviceClient.from('app_sessions').delete().eq('user_id', req.auth.user.id);
       clearSessionCookie(res);

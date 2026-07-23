@@ -32,6 +32,7 @@ const AUTH_CONFIGURATION_ERROR =
 const EMAIL_ACTION_PATH = "/auth/confirm";
 const OAUTH_CALLBACK_PATH = "/auth/callback";
 const EMAIL_ACTION_TYPES = new Set(["email", "recovery"]);
+const RECOVERY_INTENTS = new Set(["link-email", "password-reset"]);
 const TURNSTILE_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY?.trim() || "";
 const TURNSTILE_CONFIGURATION_ERROR = "La protection anti-robot n'est pas configurée.";
 let capturedEmailAction = null;
@@ -56,6 +57,12 @@ function takeEmailActionFromUrl() {
   const fragment = new URLSearchParams(url.hash.replace(/^#/, ""));
   const tokenHash = fragment.get("token_hash") || "";
   const type = fragment.get("type") || "";
+  const requestedIntent = url.searchParams.get("intent");
+  const intent = type === "email"
+    ? "confirm-signup"
+    : RECOVERY_INTENTS.has(requestedIntent)
+      ? requestedIntent
+      : "password-reset";
 
   url.pathname = url.pathname.replace(/\/auth\/confirm\/?$/, "/");
   url.search = "";
@@ -63,10 +70,10 @@ function takeEmailActionFromUrl() {
   window.history.replaceState({}, document.title, `${url.pathname}${url.search}`);
 
   if (!tokenHash || !EMAIL_ACTION_TYPES.has(type)) {
-    capturedEmailAction = { invalid: true, type };
+    capturedEmailAction = { invalid: true, type, intent };
     return capturedEmailAction;
   }
-  capturedEmailAction = { tokenHash, type, invalid: false };
+  capturedEmailAction = { tokenHash, type, intent, invalid: false };
   return capturedEmailAction;
 }
 
@@ -170,6 +177,7 @@ export function AuthProvider({ children }) {
   const [ready, setReady] = useState(false);
   const [error, setError] = useState("");
   const [recoveryMode, setRecoveryMode] = useState(false);
+  const [recoveryIntent, setRecoveryIntent] = useState("password-reset");
   const [pendingEmailAction, setPendingEmailAction] = useState(null);
   const [profileStatsState, setProfileStatsState] = useState({
     userId: '',
@@ -208,12 +216,14 @@ export function AuthProvider({ children }) {
           setCsrfToken(data?.csrfToken);
           setUser(data?.user || null);
           setRecoveryMode(data?.recovery === true);
+          setRecoveryIntent("password-reset");
           if (oauthResult === "failed") setError("La connexion avec Google a échoué. Réessayez.");
         }
       } catch (authError) {
         if (!cancelled) {
           setUser(null);
           setRecoveryMode(false);
+          setRecoveryIntent("password-reset");
           setError(getAuthErrorMessage(authError));
         }
       } finally {
@@ -232,6 +242,7 @@ export function AuthProvider({ children }) {
       clearBrowserAuthArtifacts();
       setUser(null);
       setRecoveryMode(false);
+      setRecoveryIntent("password-reset");
     };
     window.addEventListener('skyjo:session-expired', expire);
     return () => window.removeEventListener('skyjo:session-expired', expire);
@@ -257,7 +268,12 @@ export function AuthProvider({ children }) {
       capturedEmailAction = null;
       setPendingEmailAction(null);
       setCsrfToken(data?.csrfToken);
-      if (data?.recovery) setRecoveryMode(true);
+      if (data?.recovery) {
+        setRecoveryMode(true);
+        setRecoveryIntent(
+          pendingEmailAction.intent === "link-email" ? "link-email" : "password-reset",
+        );
+      }
       setUser(data?.user || null);
     } catch (actionError) {
       const message = getAuthErrorMessage(actionError);
@@ -383,6 +399,7 @@ export function AuthProvider({ children }) {
     localStorage.removeItem(LAST_EMAIL_KEY);
     setUser(null);
     setRecoveryMode(false);
+    setRecoveryIntent("password-reset");
   }, []);
 
   const updateProfile = useCallback(async ({ firstName, lastName, playerName }) => {
@@ -485,6 +502,7 @@ export function AuthProvider({ children }) {
       localStorage.removeItem(LAST_EMAIL_KEY);
       setUser(null);
       setRecoveryMode(false);
+      setRecoveryIntent("password-reset");
     } catch (deleteError) {
       const message = deleteError instanceof TypeError
         ? "Impossible de contacter le service d'authentification. Vérifiez votre connexion."
@@ -505,6 +523,7 @@ export function AuthProvider({ children }) {
       localStorage.removeItem(LAST_EMAIL_KEY);
       setUser(null);
       setRecoveryMode(false);
+      setRecoveryIntent("password-reset");
     }
   }, []);
 
@@ -514,6 +533,7 @@ export function AuthProvider({ children }) {
       ready,
       error,
       recoveryMode,
+      recoveryIntent,
       pendingEmailAction,
       confirmEmailAction,
       login,
@@ -536,6 +556,7 @@ export function AuthProvider({ children }) {
       ready,
       error,
       recoveryMode,
+      recoveryIntent,
       pendingEmailAction,
       confirmEmailAction,
       login,
@@ -1244,7 +1265,7 @@ export function AuthView() {
         });
         if (result.confirmationRequired)
           setNotice(
-            "Compte créé. Un e-mail de confirmation vient d'être envoyé.",
+            "Vérifiez votre messagerie pour confirmer ou finaliser l'accès à votre compte.",
           );
       }
     } catch {
@@ -1304,6 +1325,8 @@ export function AuthView() {
   }
 
   if (pendingEmailAction) {
+    const isEmailLink = pendingEmailAction.type === "recovery"
+      && pendingEmailAction.intent === "link-email";
     return (
       <main className="auth-page">
         <AuthMessageToast message={error} onDismiss={clearError} />
@@ -1311,15 +1334,31 @@ export function AuthView() {
           <AuthMobileBrand />
           <div className="auth-heading">
             <p className="auth-eyebrow">Lien personnel</p>
-            <h2>{pendingEmailAction.type === "recovery" ? "Réinitialiser le mot de passe" : "Confirmer l'adresse e-mail"}</h2>
-            <p>Le lien ne sera utilisé qu'après votre confirmation.</p>
+            <h2>
+              {isEmailLink
+                ? "Ajouter la connexion par e-mail"
+                : pendingEmailAction.type === "recovery"
+                  ? "Réinitialiser le mot de passe"
+                  : "Confirmer l'adresse e-mail"}
+            </h2>
+            <p>
+              {isEmailLink
+                ? "Confirmez ce lien avant de choisir le mot de passe de votre connexion par e-mail."
+                : "Le lien ne sera utilisé qu'après votre confirmation."}
+            </p>
           </div>
           <button className="auth-submit" type="button" disabled={busy || pendingEmailAction.invalid} onClick={async () => {
             setBusy(true);
             try { await confirmEmailAction(); } catch { return; }
             finally { setBusy(false); }
           }}>
-            {busy ? "Vérification..." : pendingEmailAction.type === "recovery" ? "Continuer" : "Confirmer votre adresse"}
+            {busy
+              ? "Vérification..."
+              : isEmailLink
+                ? "Ajouter la connexion par e-mail"
+                : pendingEmailAction.type === "recovery"
+                  ? "Continuer"
+                  : "Confirmer votre adresse"}
           </button>
           {pendingEmailAction.invalid && <p className="auth-switch">Ce lien est invalide ou incomplet.</p>}
         </section>
@@ -1652,7 +1691,14 @@ export function AuthView() {
 }
 
 export function ResetPasswordView() {
-  const { user, updatePassword, error, clearError } = useAuth();
+  const {
+    user,
+    recoveryIntent,
+    updatePassword,
+    error,
+    clearError,
+  } = useAuth();
+  const isEmailLink = recoveryIntent === "link-email";
   const [password, setPassword] = useState("");
   const [confirmation, setConfirmation] = useState("");
   const [localError, setLocalError] = useState("");
@@ -1686,9 +1732,15 @@ export function ResetPasswordView() {
       <section className="auth-reset-card">
         <AuthMobileBrand />
         <div className="auth-heading">
-          <p className="auth-eyebrow">Sécurisez votre compte</p>
-          <h2>Nouveau mot de passe</h2>
-          <p>Choisissez un nouveau mot de passe pour retrouver vos parties.</p>
+          <p className="auth-eyebrow">
+            {isEmailLink ? "Nouvelle méthode de connexion" : "Sécurisez votre compte"}
+          </p>
+          <h2>{isEmailLink ? "Connexion par e-mail" : "Nouveau mot de passe"}</h2>
+          <p>
+            {isEmailLink
+              ? "Choisissez un mot de passe pour vous connecter avec Google ou votre adresse e-mail."
+              : "Choisissez un nouveau mot de passe pour retrouver l'accès à votre compte."}
+          </p>
         </div>
         <form className="auth-form" onSubmit={submit}>
           <input
@@ -1726,7 +1778,11 @@ export function ResetPasswordView() {
             required
           />
           <button className="auth-submit" disabled={busy}>
-            {busy ? "Mise à jour..." : "Enregistrer le mot de passe"}
+            {busy
+              ? "Mise à jour..."
+              : isEmailLink
+                ? "Activer la connexion par e-mail"
+                : "Enregistrer le mot de passe"}
           </button>
         </form>
       </section>
