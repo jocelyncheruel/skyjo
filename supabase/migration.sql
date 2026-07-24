@@ -216,6 +216,26 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.account_consents TO service
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.app_sessions TO service_role;
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.user_game_participations TO service_role;
 
+DROP FUNCTION IF EXISTS public.skyjo_auth_account_exists(TEXT);
+CREATE OR REPLACE FUNCTION public.skyjo_auth_account_exists(p_email TEXT)
+RETURNS BOOLEAN
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+  SELECT EXISTS (
+    SELECT 1
+    FROM auth.users AS auth_user
+    WHERE LOWER(auth_user.email) = LOWER(BTRIM(p_email))
+  );
+$$;
+
+REVOKE ALL ON FUNCTION public.skyjo_auth_account_exists(TEXT)
+  FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.skyjo_auth_account_exists(TEXT)
+  TO service_role;
+
 DROP FUNCTION IF EXISTS public.commit_skyjo_room(
   TEXT, JSONB, BIGINT, SMALLINT, UUID, TEXT, TEXT, TEXT, SMALLINT, TEXT, UUID, TEXT
 );

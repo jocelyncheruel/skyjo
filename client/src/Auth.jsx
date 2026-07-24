@@ -102,9 +102,11 @@ function getAuthErrorMessage(error) {
   if (code === "email_not_confirmed" || message.includes("email not confirmed")) {
     return "Votre adresse e-mail n'est pas encore confirmée.";
   }
+  if (code === "user_already_exists" || code === "email_exists") {
+    return "Un compte existe déjà avec cette adresse e-mail.";
+  }
   if (
     code === "authentication_failed" || code === "invalid_credentials"
-    || code === "user_already_exists" || code === "email_exists"
     || message.includes("invalid login credentials")
   ) {
     return "Impossible de finaliser l'authentification avec ces informations.";
@@ -1265,7 +1267,7 @@ export function AuthView() {
         });
         if (result.confirmationRequired)
           setNotice(
-            "Vérifiez votre messagerie pour confirmer ou finaliser l'accès à votre compte.",
+            "Compte créé. Un e-mail de confirmation vient d'être envoyé.",
           );
       }
     } catch {

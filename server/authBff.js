@@ -239,6 +239,18 @@ function isTransientAuthError(error) {
 export function publicSupabaseError(error) {
   const code = String(error?.code || '').toLowerCase();
   const message = String(error?.message || '').toLowerCase();
+  if (
+    code === 'user_already_exists'
+    || code === 'email_exists'
+    || message.includes('user already registered')
+    || message.includes('email already exists')
+  ) {
+    return new PublicError(
+      'email_exists',
+      'Un compte existe déjà avec cette adresse e-mail.',
+      409,
+    );
+  }
   if (code === 'email_not_confirmed' || message.includes('email not confirmed')) {
     return new PublicError(
       'email_not_confirmed',
@@ -574,15 +586,17 @@ export function createAuthBff({
     return `${client.protocol}//${client.hostname}${port}/api/auth/google/callback`;
   }
 
-  async function requestPasswordSetupEmail(email, origin, intent = 'password-reset') {
-    const safeIntent = intent === 'link-email' ? 'link-email' : 'password-reset';
+  async function accountExistsByEmail(email) {
     try {
-      const { error } = await serviceClient.auth.resetPasswordForEmail(email, {
-        redirectTo: `${origin}/auth/confirm?intent=${safeIntent}`,
-      });
-      if (error) logInternal('auth_register_existing_email_link', error);
+      const { data, error } = await serviceClient.rpc(
+        'skyjo_auth_account_exists',
+        { p_email: email },
+      );
+      if (error) throw error;
+      return data === true;
     } catch (error) {
-      logInternal('auth_register_existing_email_link', error);
+      logInternal('auth_register_account_lookup', error);
+      return false;
     }
   }
 
@@ -729,12 +743,6 @@ export function createAuthBff({
       });
       if (error || !data?.session) throw publicSupabaseError(error) || authFailure();
       let session = data.session;
-      try {
-        const linkedUser = await ensureEmailIdentity(session.user);
-        if (linkedUser !== session.user) session = { ...session, user: linkedUser };
-      } catch (linkError) {
-        logInternal('auth_password_email_identity_link', linkError);
-      }
       const currentLocale = normalizeLocale(session.user?.user_metadata?.preferred_locale);
       const preferredLocale = normalizeLocale(body.preferredLocale);
       if (!currentLocale && preferredLocale) {
@@ -770,6 +778,7 @@ export function createAuthBff({
       }
       const origin = clientOrigin(req);
       const client = buildAuthClient();
+      const accountExistedBefore = await accountExistsByEmail(email);
       const { data, error } = await client.auth.signUp({
         email, password,
         options: {
@@ -786,17 +795,25 @@ export function createAuthBff({
         },
       });
       if (error) {
-        if (isTransientAuthError(error)) throw error;
         const safeError = publicSupabaseError(error);
+        if (safeError?.code === 'captcha_failed') throw safeError;
+        if (accountExistedBefore) {
+          throw new PublicError(
+            'email_exists',
+            'Un compte existe déjà avec cette adresse e-mail.',
+            409,
+          );
+        }
+        if (isTransientAuthError(error)) throw error;
         if (safeError) throw safeError;
-        await requestPasswordSetupEmail(email, origin);
-        res.status(202).json({ confirmationRequired: true });
-        return;
+        throw authFailure();
       }
-      if (isObfuscatedExistingSignup(data)) {
-        await requestPasswordSetupEmail(email, origin, 'link-email');
-        res.status(202).json({ confirmationRequired: true });
-        return;
+      if (accountExistedBefore || isObfuscatedExistingSignup(data)) {
+        throw new PublicError(
+          'email_exists',
+          'Un compte existe déjà avec cette adresse e-mail.',
+          409,
+        );
       }
       if (data?.session) {
         const session = await createBrowserSession(res, data.session, body.remember === true);
