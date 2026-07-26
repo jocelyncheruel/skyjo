@@ -34,7 +34,7 @@ const DEFAULT_PORT = 4000;
 const MAX_RATE_BUCKETS = 20_000;
 const MAX_SOCKETS_PER_USER = 3;
 const CHAT_PAGE_SIZE = 80;
-const DISCONNECT_GRACE_MS = 30_000;
+const ACTIVE_GAME_DISCONNECT_GRACE_MS = 10 * 60 * 1000;
 const SESSION_CHECK_CACHE_MS = 30_000;
 const generateRoomId = customAlphabet('0123456789', 6);
 const NODE_ENV = process.env.NODE_ENV || 'development';
@@ -605,9 +605,18 @@ async function handleAction(socket, fn, mutationOptions = {}) {
       );
     }
   }, mutationOptions);
+  if (state.phase === 'lobby') clearDisconnectTimersForRoom(info.roomId);
   broadcastRoom(info.roomId);
   scheduleNextRound(info.roomId, state);
   scheduleDefensePrompt(info.roomId, state);
+}
+
+function clearDisconnectTimersForRoom(roomId) {
+  for (const [key, timer] of disconnectTimers) {
+    if (!key.startsWith(`${roomId}:`)) continue;
+    clearTimeout(timer);
+    disconnectTimers.delete(key);
+  }
 }
 
 function clearRoomTimers(roomId) {
@@ -616,11 +625,7 @@ function clearRoomTimers(roomId) {
     if (timer) clearTimeout(timer);
     timers.delete(roomId);
   }
-  for (const [key, timer] of disconnectTimers) {
-    if (!key.startsWith(`${roomId}:`)) continue;
-    clearTimeout(timer);
-    disconnectTimers.delete(key);
-  }
+  clearDisconnectTimersForRoom(roomId);
 }
 
 function scheduleNextRound(roomId, state) {
@@ -1035,26 +1040,31 @@ io.on('connection', (socket) => {
     const key = connectionKey(info.roomId, info.playerId);
     clearDisconnectTimer(info.roomId, info.playerId);
     void mutateRoom(info.roomId, (draft) => removePlayer(draft, info.playerId))
-      .then(() => broadcastRoom(info.roomId))
-      .catch((error) => logInternal('disconnect_mark_offline', error));
-    const timer = setTimeout(async () => {
-      disconnectTimers.delete(key);
-      if (socketIdsForPlayer(info.roomId, info.playerId).length) return;
-      try {
-        const { state } = await mutateRoom(info.roomId, async (draft) => {
-          leavePlayer(draft, info.playerId);
-          if (draft.creatorId) {
-            const nextOwner = await findMemberByPlayer(info.roomId, draft.creatorId);
-            if (nextOwner) roomMeta.get(info.roomId).ownerUserId = nextOwner.user_id;
-          }
-        }, { removePlayerId: info.playerId });
+      .then(({ state }) => {
         broadcastRoom(info.roomId);
-        scheduleNextRound(info.roomId, state);
-        scheduleDefensePrompt(info.roomId, state);
-      } catch (error) { logInternal('disconnect_cleanup', error); }
-    }, DISCONNECT_GRACE_MS);
-    timer.unref?.();
-    disconnectTimers.set(key, timer);
+        if (state.phase === 'lobby' || socketIdsForPlayer(info.roomId, info.playerId).length) {
+          return;
+        }
+        const timer = setTimeout(async () => {
+          disconnectTimers.delete(key);
+          if (socketIdsForPlayer(info.roomId, info.playerId).length) return;
+          try {
+            const { state: nextState } = await mutateRoom(info.roomId, async (draft) => {
+              leavePlayer(draft, info.playerId);
+              if (draft.creatorId) {
+                const nextOwner = await findMemberByPlayer(info.roomId, draft.creatorId);
+                if (nextOwner) roomMeta.get(info.roomId).ownerUserId = nextOwner.user_id;
+              }
+            }, { removePlayerId: info.playerId });
+            broadcastRoom(info.roomId);
+            scheduleNextRound(info.roomId, nextState);
+            scheduleDefensePrompt(info.roomId, nextState);
+          } catch (error) { logInternal('disconnect_cleanup', error); }
+        }, ACTIVE_GAME_DISCONNECT_GRACE_MS);
+        timer.unref?.();
+        disconnectTimers.set(key, timer);
+      })
+      .catch((error) => logInternal('disconnect_mark_offline', error));
   });
 });
 
