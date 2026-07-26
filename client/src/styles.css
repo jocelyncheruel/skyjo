@@ -75,9 +75,9 @@ body {
 }
 
 .auth-copy { position: relative; z-index: 1; max-width: 30rem; padding-block: 1.25rem; }
-.auth-kicker { margin-bottom: 1rem !important; color: #f2d58c; font-size: .72rem; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
-.auth-copy h1 { max-width: 28rem; font-size: clamp(2.35rem, 4vw, 4rem); font-weight: 850; line-height: 1.02; letter-spacing: -.055em; }
-.auth-copy > p:not(.auth-kicker) { max-width: 27rem; margin-top: 1.35rem; color: #d9e8df; font-size: .98rem; line-height: 1.7; }
+.auth-copy h1 { max-width: 28rem; font-size: clamp(2.35rem, 3.7vw, 3.7rem); font-weight: 850; line-height: 1.04; letter-spacing: -.05em; }
+.auth-copy h1 span { display: block; color: #f2d58c; }
+.auth-copy > p { max-width: 26rem; margin-top: 1.35rem; color: #d9e8df; font-size: .94rem; line-height: 1.7; }
 .auth-quote { position: relative; z-index: 1; color: #a9bcb3; font-size: .72rem; font-style: italic; }
 .auth-form-panel { display: grid; min-height: 0; place-items: center; overflow-y: auto; padding: 1.5rem clamp(1.5rem, 3vw, 3rem); background: rgba(255,255,255,.98); }
 .auth-form-inner { width: 100%; max-width: 390px; }

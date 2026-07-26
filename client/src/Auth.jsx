@@ -1033,11 +1033,13 @@ function AuthStoryPanel() {
         <AuthLogoMark /> Skyjo en ligne
       </div>
       <div className="auth-copy">
-        <p className="auth-kicker">Jeu de cartes multijoueur</p>
-        <h1>Skyjo en ligne</h1>
+        <h1>
+          Jouez ensemble,
+          <span>même à distance.</span>
+        </h1>
         <p>
-          Skyjo en ligne permet de créer une salle privée ou publique,
-          d'inviter ses proches et de jouer ensemble à distance.
+          Créez une salle privée ou publique, invitez vos proches
+          et lancez la partie.
         </p>
       </div>
       <p className="auth-quote">
