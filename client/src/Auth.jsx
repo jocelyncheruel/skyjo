@@ -641,7 +641,7 @@ function loadTurnstile() {
   return turnstileScriptPromise;
 }
 
-function TurnstileWidget({ onToken, resetSignal }) {
+function TurnstileWidget({ onToken, onVisibilityChange, resetSignal }) {
   const containerRef = useRef(null);
   const widgetIdRef = useRef(null);
   const [visible, setVisible] = useState(false);
@@ -650,11 +650,16 @@ function TurnstileWidget({ onToken, resetSignal }) {
     const container = containerRef.current;
     if (!container || typeof ResizeObserver === "undefined") return undefined;
     const observer = new ResizeObserver(() => {
-      setVisible(container.getBoundingClientRect().height > 0);
+      const nextVisible = container.getBoundingClientRect().height > 0;
+      setVisible(nextVisible);
+      onVisibilityChange?.(nextVisible);
     });
     observer.observe(container);
-    return () => observer.disconnect();
-  }, []);
+    return () => {
+      observer.disconnect();
+      onVisibilityChange?.(false);
+    };
+  }, [onVisibilityChange]);
 
   useEffect(() => {
     if (!TURNSTILE_SITE_KEY || !containerRef.current) return undefined;
@@ -1178,6 +1183,8 @@ export function AuthView() {
   const [notice, setNotice] = useState("");
   const [captchaToken, setCaptchaToken] = useState("");
   const [captchaReset, setCaptchaReset] = useState(0);
+  const [googleCaptchaRequested, setGoogleCaptchaRequested] = useState(false);
+  const [googleCaptchaVisible, setGoogleCaptchaVisible] = useState(false);
   const [legalDocument, setLegalDocument] = useState(null);
   const [readLegalDocuments, setReadLegalDocuments] = useState({
     terms: false,
@@ -1217,6 +1224,22 @@ export function AuthView() {
   const securityReady = TURNSTILE_SITE_KEY
     ? Boolean(captchaToken)
     : !import.meta.env.PROD;
+  const completeGoogleCaptcha = useCallback(async (token) => {
+    setCaptchaToken(token);
+    if (!token) {
+      setGoogleCaptchaRequested(false);
+      setGoogleCaptchaVisible(false);
+      return;
+    }
+    setGoogleBusy(true);
+    try {
+      await loginWithGoogle(form.remember, token);
+    } catch {
+      setGoogleBusy(false);
+      setCaptchaToken("");
+      setCaptchaReset((value) => value + 1);
+    }
+  }, [form.remember, loginWithGoogle]);
 
   function updateField(event) {
     const { name, value, type, checked } = event.target;
@@ -1235,6 +1258,9 @@ export function AuthView() {
         "Renseignez votre prénom, votre nom et une adresse e-mail valide.",
       );
     setLocalError("");
+    setCaptchaToken("");
+    setGoogleCaptchaRequested(false);
+    setGoogleCaptchaVisible(false);
     setStep(2);
   }
   async function submit(event) {
@@ -1332,6 +1358,10 @@ export function AuthView() {
     setNotice("");
     if (import.meta.env.PROD && !TURNSTILE_SITE_KEY)
       return setLocalError(TURNSTILE_CONFIGURATION_ERROR);
+    if (TURNSTILE_SITE_KEY && !captchaToken) {
+      setGoogleCaptchaRequested(true);
+      return;
+    }
     setGoogleBusy(true);
     try {
       await loginWithGoogle(form.remember, captchaToken);
@@ -1348,6 +1378,10 @@ export function AuthView() {
     setStep(1);
     setMode(next);
     setGoogleBusy(false);
+    setGoogleCaptchaRequested(false);
+    setGoogleCaptchaVisible(false);
+    setCaptchaToken("");
+    setCaptchaReset((value) => value + 1);
   }
 
   if (pendingEmailAction) {
@@ -1417,33 +1451,96 @@ export function AuthView() {
         <div className="auth-form-panel">
           <div className="auth-form-inner">
             <AuthMobileBrand heading />
-            <div className="auth-heading">
+            <div
+              className={`auth-heading${googleCaptchaVisible ? " auth-heading-google-verification" : ""}`}
+            >
               <p className="auth-eyebrow">
                 {mode === "register"
                   ? "Bienvenue dans l'aventure"
                   : "Heureux de vous revoir"}
               </p>
               <h2>
-                {mode === "register"
+                {googleCaptchaVisible
+                  ? "Vérification Google"
+                  : mode === "register"
                   ? "Créez votre compte"
                   : "Bon retour parmi nous"}
               </h2>
             </div>
-            <form className="auth-form" onSubmit={submit}>
-              <TurnstileWidget onToken={setCaptchaToken} resetSignal={captchaReset} />
+            <form
+              className={`auth-form${googleCaptchaVisible ? " auth-form-google-verification" : ""}`}
+              onSubmit={submit}
+            >
               {(mode === "login" || step === 1) && (
                 <div className="auth-oauth-block">
                   <button
                     className="auth-google-button"
                     type="button"
                     onClick={continueWithGoogle}
-                    disabled={busy || googleBusy || !securityReady}
+                    disabled={
+                      busy
+                      || googleBusy
+                      || googleCaptchaRequested
+                      || (mode === "login" && !securityReady)
+                    }
                   >
                     <GoogleIcon />
                     <span>
-                      {googleBusy ? "Redirection..." : "Continuer avec Google"}
+                      {googleBusy
+                        ? "Redirection..."
+                        : googleCaptchaVisible && securityReady
+                          ? "Vérification validée — continuer"
+                          : googleCaptchaVisible
+                            ? "Validez la vérification ci-dessous"
+                            : googleCaptchaRequested
+                              ? "Vérification..."
+                            : "Continuer avec Google"}
                     </span>
                   </button>
+                  {googleCaptchaVisible && (
+                    <div className="auth-google-verification-copy" aria-live="polite">
+                      <strong>
+                        {googleBusy
+                          ? "Ouverture de Google..."
+                          : "Confirmez que vous n'êtes pas un robot"}
+                      </strong>
+                      <span>
+                        {googleBusy
+                          ? "Vous allez être redirigé automatiquement."
+                          : "La connexion continuera automatiquement après la vérification."}
+                      </span>
+                    </div>
+                  )}
+                  {(mode === "login" || googleCaptchaRequested) && (
+                    <TurnstileWidget
+                      onToken={
+                        googleCaptchaRequested
+                          ? completeGoogleCaptcha
+                          : setCaptchaToken
+                      }
+                      onVisibilityChange={
+                        googleCaptchaRequested
+                          ? setGoogleCaptchaVisible
+                          : undefined
+                      }
+                      resetSignal={captchaReset}
+                    />
+                  )}
+                  {googleCaptchaVisible && (
+                    <button
+                      className="auth-google-verification-cancel"
+                      type="button"
+                      disabled={googleBusy}
+                      onClick={() => {
+                        setGoogleCaptchaRequested(false);
+                        setGoogleCaptchaVisible(false);
+                        setCaptchaToken("");
+                        setCaptchaReset((value) => value + 1);
+                      }}
+                    >
+                      Retour à l'inscription
+                    </button>
+                  )}
                   <div className="auth-divider" aria-hidden="true">
                     <span>ou avec e-mail</span>
                   </div>
@@ -1628,12 +1725,22 @@ export function AuthView() {
                         readDocuments={readLegalDocuments}
                       />
                     )}
+                    {mode === "register" && (
+                      <TurnstileWidget
+                        onToken={setCaptchaToken}
+                        resetSignal={captchaReset}
+                      />
+                    )}
                     {mode === "register" ? (
                       <div className="auth-actions">
                         <button
                           className="auth-back"
                           type="button"
-                          onClick={() => setStep(1)}
+                          onClick={() => {
+                            setCaptchaToken("");
+                            setCaptchaReset((value) => value + 1);
+                            setStep(1);
+                          }}
                         >
                           ← Retour
                         </button>
