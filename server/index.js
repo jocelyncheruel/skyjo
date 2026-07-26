@@ -35,6 +35,8 @@ const MAX_RATE_BUCKETS = 20_000;
 const MAX_SOCKETS_PER_USER = 3;
 const CHAT_PAGE_SIZE = 80;
 const ACTIVE_GAME_DISCONNECT_GRACE_MS = 10 * 60 * 1000;
+const SYSTEM_CHAT_PLAYER_ID = '__system__';
+const SYSTEM_CHAT_PLAYER_NAME = 'Système';
 const SESSION_CHECK_CACHE_MS = 30_000;
 const generateRoomId = customAlphabet('0123456789', 6);
 const NODE_ENV = process.env.NODE_ENV || 'development';
@@ -470,11 +472,12 @@ async function attachSocket(socket, roomId, playerId, playerName) {
   clearDisconnectTimer(roomId, playerId);
   socketToPlayer.set(socket.id, { roomId, playerId });
   socket.join(roomId);
-  const { state } = await mutateRoom(roomId, (draft) => {
+  const { state, result: attachedPlayerName } = await mutateRoom(roomId, (draft) => {
     const player = draft.playersById[playerId];
     if (!player) throw new PublicError('seat_unavailable', 'Impossible de rejoindre cette salle.', 409);
     player.connected = true;
     if (playerName) player.name = playerName;
+    return player.name;
   });
   socket.emit(
     SOCKET_EVENTS.JOINED,
@@ -484,6 +487,10 @@ async function attachSocket(socket, roomId, playerId, playerName) {
   broadcastRoom(roomId);
   scheduleNextRound(roomId, state);
   scheduleDefensePrompt(roomId, state);
+  if (socket.data.presenceEvent === 'join') {
+    await safelyAppendSystemChatMessage(roomId, `${attachedPlayerName} a rejoint la salle.`);
+  }
+  socket.data.presenceEvent = null;
 }
 
 async function attachExistingMember(socket, roomId, playerName = '') {
@@ -674,9 +681,40 @@ function scheduleDefensePrompt(roomId, state) {
 
 function mapMessage(row) {
   return {
-    id: row.message_id, t: Date.parse(row.sent_at), playerId: row.player_id,
+    id: row.message_id, t: Date.parse(row.sent_at),
+    type: row.player_id === SYSTEM_CHAT_PLAYER_ID ? 'system' : 'user',
+    playerId: row.player_id,
     playerName: row.player_name, text: row.body,
   };
+}
+
+async function appendSystemChatMessage(roomId, text) {
+  const body = normalizeChatMessage(text);
+  if (!body) throw new Error('invalid_system_chat_message');
+  const messageId = nanoid(18);
+  const { data, error } = await supabase.rpc('append_skyjo_message', {
+    p_room_id: roomId,
+    p_message_id: messageId,
+    p_player_id: SYSTEM_CHAT_PLAYER_ID,
+    p_player_name: SYSTEM_CHAT_PLAYER_NAME,
+    p_body: body,
+    p_sent_at: new Date().toISOString(),
+  });
+  if (error || !data?.[0]) throw error || new Error('system_message_not_persisted');
+  const state = rooms.get(roomId);
+  if (state) state.updatedAt = Date.now();
+  io.to(roomId).emit(
+    SOCKET_EVENTS.CHAT_MESSAGE,
+    socketServerPayload(SOCKET_EVENTS.CHAT_MESSAGE, mapMessage(data[0])),
+  );
+}
+
+async function safelyAppendSystemChatMessage(roomId, text) {
+  try {
+    await appendSystemChatMessage(roomId, text);
+  } catch (error) {
+    logInternal('system_chat_message', error);
+  }
 }
 
 function encodeChatCursor(row) {
@@ -977,6 +1015,7 @@ io.on('connection', (socket) => {
       throw new PublicError('room_unavailable', 'Impossible de rejoindre cette salle.', 404);
     }
     let member = await findMemberByUser(roomId, socket.data.auth.user.id);
+    let memberCreated = false;
     if (!member) {
       const playerId = nanoid(12);
       try {
@@ -986,6 +1025,7 @@ io.on('connection', (socket) => {
         }, { member: { userId: socket.data.auth.user.id, playerId } });
         state = result.state;
         member = { player_id: playerId, user_id: socket.data.auth.user.id };
+        memberCreated = true;
       } catch (error) {
         if (error?.code !== '23505' && !String(error?.message || '').includes('duplicate')) throw error;
         member = await findMemberByUser(roomId, socket.data.auth.user.id);
@@ -994,6 +1034,7 @@ io.on('connection', (socket) => {
       }
     }
     if (!state.playersById[member.player_id]) throw new PublicError('seat_unavailable', 'Impossible de rejoindre cette salle.', 409);
+    socket.data.presenceEvent = memberCreated ? 'join' : null;
     await attachSocket(socket, roomId, member.player_id, playerName);
   }));
 
@@ -1001,7 +1042,9 @@ io.on('connection', (socket) => {
     const info = socketToPlayer.get(socket.id);
     if (!info) { if (typeof acknowledge === 'function') acknowledge({ ok: true }); return; }
     const allSocketIds = socketIdsForPlayer(info.roomId, info.playerId);
+    let leavingPlayerName = '';
     const { state } = await mutateRoom(info.roomId, async (draft) => {
+      leavingPlayerName = normalizePlayerName(draft.playersById[info.playerId]?.name);
       leavePlayer(draft, info.playerId);
       if (draft.creatorId) {
         const nextOwner = await findMemberByPlayer(info.roomId, draft.creatorId);
@@ -1015,6 +1058,9 @@ io.on('connection', (socket) => {
     broadcastRoom(info.roomId);
     scheduleNextRound(info.roomId, state);
     scheduleDefensePrompt(info.roomId, state);
+    if (leavingPlayerName) {
+      await safelyAppendSystemChatMessage(info.roomId, `${leavingPlayerName} a quitté la salle.`);
+    }
     if (typeof acknowledge === 'function') acknowledge({ ok: true });
   }));
 
@@ -1077,7 +1123,9 @@ io.on('connection', (socket) => {
           disconnectTimers.delete(key);
           if (socketIdsForPlayer(info.roomId, info.playerId).length) return;
           try {
+            let leavingPlayerName = '';
             const { state: nextState } = await mutateRoom(info.roomId, async (draft) => {
+              leavingPlayerName = normalizePlayerName(draft.playersById[info.playerId]?.name);
               leavePlayer(draft, info.playerId);
               if (draft.creatorId) {
                 const nextOwner = await findMemberByPlayer(info.roomId, draft.creatorId);
@@ -1087,6 +1135,9 @@ io.on('connection', (socket) => {
             broadcastRoom(info.roomId);
             scheduleNextRound(info.roomId, nextState);
             scheduleDefensePrompt(info.roomId, nextState);
+            if (leavingPlayerName) {
+              await safelyAppendSystemChatMessage(info.roomId, `${leavingPlayerName} a quitté la salle.`);
+            }
           } catch (error) { logInternal('disconnect_cleanup', error); }
         }, ACTIVE_GAME_DISCONNECT_GRACE_MS);
         timer.unref?.();

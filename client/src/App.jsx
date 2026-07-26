@@ -1265,10 +1265,23 @@ function ChatModal({
             </div>
           ) : (
             messages.map((message, index) => {
+              const system = message.type === 'system';
               const mine = message.playerId === myId;
               const previousMessage = messages[index - 1];
-              const grouped = previousMessage?.playerId === message.playerId
+              const grouped = !system
+                && previousMessage?.type !== 'system'
+                && previousMessage?.playerId === message.playerId
                 && Math.abs((message.t || 0) - (previousMessage.t || 0)) <= CHAT_GROUP_WINDOW_MS;
+              if (system) {
+                return (
+                  <article key={message.id} className="sj-chat-system-message">
+                    <span>{message.text}</span>
+                    <time dateTime={new Date(message.t).toISOString()}>
+                      {chatMessageTime(message.t)}
+                    </time>
+                  </article>
+                );
+              }
               return (
                 <article
                   key={message.id}

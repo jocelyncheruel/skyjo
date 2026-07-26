@@ -1,4 +1,4 @@
-export const SOCKET_PROTOCOL_VERSION = 8;
+export const SOCKET_PROTOCOL_VERSION = 9;
 
 export const SOCKET_EVENTS = Object.freeze({
   CONNECT: 'connect',
@@ -77,7 +77,7 @@ export const SOCKET_SERVER_PAYLOAD_KEYS = Object.freeze({
   [SOCKET_EVENTS.JOINED]: Object.freeze(['roomId', 'playerId']),
   [SOCKET_EVENTS.CHAT_HISTORY]: Object.freeze(['messages', 'hasMore', 'before']),
   [SOCKET_EVENTS.CHAT_MESSAGE]: Object.freeze([
-    'id', 't', 'playerId', 'playerName', 'text',
+    'id', 't', 'type', 'playerId', 'playerName', 'text',
   ]),
 });
 

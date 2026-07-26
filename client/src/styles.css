@@ -4770,6 +4770,35 @@ button.sj-action-count-badge:focus-visible {
   gap: 9px;
 }
 
+.sj-chat-system-message {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 2px 12px;
+  color: rgba(232, 239, 250, 0.66);
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1.35;
+  text-align: center;
+}
+
+.sj-chat-system-message::before,
+.sj-chat-system-message::after {
+  width: min(11vw, 44px);
+  height: 1px;
+  flex: 0 1 44px;
+  content: "";
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.sj-chat-system-message time {
+  flex: 0 0 auto;
+  color: rgba(255, 255, 255, 0.38);
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+}
+
 .sj-chat-message-grouped {
   margin-top: -7px;
 }

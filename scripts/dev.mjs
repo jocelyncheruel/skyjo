@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import net from 'node:net';
+import { SOCKET_PROTOCOL_VERSION } from '../shared/socketProtocol.js';
 
 const clientArgs = process.argv.slice(2);
 const isWindows = process.platform === 'win32';
@@ -8,7 +9,6 @@ const npmCommand = isWindows ? 'npm.cmd' : 'npm';
 const serverEnv = readEnvFile(new URL('../server/.env', import.meta.url));
 const serverPort = Number(process.env.PORT || serverEnv.PORT || 4000);
 const serverHost = process.env.HOST || serverEnv.HOST || '0.0.0.0';
-const expectedProtocolVersion = 6;
 const shouldStartServer = await getShouldStartServer(serverPort, serverHost);
 
 const commands = [
@@ -146,7 +146,7 @@ async function hasRunningSkyjoServer(port) {
     });
     if (!res.ok) return false;
     const data = await res.json();
-    return data?.ok === true && data?.clientProtocolVersion === expectedProtocolVersion;
+    return data?.ok === true && data?.clientProtocolVersion === SOCKET_PROTOCOL_VERSION;
   } catch {
     return false;
   } finally {
