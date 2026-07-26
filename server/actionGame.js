@@ -61,6 +61,7 @@ function ensureActionFields(state) {
   state.lastPlayedAction ||= null;
   state.pendingAction ||= null;
   state.pendingStarClaim ||= null;
+  if (!Array.isArray(state.pendingInitialStarClaims)) state.pendingInitialStarClaims = [];
   state.pendingGroupChoice ||= null;
   state.turnSerial ||= 0;
   state.extraTurns ||= {};
@@ -262,6 +263,17 @@ function resolveFinalTurnStarClaim(state) {
 }
 
 function beginStarClaim(state, playerId, resume) {
+  if (!Array.isArray(state.pendingInitialStarClaims)) {
+    state.pendingInitialStarClaims = [];
+  }
+
+  if (state.pendingStarClaim) {
+    if (state.phase !== 'initialFlip') {
+      throw new Error('Une carte Étoile doit d’abord être résolue.');
+    }
+    state.pendingInitialStarClaims.push({ playerId, resume });
+    return;
+  }
   state.pendingStarClaim = { playerId, resume };
   state.turnStage = 'starClaim';
   if (resolveFinalTurnStarClaim(state)) return;
@@ -271,9 +283,29 @@ function beginStarClaim(state, playerId, resume) {
   }
 }
 
+function activateNextInitialStarClaim(state) {
+  if (!Array.isArray(state.pendingInitialStarClaims)) {
+    state.pendingInitialStarClaims = [];
+  }
+
+  while (state.pendingInitialStarClaims.length > 0) {
+    const nextClaim = state.pendingInitialStarClaims.shift();
+    if (!state.playersById[nextClaim.playerId]) continue;
+    if (!prepareActionClaimChoices(state)) {
+      log(state, 'Aucune carte Action n’est disponible : le bonus Étoile est ignoré.');
+      continue;
+    }
+    state.pendingStarClaim = nextClaim;
+    state.turnStage = 'starClaim';
+    return true;
+  }
+  return false;
+}
+
 function resumeAfterStarClaim(state) {
   const resume = state.pendingStarClaim?.resume;
   state.pendingStarClaim = null;
+  if (activateNextInitialStarClaim(state)) return;
   if (resume?.type === 'clearGroups') {
     const player = state.playersById[resume.playerId];
     const next = resume.resume || { type: 'none' };
@@ -504,7 +536,10 @@ function revealRemainingCards(player) {
 
 function startRoundIfReady(state) {
   const ids = state.order.filter((id) => state.playersById[id]);
-  if (ids.length < 2 || !ids.every((id) => state.playersById[id].flippedCount >= 2)) return false;
+  if (state.pendingStarClaim
+    || (state.pendingInitialStarClaims?.length || 0) > 0
+    || ids.length < 2
+    || !ids.every((id) => state.playersById[id].flippedCount >= 2)) return false;
   let starterId = state.actionNextStarterId;
   let starterLogMessage = null;
   if (!starterId || !ids.includes(starterId)) {
@@ -548,6 +583,7 @@ function dealRound(state) {
   refillMarket(state);
   state.pendingAction = null;
   state.pendingStarClaim = null;
+  state.pendingInitialStarClaims = [];
   state.pendingGroupChoice = null;
   state.roundEnderId = null;
   state.roundNumber += 1;
@@ -589,7 +625,9 @@ export function startActionGame(state) {
 
 export function flipInitialActionCard(state, playerId, slotIndex) {
   if (state.phase !== 'initialFlip') throw new Error('Pas la phase de retournement initial.');
-  if (state.pendingStarClaim) throw new Error('Une carte Étoile doit d’abord être résolue.');
+  if (state.pendingStarClaim?.playerId === playerId) {
+    throw new Error('Choisissez d’abord votre carte Action obtenue grâce à l’Étoile.');
+  }
   const player = state.playersById[playerId];
   const slot = validateSlot(state, playerId, slotIndex);
   if (!slot || slot.faceUp || slot.removed || player.flippedCount >= 2) throw new Error('Carte invalide.');
@@ -1594,6 +1632,8 @@ export function resolveGroupChoice(state, playerId, remove) {
 
 export function handleActionPlayerLeave(state, playerId) {
   ensureActionFields(state);
+  state.pendingInitialStarClaims = state.pendingInitialStarClaims
+    .filter((claim) => claim.playerId !== playerId);
 
   const leavingPlayer = state.playersById[playerId];
   if (leavingPlayer?.actionCards?.length) {
@@ -1603,7 +1643,7 @@ export function handleActionPlayerLeave(state, playerId) {
 
   if (state.pendingStarClaim?.playerId === playerId) {
     state.pendingStarClaim = null;
-    if (state.turnStage === 'starClaim') {
+    if (!activateNextInitialStarClaim(state) && state.turnStage === 'starClaim') {
       state.turnStage = state.phase === 'playing' ? 'choose' : null;
     }
   }

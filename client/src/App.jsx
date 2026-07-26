@@ -37,12 +37,37 @@ import {
 } from '../../shared/socketProtocol.js';
 
 const AUTO_RECONNECT_TIMEOUT_MS = 5000;
+const SERIALIZED_GAME_EVENTS = new Set([
+  SOCKET_EVENTS.START_GAME,
+  SOCKET_EVENTS.RETURN_TO_LOBBY,
+  SOCKET_EVENTS.SET_GAME_MODE,
+  SOCKET_EVENTS.FLIP_INITIAL,
+  SOCKET_EVENTS.DRAW_CARD,
+  SOCKET_EVENTS.DECIDE_DRAWN,
+  SOCKET_EVENTS.KEEP_DRAWN_AND_PLACE,
+  SOCKET_EVENTS.PLACE_CARD,
+  SOCKET_EVENTS.REVEAL_CARD,
+  SOCKET_EVENTS.PLAY_ACTION_CARD,
+  SOCKET_EVENTS.DISCARD_ACTION_CARD,
+  SOCKET_EVENTS.RESOLVE_ACTION,
+  SOCKET_EVENTS.RESOLVE_DEFENSE,
+  SOCKET_EVENTS.RESOLVE_GROUP_CHOICE,
+  SOCKET_EVENTS.CLAIM_STAR_ACTION,
+]);
+const socketsWithPendingGameAction = new WeakSet();
 
 function emitSocket(socket, eventName, payload) {
   if (!socket) return;
+  const serialize = SERIALIZED_GAME_EVENTS.has(eventName);
+  if (serialize && socketsWithPendingGameAction.has(socket)) return;
+  if (serialize) socketsWithPendingGameAction.add(socket);
   const normalizedPayload = socketClientPayload(eventName, payload);
   if (normalizedPayload === undefined) socket.emit(eventName);
   else socket.emit(eventName, normalizedPayload);
+}
+
+function releasePendingGameAction(socket) {
+  if (socket) socketsWithPendingGameAction.delete(socket);
 }
 
 async function serverErrorMessage(response, fallback) {
@@ -494,7 +519,10 @@ function GameApp() {
     });
     setSocket(nextSocket);
     nextSocket.on(SOCKET_EVENTS.CONNECT, () => setConnected(true));
-    nextSocket.on(SOCKET_EVENTS.DISCONNECT, () => setConnected(false));
+    nextSocket.on(SOCKET_EVENTS.DISCONNECT, () => {
+      releasePendingGameAction(nextSocket);
+      setConnected(false);
+    });
     nextSocket.on(SOCKET_EVENTS.CONNECT_ERROR, (connectError) => {
       console.error('[Skyjo] Échec de connexion Socket.IO', connectError);
       const rawMessage = typeof connectError?.message === 'string' ? connectError.message : '';
@@ -502,6 +530,7 @@ function GameApp() {
       if (/session invalide|session expirée/iu.test(rawMessage)) void logout();
     });
     nextSocket.on(SOCKET_EVENTS.ERROR, (payload) => {
+      releasePendingGameAction(nextSocket);
       const rawMessage = typeof payload === 'string' ? payload : payload?.message;
       const baseMessage = typeof rawMessage === 'string' ? [...rawMessage].slice(0, 200).join('') : 'Action impossible.';
       const requestId = /^[0-9a-f-]{36}$/i.test(payload?.requestId || '') ? payload.requestId : '';
@@ -537,6 +566,7 @@ function GameApp() {
       };
     });
     nextSocket.on(SOCKET_EVENTS.STATE, (nextState) => {
+      releasePendingGameAction(nextSocket);
       if (inviteJoinPendingRef.current) {
         inviteJoinPendingRef.current = false;
         setInviteJoinPending(false);
