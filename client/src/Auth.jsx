@@ -102,14 +102,11 @@ function getAuthErrorMessage(error) {
   if (code === "email_not_confirmed" || message.includes("email not confirmed")) {
     return "Votre adresse e-mail n'est pas encore confirmée.";
   }
-  if (code === "user_already_exists" || code === "email_exists") {
-    return "Un compte existe déjà avec cette adresse e-mail.";
-  }
   if (
     code === "authentication_failed" || code === "invalid_credentials"
     || message.includes("invalid login credentials")
   ) {
-    return "Impossible de finaliser l'authentification avec ces informations.";
+    return "Identifiants incorrects.";
   }
   if (code === "signup_disabled") {
     return "La création de compte est temporairement indisponible.";
@@ -119,7 +116,7 @@ function getAuthErrorMessage(error) {
     code === "oauth_provider_not_supported" ||
     message.includes("provider is not enabled")
   ) {
-    return "La connexion avec Google n'est pas disponible pour le moment.";
+    return "Connexion Google indisponible.";
   }
   if (code === "bad_oauth_state") {
     return "La connexion avec Google a expiré. Réessayez.";
@@ -377,7 +374,7 @@ export function AuthProvider({ children }) {
       });
     } catch (requestError) {
       const message = requestError instanceof TypeError
-        ? "Impossible de contacter le service d'authentification. Vérifiez votre connexion."
+        ? "Service inaccessible. Vérifiez votre connexion."
         : getAuthErrorMessage(requestError);
       setError(message);
       throw requestError;
@@ -418,7 +415,7 @@ export function AuthProvider({ children }) {
       return data.user;
     } catch (profileError) {
       const message = profileError instanceof TypeError
-        ? "Impossible de contacter le service d'authentification. Vérifiez votre connexion."
+        ? "Service inaccessible. Vérifiez votre connexion."
         : getAuthErrorMessage(profileError);
       throw new Error(message);
     }
@@ -448,7 +445,7 @@ export function AuthProvider({ children }) {
         return data.stats;
       } catch (statsError) {
         const message = statsError instanceof TypeError
-          ? "Impossible de contacter le serveur. Vérifiez votre connexion."
+          ? "Service inaccessible. Vérifiez votre connexion."
           : String(statsError?.message || 'Impossible de charger les statistiques.');
         if (profileStatsRequestRef.current.promise === requestPromise) {
           commitProfileStatsState({
@@ -487,7 +484,7 @@ export function AuthProvider({ children }) {
       await authApi('/api/auth/password/change-request', { method: 'POST' }, "Impossible d'envoyer l'e-mail de modification.");
     } catch (requestError) {
       const message = requestError instanceof TypeError
-        ? "Impossible de contacter le service d'authentification. Vérifiez votre connexion."
+        ? "Service inaccessible. Vérifiez votre connexion."
         : getAuthErrorMessage(requestError);
       throw new Error(message);
     }
@@ -507,7 +504,7 @@ export function AuthProvider({ children }) {
       setRecoveryIntent("password-reset");
     } catch (deleteError) {
       const message = deleteError instanceof TypeError
-        ? "Impossible de contacter le service d'authentification. Vérifiez votre connexion."
+        ? "Service inaccessible. Vérifiez votre connexion."
         : getAuthErrorMessage(deleteError);
       const profileError = new Error(message);
       profileError.code = String(deleteError?.code || '');
@@ -1285,8 +1282,19 @@ export function AuthView() {
     ) {
       setForm(submittedForm);
     }
-    if (mode === "register" && (submittedForm.password.length < 12 || submittedForm.password.length > 128))
-      return setLocalError("Choisissez un mot de passe de 12 à 128 caractères.");
+    if (
+      mode === "register"
+      && (
+        submittedForm.password.length < 12
+        || submittedForm.password.length > 128
+        || !/[A-Z]/.test(submittedForm.password)
+        || !/[0-9]/.test(submittedForm.password)
+        || !/[^A-Za-z0-9]/.test(submittedForm.password)
+      )
+    )
+      return setLocalError(
+        "12–128 caractères, avec majuscule, chiffre et symbole.",
+      );
     if (
       mode === "register" &&
       submittedForm.password !== submittedForm.confirmPassword
@@ -1294,7 +1302,7 @@ export function AuthView() {
       return setLocalError("Les mots de passe ne correspondent pas.");
     if (mode === "register" && !canAcceptTerms)
       return setLocalError(
-        "Lisez les conditions d'utilisation et la politique de confidentialité.",
+        "Consultez les documents requis.",
       );
     if (mode === "register" && !form.acceptTerms)
       return setLocalError(
@@ -1319,7 +1327,7 @@ export function AuthView() {
         });
         if (result.confirmationRequired)
           setNotice(
-            "Compte créé. Un e-mail de confirmation vient d'être envoyé.",
+            "Consultez votre boîte mail pour continuer.",
           );
       }
     } catch {
@@ -1345,7 +1353,7 @@ export function AuthView() {
     try {
       await requestPasswordReset(normalizeEmail(form.email), captchaToken);
       setNotice(
-        "Si cette adresse peut recevoir un lien, un e-mail vient d'être envoyé.",
+        "Consultez votre boîte mail.",
       );
     } catch {
       return;
@@ -1821,8 +1829,16 @@ export function ResetPasswordView() {
     event.preventDefault();
     clearError();
     setLocalError("");
-    if (password.length < 12 || password.length > 128)
-      return setLocalError("Choisissez un mot de passe de 12 à 128 caractères.");
+    if (
+      password.length < 12
+      || password.length > 128
+      || !/[A-Z]/.test(password)
+      || !/[0-9]/.test(password)
+      || !/[^A-Za-z0-9]/.test(password)
+    )
+      return setLocalError(
+        "12–128 caractères, avec majuscule, chiffre et symbole.",
+      );
     if (password !== confirmation)
       return setLocalError("Les mots de passe ne correspondent pas.");
     setBusy(true);

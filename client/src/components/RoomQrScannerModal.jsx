@@ -220,7 +220,7 @@ export default function RoomQrScannerModal({ open, onScan, onClose }) {
             setStatus('Présentez un autre QR code.');
             rejectedUntil = timestamp + 1200;
           } catch {
-            if (active) setError('Le QR code n’a pas pu être lu. Réessayez en l’éloignant légèrement.');
+            if (active) setError('QR code illisible. Éloignez-le légèrement.');
           } finally {
             detectionPending = false;
           }

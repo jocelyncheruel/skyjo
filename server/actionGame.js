@@ -1317,20 +1317,22 @@ export function resolveActionInput(state, playerId, payload = {}) {
     const target = state.playersById[targetId];
     const hasSlotTarget = Number.isInteger(payload.slotIndex);
     const hasActionTarget = typeof payload.actionCardId === 'string' && payload.actionCardId.length > 0;
+    const selectedActionCardId = hasActionTarget
+      && target?.actionCards?.some((card) => card.id === payload.actionCardId)
+      ? payload.actionCardId
+      : null;
     if (hasSlotTarget === hasActionTarget) throw new Error('Carte à retirer invalide.');
     if (hasSlotTarget) validateSlot(state, targetId, payload.slotIndex);
-    if (hasActionTarget && !target?.actionCards?.some((card) => card.id === payload.actionCardId)) {
-      throw new Error('Carte Action invalide.');
-    }
+    if (hasActionTarget && !selectedActionCardId) throw new Error('Carte Action invalide.');
     if (findDefenseIndex(state.playersById[targetId]) >= 0) {
       beginDefensePrompt(state, pending, targetId, hasSlotTarget
         ? { slotIndex: payload.slotIndex }
-        : { actionCardId: payload.actionCardId });
+        : { actionCardId: selectedActionCardId });
       return;
     }
     resolveRemoveEachTarget(state, pending, targetId, hasSlotTarget
       ? { slotIndex: payload.slotIndex }
-      : { actionCardId: payload.actionCardId });
+      : { actionCardId: selectedActionCardId });
     return;
   }
 
@@ -1371,7 +1373,7 @@ export function resolveActionInput(state, playerId, payload = {}) {
     [first.faceUp, second.faceUp] = [second.faceUp, first.faceUp];
     if (clearCompletedGroups(state, actor, { type: 'pendingActionAfterResolve', claimedStar: false })) return;
   } else if (pending.type === 'drawThree') {
-    let claimedStar = false;
+    let claimedStar;
     const hasPayloadChoice = Object.prototype.hasOwnProperty.call(payload, 'choiceIndex');
     const hasStoredChoice = Object.prototype.hasOwnProperty.call(pending.selection || {}, 'choiceIndex');
     if (!hasPayloadChoice && !hasStoredChoice) throw new Error('Choisissez d’abord une option.');

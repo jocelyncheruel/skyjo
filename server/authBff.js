@@ -62,6 +62,15 @@ function normalizeName(value) {
     .replace(/\s+/gu, ' ').trim()].slice(0, 50).join('');
 }
 
+export function isStrongPassword(value) {
+  const password = String(value || '');
+  return password.length >= 12
+    && password.length <= 128
+    && /[A-Z]/u.test(password)
+    && /[0-9]/u.test(password)
+    && /[^A-Za-z0-9]/u.test(password);
+}
+
 function normalizeLocale(value) {
   const locale = String(value || '').trim().replaceAll('_', '-');
   if (!locale || locale.length > 35) return '';
@@ -169,6 +178,15 @@ export function isObfuscatedExistingSignup(data) {
   );
 }
 
+export function isDuplicateAuthError(error) {
+  const code = String(error?.code || '').toLowerCase();
+  const message = String(error?.message || '').toLowerCase();
+  return code === 'user_already_exists'
+    || code === 'email_exists'
+    || message.includes('user already registered')
+    || message.includes('email already exists');
+}
+
 function publicUser(user) {
   if (!user?.id) return null;
   const metadata = user.user_metadata || {};
@@ -226,7 +244,7 @@ function publicGameStats(row) {
 function authFailure() {
   return new PublicError(
     'authentication_failed',
-    "Impossible de finaliser l'authentification avec ces informations.",
+    'Identifiants incorrects.',
     401,
   );
 }
@@ -239,18 +257,6 @@ function isTransientAuthError(error) {
 export function publicSupabaseError(error) {
   const code = String(error?.code || '').toLowerCase();
   const message = String(error?.message || '').toLowerCase();
-  if (
-    code === 'user_already_exists'
-    || code === 'email_exists'
-    || message.includes('user already registered')
-    || message.includes('email already exists')
-  ) {
-    return new PublicError(
-      'email_exists',
-      'Un compte existe déjà avec cette adresse e-mail.',
-      409,
-    );
-  }
   if (code === 'email_not_confirmed' || message.includes('email not confirmed')) {
     return new PublicError(
       'email_not_confirmed',
@@ -586,20 +592,6 @@ export function createAuthBff({
     return `${client.protocol}//${client.hostname}${port}/api/auth/google/callback`;
   }
 
-  async function accountExistsByEmail(email) {
-    try {
-      const { data, error } = await serviceClient.rpc(
-        'skyjo_auth_account_exists',
-        { p_email: email },
-      );
-      if (error) throw error;
-      return data === true;
-    } catch (error) {
-      logInternal('auth_register_account_lookup', error);
-      return false;
-    }
-  }
-
   async function ensureEmailIdentity(user) {
     if (!user?.id) return user;
     const identities = Array.isArray(user.identities) ? user.identities : null;
@@ -773,12 +765,11 @@ export function createAuthBff({
       const firstName = normalizeName(body.firstName);
       const lastName = normalizeName(body.lastName);
       const preferredLocale = normalizeLocale(body.preferredLocale);
-      if (!email || password.length < 12 || password.length > 128 || !firstName || !lastName) {
+      if (!email || !isStrongPassword(password) || !firstName || !lastName) {
         throw new PublicError('invalid_registration', "Impossible de finaliser l'inscription.", 400);
       }
       const origin = clientOrigin(req);
       const client = buildAuthClient();
-      const accountExistedBefore = await accountExistsByEmail(email);
       const { data, error } = await client.auth.signUp({
         email, password,
         options: {
@@ -797,23 +788,17 @@ export function createAuthBff({
       if (error) {
         const safeError = publicSupabaseError(error);
         if (safeError?.code === 'captcha_failed') throw safeError;
-        if (accountExistedBefore) {
-          throw new PublicError(
-            'email_exists',
-            'Un compte existe déjà avec cette adresse e-mail.',
-            409,
-          );
+        if (isDuplicateAuthError(error)) {
+          res.status(202).json({ confirmationRequired: true });
+          return;
         }
         if (isTransientAuthError(error)) throw error;
         if (safeError) throw safeError;
         throw authFailure();
       }
-      if (accountExistedBefore || isObfuscatedExistingSignup(data)) {
-        throw new PublicError(
-          'email_exists',
-          'Un compte existe déjà avec cette adresse e-mail.',
-          409,
-        );
+      if (isObfuscatedExistingSignup(data)) {
+        res.status(202).json({ confirmationRequired: true });
+        return;
       }
       if (data?.session) {
         const session = await createBrowserSession(res, data.session, body.remember === true);
@@ -963,8 +948,12 @@ export function createAuthBff({
       }
       const body = objectPayload(req.body, ['password']);
       const password = String(body.password || '');
-      if (password.length < 12 || password.length > 128) {
-        throw new PublicError('invalid_password', 'Choisissez un mot de passe de 12 à 128 caractères.', 400);
+      if (!isStrongPassword(password)) {
+        throw new PublicError(
+          'invalid_password',
+          '12–128 caractères, avec majuscule, chiffre et symbole.',
+          400,
+        );
       }
       const client = buildAuthClient();
       const current = await client.auth.setSession({

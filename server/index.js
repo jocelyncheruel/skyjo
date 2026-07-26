@@ -459,12 +459,15 @@ function socketIdsForPlayer(roomId, playerId) {
 }
 
 async function attachSocket(socket, roomId, playerId, playerName) {
-  clearDisconnectTimer(roomId, playerId);
   const previous = socketToPlayer.get(socket.id);
   if (previous && (previous.roomId !== roomId || previous.playerId !== playerId)) {
-    socket.leave(previous.roomId);
-    socketToPlayer.delete(socket.id);
+    throw new PublicError(
+      'already_in_room',
+      'Quittez d’abord votre salle actuelle.',
+      409,
+    );
   }
+  clearDisconnectTimer(roomId, playerId);
   socketToPlayer.set(socket.id, { roomId, playerId });
   socket.join(roomId);
   const { state } = await mutateRoom(roomId, (draft) => {
@@ -791,8 +794,8 @@ app.use(cors({
   origin: corsOrigin, methods: ['GET', 'POST', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'X-CSRF-Token'], credentials: true, maxAge: 600,
 }));
-app.use(express.json({ limit: JSON_BODY_LIMIT, strict: true }));
 app.use(httpRateLimit({ keyPrefix: 'preauth', limit: 120, windowMs: 60_000 }));
+app.use(express.json({ limit: JSON_BODY_LIMIT, strict: true, inflate: false }));
 
 app.get('/health', (req, res) => res.json({ ok: true, clientProtocolVersion: SOCKET_PROTOCOL_VERSION }));
 app.use('/api/auth', authBff.router);
@@ -862,9 +865,13 @@ app.use((req, res) => res.status(404).json({ error: { code: 'not_found', message
 app.use((error, req, res, next) => {
   void next;
   const id = requestId();
-  const normalized = error instanceof SyntaxError && 'body' in error
-    ? new PublicError('invalid_json', 'Corps JSON invalide.', 400)
-    : error;
+  const normalized = error?.type === 'entity.too.large'
+    ? new PublicError('payload_too_large', 'Corps JSON trop volumineux.', 413)
+    : error?.type === 'encoding.unsupported'
+      ? new PublicError('unsupported_encoding', 'Compression du corps non autorisée.', 415)
+    : error instanceof SyntaxError && 'body' in error
+      ? new PublicError('invalid_json', 'Corps JSON invalide.', 400)
+      : error;
   if (!(normalized instanceof PublicError)) logInternal('http', normalized, id);
   const payload = publicErrorPayload(normalized, id);
   res.status(payload.status).json(payload.body);
@@ -873,10 +880,23 @@ app.use((error, req, res, next) => {
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: { origin: corsOrigin, methods: ['GET', 'POST'], credentials: true },
-  allowRequest: (req, callback) => callback(
-    null,
-    Boolean((!isProduction || req.headers.origin) && isAllowedOrigin(req.headers.origin)),
-  ),
+  allowRequest: (req, callback) => {
+    const originAllowed = Boolean(
+      (!isProduction || req.headers.origin) && isAllowedOrigin(req.headers.origin),
+    );
+    if (!originAllowed) {
+      callback(null, false);
+      return;
+    }
+    const ip = clientIpFromForwarded(
+      req.headers['x-forwarded-for'],
+      req.socket?.remoteAddress || req.connection?.remoteAddress,
+    );
+    callback(
+      null,
+      consumeRateLimit(`transport-handshake:${ip}`, { limit: 20, windowMs: 60_000 }).allowed,
+    );
+  },
   maxHttpBufferSize: 20_000,
 });
 
@@ -934,6 +954,14 @@ io.on('connection', (socket) => {
     const roomId = normalizeRoomId(data.roomId);
     const playerName = normalizePlayerName(data.playerName);
     if (!roomId || !playerName) throw new PublicError('invalid_join', 'Impossible de rejoindre cette salle.', 400);
+    const currentRoom = socketToPlayer.get(socket.id);
+    if (currentRoom && currentRoom.roomId !== roomId) {
+      throw new PublicError(
+        'already_in_room',
+        'Quittez d’abord votre salle actuelle.',
+        409,
+      );
+    }
     const joinUserLimit = consumeRateLimit(`join-attempt:user:${socket.data.auth.user.id}`, { limit: 10, windowMs: 60_000 });
     const joinIpLimit = consumeRateLimit(`join-attempt:ip:${socketIp(socket)}`, { limit: 40, windowMs: 60_000 });
     if (!joinUserLimit.allowed || !joinIpLimit.allowed) {

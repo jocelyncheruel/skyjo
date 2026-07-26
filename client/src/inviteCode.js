@@ -15,6 +15,7 @@ export function createRoomInviteUrl(roomCode, origin) {
 
 export function extractRoomCodeFromInvite(value) {
   const input = String(value || '').trim();
+  if (input.length > 512) return '';
   if (ROOM_CODE_PATTERN.test(input)) return input;
 
   try {
