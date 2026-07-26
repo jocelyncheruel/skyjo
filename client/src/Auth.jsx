@@ -592,6 +592,31 @@ function AuthField({ label, icon: Icon, action, ...props }) {
   );
 }
 
+function PasswordField(props) {
+  const [visible, setVisible] = useState(false);
+  const label = visible ? "Masquer le mot de passe" : "Afficher le mot de passe";
+
+  return (
+    <AuthField
+      {...props}
+      type={visible ? "text" : "password"}
+      action={
+        <button
+          type="button"
+          onClick={() => setVisible((value) => !value)}
+          aria-label={label}
+          aria-pressed={visible}
+          title={label}
+        >
+          {visible
+            ? <EyeOff aria-hidden="true" size={16} />
+            : <Eye aria-hidden="true" size={16} />}
+        </button>
+      }
+    />
+  );
+}
+
 let turnstileScriptPromise = null;
 
 function loadTurnstile() {
@@ -1149,7 +1174,6 @@ export function AuthView() {
   const [step, setStep] = useState(1);
   const [busy, setBusy] = useState(false);
   const [googleBusy, setGoogleBusy] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
   const [localError, setLocalError] = useState("");
   const [notice, setNotice] = useState("");
   const [captchaToken, setCaptchaToken] = useState("");
@@ -1518,11 +1542,10 @@ export function AuthView() {
                         readOnly
                       />
                     )}
-                    <AuthField
+                    <PasswordField
                       icon={LockKeyhole}
                       label="Mot de passe"
                       name="password"
-                      type={showPassword ? "text" : "password"}
                       value={form.password}
                       onChange={updateField}
                       onInput={updateField}
@@ -1535,25 +1558,6 @@ export function AuthView() {
                       minLength={mode === "register" ? 12 : undefined}
                       maxLength={128}
                       required
-                      action={
-                        <button
-                          type="button"
-                          tabIndex={-1}
-                          onFocus={(event) => event.currentTarget.blur()}
-                          onClick={() => setShowPassword((value) => !value)}
-                          aria-label={
-                            showPassword
-                              ? "Masquer le mot de passe"
-                              : "Afficher le mot de passe"
-                          }
-                        >
-                          {showPassword ? (
-                            <EyeOff size={16} />
-                          ) : (
-                            <Eye size={16} />
-                          )}
-                        </button>
-                      }
                     />
                     {mode === "register" && (
                       <>
@@ -1582,11 +1586,10 @@ export function AuthView() {
                             ))}
                           </div>
                         </div>
-                        <AuthField
+                        <PasswordField
                           icon={LockKeyhole}
                           label="Confirmer le mot de passe"
                           name="confirmPassword"
-                          type={showPassword ? "text" : "password"}
                           value={form.confirmPassword}
                           onChange={updateField}
                           onInput={updateField}
@@ -1755,11 +1758,10 @@ export function ResetPasswordView() {
             aria-hidden="true"
             readOnly
           />
-          <AuthField
+          <PasswordField
             icon={LockKeyhole}
             label="Nouveau mot de passe"
             name="password"
-            type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             autoComplete="new-password"
@@ -1767,11 +1769,10 @@ export function ResetPasswordView() {
             maxLength={128}
             required
           />
-          <AuthField
+          <PasswordField
             icon={LockKeyhole}
             label="Confirmer le mot de passe"
             name="confirmPassword"
-            type="password"
             value={confirmation}
             onChange={(e) => setConfirmation(e.target.value)}
             autoComplete="new-password"
