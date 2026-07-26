@@ -487,11 +487,29 @@ function GameApp() {
     let nextSocket;
     let reconnectTimeout;
 
-    const stopReconnectScreen = ({ clearSavedRoom = false } = {}) => {
+    const stopReconnectScreen = () => {
       if (!autoReconnectPendingRef.current) return;
-      if (clearSavedRoom) saveGameValue('sj-room-id', '');
+      autoReconnectPendingRef.current = false;
+      saveGameValue('sj-room-id', '');
+      if (reconnectTimeout) {
+        window.clearTimeout(reconnectTimeout);
+        reconnectTimeout = null;
+      }
+      if (nextSocket) {
+        nextSocket.auth = {
+          ...nextSocket.auth,
+          roomId: '',
+        };
+        if (nextSocket.connected || nextSocket.active) {
+          nextSocket.disconnect();
+          nextSocket.connect();
+        }
+      }
       setRoomId('');
       setPlayerId('');
+      setChatMessages([]);
+      setChatHasMore(false);
+      setChatBefore(null);
       setPendingReconnectState(null);
       setAutoReconnectPending(false);
     };
@@ -550,7 +568,7 @@ function GameApp() {
         || code === 'seat_unavailable'
         || message === "Impossible de rejoindre cette salle."
       )) {
-        stopReconnectScreen({ clearSavedRoom: true });
+        stopReconnectScreen();
       } else if (autoReconnectPendingRef.current && code === 'reconnect_failed') {
         stopReconnectScreen();
       }
