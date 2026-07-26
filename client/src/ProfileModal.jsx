@@ -620,32 +620,6 @@ export default function ProfileModal({ open, onClose, onProfileUpdated }) {
                           </article>
                         ))}
                       </div>
-                      <dl className="sj-profile-statistics-details">
-                        <div>
-                          <dt>Taux de victoire</dt>
-                          <dd>{statisticsLoading ? '—' : `${winRate}%`}</dd>
-                        </div>
-                        <div>
-                          <dt>Manches jouées</dt>
-                          <dd>{statisticsLoading ? '—' : formatStat(statistics?.roundsPlayed)}</dd>
-                        </div>
-                        <div>
-                          <dt>Classique</dt>
-                          <dd>{statisticsLoading ? '—' : formatStat(statistics?.classicGames)}</dd>
-                        </div>
-                        <div>
-                          <dt>Action</dt>
-                          <dd>{statisticsLoading ? '—' : formatStat(statistics?.actionGames)}</dd>
-                        </div>
-                        <div>
-                          <dt>Meilleur score final</dt>
-                          <dd>
-                            {statisticsLoading || statistics?.bestScore == null
-                              ? '—'
-                              : formatStat(statistics.bestScore)}
-                          </dd>
-                        </div>
-                      </dl>
                       {!statisticsLoading && (statistics?.gamesPlayed || 0) === 0 && (
                         <p className="sj-profile-statistics-empty">
                           <Trophy aria-hidden="true" size={15} /> Vos prochaines parties apparaîtront ici.
@@ -656,6 +630,8 @@ export default function ProfileModal({ open, onClose, onProfileUpdated }) {
                 </section>
               </div>
             </div>
+
+            <div className="sj-profile-main-separator" aria-hidden="true" />
 
             {compactProfile && (
               <button

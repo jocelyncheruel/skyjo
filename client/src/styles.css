@@ -3577,15 +3577,19 @@ button.sj-action-count-badge:focus-visible {
   align-items: start;
 }
 
+.sj-profile-main-separator {
+  display: none;
+}
+
 .sj-profile-statistics {
   grid-column: 1;
   grid-row: 1;
-  align-self: stretch;
+  align-self: start;
   display: grid;
   align-content: start;
   gap: 14px;
   border-right: 1px solid rgba(255, 255, 255, 0.08);
-  padding: clamp(20px, 3vw, 26px) clamp(22px, 3.5vw, 30px);
+  padding: clamp(22px, 3.5vw, 30px);
 }
 
 .sj-profile-statistics-head {
@@ -3669,33 +3673,6 @@ button.sj-action-count-badge:focus-visible {
 
 @keyframes sjProfileStatsLoading {
   to { opacity: 0.52; }
-}
-
-.sj-profile-statistics-details {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-  margin: 0;
-}
-
-.sj-profile-statistics-details > div {
-  min-width: 0;
-  display: grid;
-  gap: 3px;
-}
-
-.sj-profile-statistics-details dt {
-  color: var(--soft);
-  font-size: 8.5px;
-  font-weight: 750;
-  line-height: 1.25;
-}
-
-.sj-profile-statistics-details dd {
-  margin: 0;
-  color: var(--text);
-  font-size: 11px;
-  font-weight: 850;
 }
 
 .sj-profile-statistics-empty,
@@ -4012,7 +3989,7 @@ button.sj-action-count-badge:focus-visible {
 
   .sj-profile-main {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto auto;
+    grid-template-rows: auto 1px auto;
     align-items: stretch;
   }
 
@@ -4021,8 +3998,13 @@ button.sj-action-count-badge:focus-visible {
     grid-row: 1;
     gap: 18px;
     border-right: 0;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-    padding-block: 22px;
+  }
+
+  .sj-profile-main-separator {
+    grid-column: 1;
+    grid-row: 2;
+    display: block;
+    background: rgba(255, 255, 255, 0.08);
   }
 
   .sj-profile-statistics-grid {
@@ -4035,28 +4017,9 @@ button.sj-action-count-badge:focus-visible {
     padding: 13px 12px 12px;
   }
 
-  .sj-profile-statistics-details {
-    grid-template-columns: repeat(5, minmax(0, 1fr));
-    column-gap: 14px;
-    row-gap: 12px;
-  }
-
-  .sj-profile-statistics-details > div {
-    gap: 6px;
-  }
-
-  .sj-profile-statistics-details dt {
-    font-size: 10px;
-    line-height: 1.35;
-  }
-
-  .sj-profile-statistics-details dd {
-    font-size: 14px;
-  }
-
   .sj-profile-form {
     grid-column: 1;
-    grid-row: 2;
+    grid-row: 3;
   }
 }
 
@@ -4391,7 +4354,7 @@ button.sj-action-count-badge:focus-visible {
     border-top: 0;
     border-radius: 0 0 11px 11px;
     background: #171b24;
-    padding: 20px;
+    padding: 22px 20px 20px;
   }
 
   .sj-profile-statistics-head h3 {
@@ -4439,10 +4402,6 @@ button.sj-action-count-badge:focus-visible {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .sj-profile-statistics-details {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    row-gap: 12px;
-  }
 }
 
 @media (max-width: 420px) {
@@ -4563,7 +4522,7 @@ button.sj-action-count-badge:focus-visible {
 
   .sj-profile-statistics {
     gap: 11px;
-    padding-block: 14px;
+    padding-block: 18px;
   }
 
   .sj-profile-statistics-grid {
@@ -4573,22 +4532,6 @@ button.sj-action-count-badge:focus-visible {
   .sj-profile-stat {
     gap: 4px;
     padding: 10px;
-  }
-
-  .sj-profile-statistics-details {
-    row-gap: 10px;
-  }
-
-  .sj-profile-statistics-details > div {
-    gap: 3px;
-  }
-
-  .sj-profile-statistics-details dt {
-    font-size: 8.5px;
-  }
-
-  .sj-profile-statistics-details dd {
-    font-size: 11px;
   }
 
   .sj-profile-form input {
