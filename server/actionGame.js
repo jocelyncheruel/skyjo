@@ -544,8 +544,7 @@ function startRoundIfReady(state) {
     const tiedIds = sums.filter(({ sum }) => sum === best).map(({ id }) => id);
     starterId = tiedIds[0];
     if (tiedIds.length > 1) {
-      const tiedNames = tiedIds.map((id) => state.playersById[id].name).join(', ');
-      starterLogMessage = `Égalité pour commencer la manche Action entre ${tiedNames} (${best}). ${state.playersById[starterId].name} commence.`;
+      starterLogMessage = `Égalité : ${state.playersById[starterId].name} commence.`;
     }
   }
   state.turnIndex = state.order.indexOf(starterId);

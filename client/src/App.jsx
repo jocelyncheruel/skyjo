@@ -111,6 +111,7 @@ const SHOW_ALL_ACTION_CARDS_PREVIEW = false;
 const MIN_RECONNECT_SCREEN_MS = 1000;
 const CHAT_GROUP_WINDOW_MS = 2 * 60 * 1000;
 const ACTION_PLAY_POPUP_MS = 3400;
+const STARTER_TIE_TOAST_MS = 3500;
 const MAX_PLAYER_NAME_LENGTH = 20;
 const ACTION_CARD_PREVIEWS = Object.keys(ACTION_LABELS).map((type) => ({
   id: `preview-${type}`,
@@ -127,7 +128,7 @@ function GameToast({ message, tone = 'error' }) {
 
   return (
     <div className={`sj-game-toast sj-game-toast-${tone}`} role="status" aria-live="polite">
-      <span className="sj-game-toast-icon" aria-hidden="true">!</span>
+      <span className="sj-game-toast-icon" aria-hidden="true">{tone === 'info' ? 'i' : '!'}</span>
       <span className="sj-game-toast-text">{message}</span>
     </div>
   );
@@ -2305,6 +2306,7 @@ function GameScreen({
   const [chatModalOpen, setChatModalOpen] = useState(false);
   const [visibleActionPlayId, setVisibleActionPlayId] = useState(null);
   const [roundScoresReady, setRoundScoresReady] = useState(true);
+  const [starterTieToast, setStarterTieToast] = useState(null);
   const [peekNow, setPeekNow] = useState(() => Date.now());
   const [dismissedPeekId, setDismissedPeekId] = useState(null);
   const [lastSeenChatMessageId, setLastSeenChatMessageId] = useState(null);
@@ -2317,6 +2319,7 @@ function GameScreen({
   const [visibleRoundRevealId, setVisibleRoundRevealId] = useState(null);
   const [roundRevealEndsAt, setRoundRevealEndsAt] = useState(0);
   const initializedChatRoomRef = useRef('');
+  const starterTieToastTimerRef = useRef(null);
   const closeChatModal = useCallback(() => setChatModalOpen(false), []);
   const closeInviteModal = useCallback(() => setInviteModalOpen(false), []);
   const handleCardMotionBatch = useCallback((endsAt) => {
@@ -2330,6 +2333,8 @@ function GameScreen({
   const cardMoves = state.cardMoves?.length > 0
     ? state.cardMoves
     : state.lastCardMove ? [state.lastCardMove] : [];
+  const starterTieNoticeId = state.starterTieNotice?.id || null;
+  const starterTieNoticeMessage = state.starterTieNotice?.message || '';
   const latestCardMove = cardMoves.at(-1) || null;
   const latestCardMoveType = latestCardMove?.type || null;
   const roundRevealMove = [...cardMoves]
@@ -2569,6 +2574,35 @@ function GameScreen({
     tutorialCheckedRef.current = true;
     if (!hasCompletedGameTutorial()) setTutorialStep(0);
   }, [isSpectator, state.phase]);
+
+  useEffect(() => {
+    if (!starterTieNoticeId || !starterTieNoticeMessage) {
+      if (starterTieToastTimerRef.current) {
+        window.clearTimeout(starterTieToastTimerRef.current);
+        starterTieToastTimerRef.current = null;
+      }
+      setStarterTieToast(null);
+      return;
+    }
+
+    if (starterTieToastTimerRef.current) {
+      window.clearTimeout(starterTieToastTimerRef.current);
+    }
+    setStarterTieToast({
+      id: starterTieNoticeId,
+      message: starterTieNoticeMessage,
+    });
+    starterTieToastTimerRef.current = window.setTimeout(() => {
+      setStarterTieToast((current) => current?.id === starterTieNoticeId ? null : current);
+      starterTieToastTimerRef.current = null;
+    }, STARTER_TIE_TOAST_MS);
+  }, [starterTieNoticeId, starterTieNoticeMessage]);
+
+  useEffect(() => () => {
+    if (starterTieToastTimerRef.current) {
+      window.clearTimeout(starterTieToastTimerRef.current);
+    }
+  }, []);
 
   useEffect(() => {
     if (!actionPlayId) {
@@ -3369,12 +3403,11 @@ function GameScreen({
           onClick={() => setActionHandModalOpen(true)}
         />
       )}
-      <GameToast key={errorSerial} message={error} />
-      {state.starterTieNotice?.message && (
-        <div className="sj-round-start-notice" aria-live="polite">
-          {state.starterTieNotice.message}
-        </div>
-      )}
+      <GameToast
+        key={error ? `error-${errorSerial}` : `starter-${starterTieToast?.id || 'none'}`}
+        message={error || starterTieToast?.message}
+        tone={error ? 'error' : 'info'}
+      />
       {showLastTurnNotice && (
         <div className="sj-last-turn-notice" aria-live="polite">
           <span className="sj-last-turn-kicker">Dernier tour</span>

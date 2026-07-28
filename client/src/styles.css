@@ -1755,32 +1755,30 @@ input:focus {
     0 0 0 4px rgba(239, 106, 97, 0.14);
 }
 
+.sj-game-toast-info {
+  border-color: rgba(240, 189, 87, 0.56);
+  background:
+    linear-gradient(135deg, rgba(39, 32, 18, 0.96), rgba(28, 33, 43, 0.96));
+  color: #fff2cf;
+  box-shadow:
+    0 18px 44px rgba(0, 0, 0, 0.38),
+    0 0 0 4px rgba(240, 189, 87, 0.1),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+.sj-game-toast-info .sj-game-toast-icon {
+  background:
+    radial-gradient(circle at 32% 26%, #ffe29a 38%, #b97b24 100%);
+  box-shadow:
+    0 8px 18px rgba(0, 0, 0, 0.3),
+    0 0 0 4px rgba(240, 189, 87, 0.14);
+}
+
 .sj-game-toast-text {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.sj-round-start-notice {
-  position: fixed;
-  top: clamp(48px, 7vh, 72px);
-  left: 50%;
-  z-index: 48;
-  width: min(520px, calc(100vw - 32px));
-  transform: translateX(-50%);
-  padding: 10px 14px;
-  border: 1px solid rgba(240, 189, 87, 0.56);
-  border-radius: 999px;
-  background:
-    linear-gradient(135deg, rgba(39, 32, 18, 0.94), rgba(31, 37, 48, 0.94));
-  color: #fff2cf;
-  box-shadow: 0 16px 44px rgba(0, 0, 0, 0.34), inset 0 0 0 1px rgba(255, 255, 255, 0.06);
-  font-size: clamp(12px, 1.8vw, 14px);
-  font-weight: 900;
-  text-align: center;
-  pointer-events: none;
-  animation: sjToastIn 0.2s ease both;
 }
 
 .sj-last-turn-notice {
@@ -1855,13 +1853,6 @@ input:focus {
   .sj-game-toast-text {
     max-width: calc(100vw - 86px);
     white-space: nowrap;
-  }
-
-  .sj-round-start-notice {
-    width: max-content;
-    max-width: calc(100vw - 24px);
-    border-radius: 18px;
-    white-space: normal;
   }
 
   .sj-last-turn-notice {
@@ -7207,7 +7198,6 @@ select:focus {
   --board-shadow: 0 10px 22px rgba(0, 0, 0, 0.26);
 }
 
-.sj-layout-short-landscape .sj-round-start-notice,
 .sj-layout-short-landscape .sj-last-turn-notice {
   top: auto;
   bottom: max(6px, env(safe-area-inset-bottom));

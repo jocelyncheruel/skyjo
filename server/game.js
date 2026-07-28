@@ -168,8 +168,7 @@ function startRoundIfReady(state) {
   state.phase = 'playing';
   state.turnStage = 'draw';
   if (tiedIds.length > 1) {
-    const tiedNames = tiedIds.map((id) => state.playersById[id].name).join(', ');
-    const message = `Égalité pour commencer la manche entre ${tiedNames} (${bestSum}). ${state.playersById[bestId].name} commence.`;
+    const message = `Égalité : ${state.playersById[bestId].name} commence.`;
     state.starterTieNotice = {
       id: `starter-tie-${state.roundNumber}-${Date.now()}`,
       message,
