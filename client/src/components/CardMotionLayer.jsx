@@ -98,6 +98,7 @@ function addKnownBoardMoves(previousState, nextState, motions, seen, cardMoves) 
           card: cardVisual(move.card, !!move.faceUp),
           tone: 'swap',
           stack: swapIndex % 2 === 0 ? 'front' : 'back',
+          lateHandoff: true,
           clearedOnArrival: !!destinationSlot?.removed,
         });
         swapIndex += 1;
@@ -134,6 +135,7 @@ function addKnownBoardMoves(previousState, nextState, motions, seen, cardMoves) 
       card: previousLocation.card,
       tone: 'swap',
       stack: swapIndex % 2 === 0 ? 'front' : 'back',
+      lateHandoff: true,
     });
     swapIndex += 1;
   }
