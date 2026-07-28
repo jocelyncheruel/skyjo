@@ -82,18 +82,22 @@ export default function PlayerBoard({
           const selectable = selectableSet.has(index);
 
           return (
-            <Card
+            <div
               key={`slot-${index}`}
-              value={slot.value}
-              kind={slot.kind}
-              faceUp={slot.faceUp}
-              removed={slot.removed}
-              size={cardSize}
-              highlighted={selectable}
-              selected={selectedSet.has(index)}
-              onClick={selectable ? () => onSlotClick(index) : undefined}
-              motionAnchor={`board:${player.id}:${index}`}
-            />
+              className="sj-card-slot"
+              data-sj-card-anchor={`board:${player.id}:${index}`}
+            >
+              <Card
+                value={slot.value}
+                kind={slot.kind}
+                faceUp={slot.faceUp}
+                removed={slot.removed}
+                size={cardSize}
+                highlighted={selectable}
+                selected={selectedSet.has(index)}
+                onClick={selectable ? () => onSlotClick(index) : undefined}
+              />
+            </div>
           );
         })}
       </div>
