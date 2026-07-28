@@ -3230,6 +3230,7 @@ function GameScreen({
       <>
         <div className="sj-app-shell sj-lobby-room">
           {leaveButton}
+          {chatButton}
           {isSpectator && <SpectatorBadge connected={connected} />}
           <GameToast key={errorSerial} message={error} />
           <section className="sj-lobby-card sj-fade-in">
@@ -3329,6 +3330,7 @@ function GameScreen({
           </section>
         </div>
         {leaveModal}
+        {chatModal}
         {disconnectedPlayersModal}
         {gameGuideModal}
         {gameTutorial}
