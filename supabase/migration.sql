@@ -404,7 +404,7 @@ BEGIN
   ) VALUES (
     p_room_id, p_message_id, p_player_id, p_player_name, p_body, p_sent_at
   )
-  ON CONFLICT (room_id, message_id) DO NOTHING;
+  ON CONFLICT ON CONSTRAINT room_messages_pkey DO NOTHING;
 
   UPDATE public.rooms SET updated_at = NOW() WHERE public.rooms.room_id = p_room_id;
 
