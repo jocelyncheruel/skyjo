@@ -665,10 +665,7 @@ export function publicState(state, forPlayerId) {
     drawnCard: state.drawnCard
       ? {
         from: state.drawnCard.from,
-        card: state.drawnCard.from === 'discard'
-          || state.order[state.turnIndex] === forPlayerId
-          ? state.drawnCard.card
-          : null,
+        card: state.drawnCard.card,
       }
       : null,
     lastCardMove: publicCardMove(state.lastCardMove),

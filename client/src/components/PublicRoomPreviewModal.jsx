@@ -3,6 +3,7 @@ import { Eye, LogIn, QrCode, X } from 'lucide-react';
 import Card from './Card.jsx';
 import CardMotionLayer from './CardMotionLayer.jsx';
 import { GameGuideButton } from './GameGuide.jsx';
+import { PileButton } from './GameTablePieces.jsx';
 import PlayerBoard from './PlayerBoard.jsx';
 import { ACTION_ART_URLS, ACTION_LABELS } from '../gameGuide.js';
 import { calculateAdaptiveBoardLayout, layoutClassNames } from '../responsiveLayout.js';
@@ -175,29 +176,45 @@ function GamePreview({ room, viewport, scale, previewRootRef }) {
           <section className="sj-center sj-piles-zone" aria-hidden="true">
             <div className="sj-action-panel">
               <div className="sj-pile-group">
-                <Card
-                  faceUp={false}
-                  size="pile"
-                  motionAnchor="pile:deck"
-                  suppressRevealAnimation
-                />
-                {room?.discardTop ? (
+                <PileButton
+                  ariaLabel="Pioche"
+                  enabled={false}
+                  active={false}
+                  drawnCard={room?.drawnCard?.from === 'deck' ? room.drawnCard.card : null}
+                  drawnFrom="deck"
+                >
                   <Card
-                    value={room.discardTop.value}
-                    kind={room.discardTop.kind}
-                    faceUp
+                    faceUp={false}
                     size="pile"
-                    motionAnchor="pile:discard"
+                    motionAnchor="pile:deck"
                     suppressRevealAnimation
                   />
-                ) : (
-                  <Card
-                    removed
-                    size="pile"
-                    motionAnchor="pile:discard"
-                    suppressRevealAnimation
-                  />
-                )}
+                </PileButton>
+                <PileButton
+                  ariaLabel="Défausse"
+                  enabled={false}
+                  active={false}
+                  drawnCard={room?.drawnCard?.from === 'discard' ? room.drawnCard.card : null}
+                  drawnFrom="discard"
+                >
+                  {room?.discardTop ? (
+                    <Card
+                      value={room.discardTop.value}
+                      kind={room.discardTop.kind}
+                      faceUp
+                      size="pile"
+                      motionAnchor="pile:discard"
+                      suppressRevealAnimation
+                    />
+                  ) : (
+                    <Card
+                      removed
+                      size="pile"
+                      motionAnchor="pile:discard"
+                      suppressRevealAnimation
+                    />
+                  )}
+                </PileButton>
               </div>
             </div>
           </section>
