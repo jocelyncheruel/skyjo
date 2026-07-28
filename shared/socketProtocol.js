@@ -1,4 +1,4 @@
-export const SOCKET_PROTOCOL_VERSION = 9;
+export const SOCKET_PROTOCOL_VERSION = 12;
 
 export const SOCKET_EVENTS = Object.freeze({
   CONNECT: 'connect',
@@ -7,12 +7,16 @@ export const SOCKET_EVENTS = Object.freeze({
   ERROR: 'errorMsg',
   JOINED: 'joined',
   STATE: 'state',
+  SPECTATOR_STATE: 'spectatorState',
+  PUBLIC_PREVIEW_STATE: 'publicPreviewState',
   CHAT_HISTORY: 'chatHistory',
   CHAT_MESSAGE: 'chatMessage',
   ROOM_EXPIRED: 'roomExpired',
   REMOVED_FROM_ROOM: 'removedFromRoom',
   JOIN_ROOM: 'joinRoom',
   LEAVE_ROOM: 'leaveRoom',
+  SUBSCRIBE_PUBLIC_PREVIEW: 'subscribePublicPreview',
+  UNSUBSCRIBE_PUBLIC_PREVIEW: 'unsubscribePublicPreview',
   START_GAME: 'startGame',
   REMOVE_PLAYER_FROM_LOBBY: 'removePlayerFromLobby',
   RETURN_TO_LOBBY: 'returnToLobby',
@@ -37,11 +41,14 @@ export const SOCKET_HANDSHAKE_KEYS = Object.freeze([
   'protocolVersion',
   'roomId',
   'playerName',
+  'roomRole',
 ]);
 
 export const SOCKET_CLIENT_PAYLOAD_KEYS = Object.freeze({
-  [SOCKET_EVENTS.JOIN_ROOM]: Object.freeze(['roomId', 'playerName']),
+  [SOCKET_EVENTS.JOIN_ROOM]: Object.freeze(['roomId', 'playerName', 'role']),
   [SOCKET_EVENTS.LEAVE_ROOM]: Object.freeze([]),
+  [SOCKET_EVENTS.SUBSCRIBE_PUBLIC_PREVIEW]: Object.freeze(['roomId']),
+  [SOCKET_EVENTS.UNSUBSCRIBE_PUBLIC_PREVIEW]: Object.freeze(['roomId']),
   [SOCKET_EVENTS.START_GAME]: Object.freeze([]),
   [SOCKET_EVENTS.REMOVE_PLAYER_FROM_LOBBY]: Object.freeze(['playerId']),
   [SOCKET_EVENTS.RETURN_TO_LOBBY]: Object.freeze([]),
@@ -74,7 +81,7 @@ export const SOCKET_PEEK_FIRST_KEYS = Object.freeze(['playerId', 'slotIndex']);
 
 export const SOCKET_SERVER_PAYLOAD_KEYS = Object.freeze({
   [SOCKET_EVENTS.ERROR]: Object.freeze(['code', 'message', 'requestId', 'retryAfter']),
-  [SOCKET_EVENTS.JOINED]: Object.freeze(['roomId', 'playerId']),
+  [SOCKET_EVENTS.JOINED]: Object.freeze(['roomId', 'playerId', 'role']),
   [SOCKET_EVENTS.CHAT_HISTORY]: Object.freeze(['messages', 'hasMore', 'before']),
   [SOCKET_EVENTS.CHAT_MESSAGE]: Object.freeze([
     'id', 't', 'type', 'playerId', 'playerName', 'text',

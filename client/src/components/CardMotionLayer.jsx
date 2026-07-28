@@ -391,13 +391,28 @@ function findAnchor(anchor, anchorRoot) {
     .find((element) => element.dataset.sjCardAnchor === anchor) || null;
 }
 
-function measuredFlight(specification, sequence, anchorRoot) {
+function measuredFlight(specification, sequence, anchorRoot, coordinateRoot) {
   const source = findAnchor(specification.from, anchorRoot);
   const destination = findAnchor(specification.to, anchorRoot);
   if (!source || !destination) return null;
 
-  const from = source.getBoundingClientRect();
-  const to = destination.getBoundingClientRect();
+  const sourceRect = source.getBoundingClientRect();
+  const destinationRect = destination.getBoundingClientRect();
+  const coordinateRect = coordinateRoot?.getBoundingClientRect();
+  const offsetLeft = coordinateRect?.left || 0;
+  const offsetTop = coordinateRect?.top || 0;
+  const from = {
+    left: sourceRect.left - offsetLeft,
+    top: sourceRect.top - offsetTop,
+    width: sourceRect.width,
+    height: sourceRect.height,
+  };
+  const to = {
+    left: destinationRect.left - offsetLeft,
+    top: destinationRect.top - offsetTop,
+    width: destinationRect.width,
+    height: destinationRect.height,
+  };
   if (!from.width || !from.height || !to.width || !to.height) return null;
 
   const deltaX = to.left - from.left;
@@ -457,7 +472,15 @@ function prepareDestinationSnapshots(flights) {
   return flightsByDestination;
 }
 
-export default function CardMotionLayer({ state, enabled, onMotionBatch, anchorRootRef, layerClassName = '' }) {
+export default function CardMotionLayer({
+  state,
+  enabled,
+  onMotionBatch,
+  anchorRootRef,
+  coordinateRootRef,
+  portalRootRef,
+  layerClassName = '',
+}) {
   const previousStateRef = useRef(state);
   const sequenceRef = useRef(0);
   const timersRef = useRef(new Set());
@@ -492,6 +515,7 @@ export default function CardMotionLayer({ state, enabled, onMotionBatch, anchorR
         specification,
         `${sequenceRef.current}-${index}`,
         anchorRootRef?.current,
+        coordinateRootRef?.current,
       ))
       .filter(Boolean);
     const incomingByHandoff = new Map(
@@ -573,12 +597,15 @@ export default function CardMotionLayer({ state, enabled, onMotionBatch, anchorR
       }
     }, lifetime);
     timersRef.current.add(timer);
-  }, [anchorRootRef, enabled, onMotionBatch, state]);
+  }, [anchorRootRef, coordinateRootRef, enabled, onMotionBatch, state]);
 
   if (!flights.length) return null;
 
   return createPortal(
-    <div className={`sj-card-motion-layer ${layerClassName}`.trim()} aria-hidden="true">
+    <div
+      className={`sj-card-motion-layer ${portalRootRef?.current ? 'sj-card-motion-layer-local' : ''} ${layerClassName}`.trim()}
+      aria-hidden="true"
+    >
       {flights.map((flight) => (
         <React.Fragment key={flight.id}>
           {flight.targetCard && (
@@ -674,6 +701,6 @@ export default function CardMotionLayer({ state, enabled, onMotionBatch, anchorR
         </React.Fragment>
       ))}
     </div>,
-    document.body,
+    portalRootRef?.current || document.body,
   );
 }

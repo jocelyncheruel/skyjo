@@ -701,6 +701,21 @@ export function publicState(state, forPlayerId) {
   };
 }
 
+export function publicPreviewState(state) {
+  const view = publicState(state, null);
+  const actionCardCounts = view.playersAction
+    ? Object.fromEntries(Object.entries(view.playersAction).map(([playerId, actionState]) => (
+      [playerId, actionState.actionCards?.length || 0]
+    )))
+    : {};
+  const preview = { ...view, actionCardCounts };
+  delete preview.playersAction;
+  delete preview.pendingAction;
+  delete preview.pendingStarClaim;
+  delete preview.pendingGroupChoice;
+  return preview;
+}
+
 export {
   assertActionCardIntegrity,
   claimStarAction,

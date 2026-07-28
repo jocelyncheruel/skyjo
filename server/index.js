@@ -18,7 +18,7 @@ import {
 import {
   newRoomState, addPlayer, leavePlayer, removePlayer, removeLobbyPlayer, startGame, flipInitialCard,
   drawCard, decideDrawnCard, keepDrawnAndPlace, placeDrawnCard, revealHiddenCard, nextRound,
-  publicState, setGameMode, returnToLobby, playOwnedAction, resolveActionInput, claimStarAction,
+  publicPreviewState, publicState, setGameMode, returnToLobby, playOwnedAction, resolveActionInput, claimStarAction,
   discardOwnedAction, resolveDefensePrompt, expireDefensePrompt,
   resolveGroupChoice, assertActionCardIntegrity, MAX_PLAYERS_PER_ROOM,
 } from './game.js';
@@ -33,6 +33,7 @@ import {
 const DEFAULT_PORT = 4000;
 const MAX_RATE_BUCKETS = 20_000;
 const MAX_SOCKETS_PER_USER = 3;
+const MAX_SPECTATORS_PER_ROOM = 50;
 const CHAT_PAGE_SIZE = 80;
 const ACTIVE_GAME_DISCONNECT_GRACE_MS = 10 * 60 * 1000;
 const SYSTEM_CHAT_PLAYER_ID = '__system__';
@@ -432,10 +433,11 @@ async function createRoom({ ownerUserId, playerName, roomVisibility }) {
 
 async function listPublicRooms() {
   const { data, error } = await supabase.from('rooms')
-    .select('room_id, player_count, creator_name, game_mode, updated_at')
-    .eq('visibility', 'public').eq('phase', 'lobby')
+    .select('room_id, player_count, creator_name, game_mode, phase, updated_at')
+    .eq('visibility', 'public')
+    .in('phase', ['lobby', 'initialFlip', 'playing', 'roundEnd', 'gameEnd'])
     .is('quarantined_at', null)
-    .gt('player_count', 0).lt('player_count', MAX_PLAYERS_PER_ROOM)
+    .gt('player_count', 0)
     .gt('updated_at', new Date(Date.now() - ROOM_TTL_MS).toISOString())
     .order('updated_at', { ascending: false }).limit(30);
   if (error) throw error;
@@ -443,11 +445,22 @@ async function listPublicRooms() {
     roomId: row.room_id, playerCount: row.player_count, maxPlayers: MAX_PLAYERS_PER_ROOM,
     creatorName: normalizePlayerName(row.creator_name) || 'Salle publique',
     gameMode: row.game_mode === 'action' ? 'action' : 'classic',
+    phase: ['initialFlip', 'playing', 'roundEnd', 'gameEnd'].includes(row.phase)
+      ? row.phase
+      : 'lobby',
     updatedAt: Date.parse(row.updated_at),
   }));
 }
 
+async function getPublicRoomPreview(roomId) {
+  const state = await getOrLoadRoom(roomId);
+  if (!state || state.roomVisibility !== 'public') return null;
+  return publicPreviewState(state);
+}
+
 function connectionKey(roomId, playerId) { return `${roomId}:${playerId}`; }
+function normalizeRoomRole(value) { return value === 'spectator' ? 'spectator' : 'player'; }
+function publicPreviewSocketRoom(roomId) { return `public-preview:${roomId}`; }
 
 function clearDisconnectTimer(roomId, playerId) {
   const key = connectionKey(roomId, playerId);
@@ -457,7 +470,9 @@ function clearDisconnectTimer(roomId, playerId) {
 }
 
 function socketIdsForPlayer(roomId, playerId) {
-  return [...socketToPlayer].filter(([, info]) => info.roomId === roomId && info.playerId === playerId).map(([id]) => id);
+  return [...socketToPlayer]
+    .filter(([, info]) => info.role === 'player' && info.roomId === roomId && info.playerId === playerId)
+    .map(([id]) => id);
 }
 
 async function attachSocket(socket, roomId, playerId, playerName) {
@@ -470,7 +485,7 @@ async function attachSocket(socket, roomId, playerId, playerName) {
     );
   }
   clearDisconnectTimer(roomId, playerId);
-  socketToPlayer.set(socket.id, { roomId, playerId });
+  socketToPlayer.set(socket.id, { roomId, playerId, role: 'player' });
   socket.join(roomId);
   const { state, result: attachedPlayerName } = await mutateRoom(roomId, (draft) => {
     const player = draft.playersById[playerId];
@@ -481,7 +496,7 @@ async function attachSocket(socket, roomId, playerId, playerName) {
   });
   socket.emit(
     SOCKET_EVENTS.JOINED,
-    socketServerPayload(SOCKET_EVENTS.JOINED, { roomId, playerId }),
+    socketServerPayload(SOCKET_EVENTS.JOINED, { roomId, playerId, role: 'player' }),
   );
   await sendChatHistory(socket, null);
   broadcastRoom(roomId);
@@ -491,6 +506,39 @@ async function attachSocket(socket, roomId, playerId, playerName) {
     await safelyAppendSystemChatMessage(roomId, `${attachedPlayerName} a rejoint la salle.`);
   }
   socket.data.presenceEvent = null;
+}
+
+async function attachSpectator(socket, roomId) {
+  if (!roomId) return null;
+  const state = await getOrLoadRoom(roomId);
+  if (!state) return null;
+  const previous = socketToPlayer.get(socket.id);
+  if (previous && (previous.roomId !== roomId || previous.role !== 'spectator')) {
+    throw new PublicError(
+      'already_in_room',
+      'Quittez d’abord votre salle actuelle.',
+      409,
+    );
+  }
+  const spectatorCount = [...socketToPlayer.values()]
+    .filter((info) => info.roomId === roomId && info.role === 'spectator')
+    .length;
+  if (!previous && spectatorCount >= MAX_SPECTATORS_PER_ROOM) {
+    throw new PublicError('spectator_limit', 'Le mode spectateur est complet.', 409);
+  }
+  socketToPlayer.set(socket.id, { roomId, playerId: null, role: 'spectator' });
+  socket.join(roomId);
+  socket.emit(
+    SOCKET_EVENTS.JOINED,
+    socketServerPayload(SOCKET_EVENTS.JOINED, {
+      roomId,
+      playerId: null,
+      role: 'spectator',
+    }),
+  );
+  await sendChatHistory(socket, null);
+  socket.emit(SOCKET_EVENTS.STATE, publicState(state, null));
+  return { role: 'spectator' };
 }
 
 async function attachExistingMember(socket, roomId, playerName = '') {
@@ -591,15 +639,27 @@ function actionPayload(value) {
 function broadcastRoom(roomId) {
   const state = rooms.get(roomId);
   if (!state) return;
+  io.to(roomId).emit(SOCKET_EVENTS.SPECTATOR_STATE, publicState(state, null));
+  if (state.roomVisibility === 'public') {
+    io.to(publicPreviewSocketRoom(roomId)).emit(
+      SOCKET_EVENTS.PUBLIC_PREVIEW_STATE,
+      publicPreviewState(state),
+    );
+  }
   for (const [socketId, info] of socketToPlayer) {
-    if (info.roomId !== roomId || !state.playersById[info.playerId]) continue;
-    io.to(socketId).emit(SOCKET_EVENTS.STATE, publicState(state, info.playerId));
+    if (info.roomId !== roomId || info.role !== 'player') continue;
+    if (state.playersById[info.playerId]) {
+      io.to(socketId).emit(SOCKET_EVENTS.STATE, publicState(state, info.playerId));
+    }
   }
 }
 
 async function handleAction(socket, fn, mutationOptions = {}) {
   const info = socketToPlayer.get(socket.id);
   if (!info) throw new PublicError('not_in_room', "Vous ne faites partie d'aucune salle.", 403);
+  if (info.role !== 'player' || !info.playerId) {
+    throw new PublicError('spectator_read_only', 'Le mode spectateur est en lecture seule.', 403);
+  }
   const { state } = await mutateRoom(info.roomId, (draft) => {
     try {
       return fn(draft, info.playerId);
@@ -760,6 +820,9 @@ async function sendChatHistory(socket, before) {
 async function appendChatMessage(socket, value) {
   const info = socketToPlayer.get(socket.id);
   if (!info) throw new PublicError('not_in_room', "Vous ne faites partie d'aucune salle.", 403);
+  if (info.role !== 'player' || !info.playerId) {
+    throw new PublicError('spectator_read_only', 'Le chat est en lecture seule pour les spectateurs.', 403);
+  }
   const text = normalizeChatMessage(value);
   if (!text) throw new PublicError('invalid_message', 'Message vide ou trop long.', 400);
   const state = await getOrLoadRoom(info.roomId);
@@ -899,6 +962,17 @@ app.get('/api/rooms/public', requireHttpAuth, authBff.requireStandardSession, re
     catch (error) { next(error); }
   });
 
+app.get('/api/rooms/public/:roomId/preview', requireHttpAuth, authBff.requireStandardSession, requireConsent,
+  httpRateLimit({ keyPrefix: 'preview-public-room', limit: 90, windowMs: 60_000, user: true }),
+  async (req, res, next) => {
+    try {
+      const roomId = normalizeRoomId(req.params.roomId);
+      const preview = roomId ? await getPublicRoomPreview(roomId) : null;
+      if (!preview) throw new PublicError('room_unavailable', 'Cette partie publique n’est plus disponible.', 404);
+      res.json({ room: preview });
+    } catch (error) { next(error); }
+  });
+
 app.use((req, res) => res.status(404).json({ error: { code: 'not_found', message: 'Ressource introuvable.' } }));
 app.use((error, req, res, next) => {
   void next;
@@ -966,18 +1040,22 @@ io.use(async (socket, next) => {
 io.on('connection', (socket) => {
   scheduleSocketExpiry(socket);
   const initialRoomId = normalizeRoomId(socket.handshake.auth?.roomId);
-  socket.data.attachPromise = attachExistingMember(
-    socket,
-    initialRoomId,
-    normalizePlayerName(socket.handshake.auth?.playerName),
-  ).then((member) => {
-    if (initialRoomId && !member) {
+  const initialRoomRole = normalizeRoomRole(socket.handshake.auth?.roomRole);
+  const initialAttach = initialRoomRole === 'spectator'
+    ? attachSpectator(socket, initialRoomId)
+    : attachExistingMember(
+      socket,
+      initialRoomId,
+      normalizePlayerName(socket.handshake.auth?.playerName),
+    );
+  socket.data.attachPromise = initialAttach.then((connection) => {
+    if (initialRoomId && !connection) {
       socket.emit(SOCKET_EVENTS.ERROR, socketServerPayload(SOCKET_EVENTS.ERROR, {
         code: 'room_unavailable',
         message: 'Cette salle n\'est plus disponible.',
       }));
     }
-    return member;
+    return connection;
   }).catch((error) => {
     logInternal('socket_auto_attach', error);
     socket.emit(SOCKET_EVENTS.ERROR, socketServerPayload(SOCKET_EVENTS.ERROR, {
@@ -990,10 +1068,13 @@ io.on('connection', (socket) => {
   socket.on(SOCKET_EVENTS.JOIN_ROOM, withSocketGuard(socket, SOCKET_EVENTS.JOIN_ROOM, async (payload = {}) => {
     const data = objectPayload(payload, socketPayloadKeys(SOCKET_EVENTS.JOIN_ROOM));
     const roomId = normalizeRoomId(data.roomId);
+    const role = normalizeRoomRole(data.role);
     const playerName = normalizePlayerName(data.playerName);
-    if (!roomId || !playerName) throw new PublicError('invalid_join', 'Impossible de rejoindre cette salle.', 400);
+    if (!roomId || (role === 'player' && !playerName)) {
+      throw new PublicError('invalid_join', 'Impossible de rejoindre cette salle.', 400);
+    }
     const currentRoom = socketToPlayer.get(socket.id);
-    if (currentRoom && currentRoom.roomId !== roomId) {
+    if (currentRoom && (currentRoom.roomId !== roomId || currentRoom.role !== role)) {
       throw new PublicError(
         'already_in_room',
         'Quittez d’abord votre salle actuelle.',
@@ -1014,9 +1095,20 @@ io.on('connection', (socket) => {
       }
       throw new PublicError('room_unavailable', 'Impossible de rejoindre cette salle.', 404);
     }
+    if (role === 'spectator') {
+      await attachSpectator(socket, roomId);
+      return;
+    }
     let member = await findMemberByUser(roomId, socket.data.auth.user.id);
     let memberCreated = false;
     if (!member) {
+      if (state.order.length >= MAX_PLAYERS_PER_ROOM) {
+        throw new PublicError(
+          'room_full',
+          'Cette salle est complète. Vous pouvez la regarder en spectateur.',
+          409,
+        );
+      }
       const playerId = nanoid(12);
       try {
         const result = await mutateRoom(roomId, (draft) => {
@@ -1041,6 +1133,12 @@ io.on('connection', (socket) => {
   socket.on(SOCKET_EVENTS.LEAVE_ROOM, withSocketGuard(socket, SOCKET_EVENTS.LEAVE_ROOM, async (acknowledge) => {
     const info = socketToPlayer.get(socket.id);
     if (!info) { if (typeof acknowledge === 'function') acknowledge({ ok: true }); return; }
+    if (info.role === 'spectator') {
+      socketToPlayer.delete(socket.id);
+      socket.leave(info.roomId);
+      if (typeof acknowledge === 'function') acknowledge({ ok: true });
+      return;
+    }
     const allSocketIds = socketIdsForPlayer(info.roomId, info.playerId);
     let leavingPlayerName = '';
     const { state } = await mutateRoom(info.roomId, async (draft) => {
@@ -1063,6 +1161,47 @@ io.on('connection', (socket) => {
     }
     if (typeof acknowledge === 'function') acknowledge({ ok: true });
   }));
+
+  socket.on(SOCKET_EVENTS.SUBSCRIBE_PUBLIC_PREVIEW, withSocketGuard(
+    socket,
+    SOCKET_EVENTS.SUBSCRIBE_PUBLIC_PREVIEW,
+    async (payload) => {
+      const limit = consumeRateLimit(
+        `public-preview:user:${socket.data.auth.user.id}`,
+        { limit: 60, windowMs: 60_000 },
+      );
+      if (!limit.allowed) {
+        throw new PublicError('rate_limited', 'Trop de prévisualisations. Réessayez plus tard.', 429);
+      }
+      const roomId = normalizeRoomId(
+        objectPayload(payload, socketPayloadKeys(SOCKET_EVENTS.SUBSCRIBE_PUBLIC_PREVIEW)).roomId,
+      );
+      const preview = roomId ? await getPublicRoomPreview(roomId) : null;
+      if (!preview) {
+        throw new PublicError('room_unavailable', 'Cette partie publique n’est plus disponible.', 404);
+      }
+      const previousRoomId = socket.data.publicPreviewRoomId;
+      if (previousRoomId && previousRoomId !== roomId) {
+        socket.leave(publicPreviewSocketRoom(previousRoomId));
+      }
+      socket.data.publicPreviewRoomId = roomId;
+      socket.join(publicPreviewSocketRoom(roomId));
+      socket.emit(SOCKET_EVENTS.PUBLIC_PREVIEW_STATE, preview);
+    },
+  ));
+
+  socket.on(SOCKET_EVENTS.UNSUBSCRIBE_PUBLIC_PREVIEW, withSocketGuard(
+    socket,
+    SOCKET_EVENTS.UNSUBSCRIBE_PUBLIC_PREVIEW,
+    (payload) => {
+      const roomId = normalizeRoomId(
+        objectPayload(payload, socketPayloadKeys(SOCKET_EVENTS.UNSUBSCRIBE_PUBLIC_PREVIEW)).roomId,
+      );
+      if (!roomId || socket.data.publicPreviewRoomId !== roomId) return;
+      socket.leave(publicPreviewSocketRoom(roomId));
+      socket.data.publicPreviewRoomId = null;
+    },
+  ));
 
   socket.on(SOCKET_EVENTS.START_GAME, withSocketGuard(socket, SOCKET_EVENTS.START_GAME, () => handleAction(socket, startGame)));
   socket.on(SOCKET_EVENTS.REMOVE_PLAYER_FROM_LOBBY, withSocketGuard(socket, SOCKET_EVENTS.REMOVE_PLAYER_FROM_LOBBY, async (payload) => {
@@ -1110,6 +1249,7 @@ io.on('connection', (socket) => {
     if (socket.data.expiryTimer) clearTimeout(socket.data.expiryTimer);
     const info = socketToPlayer.get(socket.id);
     socketToPlayer.delete(socket.id);
+    if (info?.role === 'spectator') return;
     if (!info || socketIdsForPlayer(info.roomId, info.playerId).length) return;
     const key = connectionKey(info.roomId, info.playerId);
     clearDisconnectTimer(info.roomId, info.playerId);
