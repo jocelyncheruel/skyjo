@@ -17,7 +17,7 @@ function contentBoxWidth(element, fallback = 0) {
   return Math.max(0, rect.width - readPx(styles.paddingLeft) - readPx(styles.paddingRight));
 }
 
-export function useAdaptiveBoardSizing(playerCount, layoutKey, actionMode = false) {
+export function useAdaptiveBoardSizing(playerCount, layoutKey) {
   const shellRef = useRef(null);
   const boardAreaRef = useRef(null);
   const opponentsRef = useRef(null);
@@ -96,7 +96,6 @@ export function useAdaptiveBoardSizing(playerCount, layoutKey, actionMode = fals
         opponentsRightLimit: exitRect && opponentsRect
           ? Math.max(0, exitRect.left - opponentsRect.left - 8)
           : undefined,
-        actionMode,
       });
       const nextClassName = layoutClassNames(layout).join(' ');
       if (nextClassName !== appliedClassNameRef.current) {
@@ -145,7 +144,7 @@ export function useAdaptiveBoardSizing(playerCount, layoutKey, actionMode = fals
       window.visualViewport?.removeEventListener('resize', handleResize);
       window.visualViewport?.removeEventListener('scroll', handleResize);
     };
-  }, [actionMode, playerCount, layoutKey]);
+  }, [playerCount, layoutKey]);
 
   return {
     shellRef,

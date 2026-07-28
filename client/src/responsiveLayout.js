@@ -254,7 +254,6 @@ export function calculateAdaptiveBoardLayout({
   playGap = 0,
   chatEdgeClearance = CHAT_EDGE_CLEARANCE,
   opponentsRightLimit = Number.POSITIVE_INFINITY,
-  actionMode = false,
 }) {
   const mode = responsiveLayoutMode(viewportWidth, viewportHeight);
   const opponentCount = Math.max(0, playerCount - 1);
@@ -314,12 +313,10 @@ export function calculateAdaptiveBoardLayout({
 
   if (mode.shortLandscape) {
     const sideWidth = shortLandscapeSideWidth;
-    const actionDockReserve = actionMode ? 60 : 0;
-    meWidthBudget = Math.max(132, sideWidth - actionDockReserve);
+    meWidthBudget = Math.max(132, sideWidth);
     meHeightBudget = Math.max(168, measuredBoardHeight - 2);
     opponentWidthBudget = sideWidth;
-    opponentHeightBudget = Math.max(168, meHeightBudget - CHAT_BOTTOM_RESERVE);
-    chatClearance = true;
+    opponentHeightBudget = meHeightBudget;
   } else {
     const centerFlowHeight = mode.desktop
       ? 0

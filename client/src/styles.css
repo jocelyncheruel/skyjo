@@ -7128,6 +7128,12 @@ select:focus {
 .sj-layout-short-landscape {
   --sj-responsive-layout: short-landscape;
   --sj-play-gap: 4px;
+  --sj-landscape-control-size: clamp(40px, min(7.5dvh, 5dvw), 46px);
+  --sj-landscape-control-gap: clamp(20px, 7dvh, 40px);
+  --sj-landscape-pile-height: calc(
+    var(--sj-pile-card-width, 56px) * 1.386364
+    + 12px
+  );
 }
 
 .sj-layout-short-landscape .sj-board-area {
@@ -7196,10 +7202,6 @@ select:focus {
   overflow: auto;
 }
 
-.sj-layout-short-landscape.sj-action-game .sj-me-wrap {
-  padding-inline: 30px;
-}
-
 .sj-layout-short-landscape .sj-action-panel {
   width: min(calc(var(--pile-item-width) * 2 + 4px), 30vw);
   gap: 4px;
@@ -7215,7 +7217,11 @@ select:focus {
 
 .sj-layout-short-landscape .sj-last-turn-notice {
   top: auto;
-  bottom: max(6px, env(safe-area-inset-bottom));
+  bottom: calc(
+    max(var(--sj-shell-pad), env(safe-area-inset-bottom))
+    + var(--sj-landscape-control-size)
+    + 6px
+  );
   max-width: min(46vw, 360px);
   padding: 5px 8px;
   gap: 5px;
@@ -7228,23 +7234,82 @@ select:focus {
   font-size: 8px;
 }
 
-.sj-layout-short-landscape .sj-action-hand-dock {
+.sj-layout-short-landscape.sj-action-hand-visible .sj-action-hand-dock {
+  right: auto;
   bottom: max(8px, env(safe-area-inset-bottom));
+  left: 50%;
+  width: calc(64px + var(--sj-action-tab-stack));
+  height: 30px;
+  transform: translateX(-50%);
+}
+
+.sj-layout-short-landscape.sj-action-hand-visible .sj-action-hand-tab {
+  top: auto;
+  right: auto;
+  bottom: -52px;
+  left: var(--sj-action-tab-top);
+  width: 64px;
+  height: 76px;
+  border-right: 2px solid rgba(255, 255, 255, 0.6);
+  border-bottom: 0;
+  border-radius: 9px 9px 0 0;
+  box-shadow: 5px -5px 18px rgba(0, 0, 0, 0.28);
+  transition: bottom 0.16s ease, filter 0.16s ease;
+}
+
+.sj-layout-short-landscape.sj-action-hand-visible .sj-action-hand-dock:hover .sj-action-hand-tab,
+.sj-layout-short-landscape.sj-action-hand-visible .sj-action-hand-dock:focus-visible .sj-action-hand-tab {
+  right: auto;
+  bottom: -46px;
+}
+
+.sj-layout-short-landscape.sj-action-hand-visible .sj-action-hand-count {
+  top: -10px;
+  right: -10px;
+}
+
+.sj-layout-short-landscape.sj-action-hand-visible .sj-action-hand-dock:hover .sj-action-hand-count,
+.sj-layout-short-landscape.sj-action-hand-visible .sj-action-hand-dock:focus-visible .sj-action-hand-count {
+  transform: translateY(-2px);
 }
 
 .sj-app-shell.sj-layout-short-landscape .sj-game-controls .sj-exit-button {
-  top: max(var(--sj-shell-pad), env(safe-area-inset-top));
+  top: calc(
+    50%
+    - var(--sj-landscape-pile-height) / 2
+    - var(--sj-landscape-control-size)
+    - var(--sj-landscape-control-gap)
+  );
   right: auto;
   left: 50%;
   transform: translateX(-50%);
 }
 
+.sj-app-shell.sj-layout-short-landscape .sj-game-controls .sj-exit-button,
 .sj-app-shell.sj-layout-short-landscape .sj-game-controls .sj-chat-button {
-  top: auto;
+  width: var(--sj-landscape-control-size);
+  height: var(--sj-landscape-control-size);
+}
+
+.sj-app-shell.sj-layout-short-landscape .sj-game-controls .sj-chat-button {
+  top: calc(
+    50%
+    + var(--sj-landscape-pile-height) / 2
+    + var(--sj-landscape-control-gap)
+  );
   right: auto;
-  bottom: max(var(--sj-shell-pad), env(safe-area-inset-bottom));
-  left: max(var(--sj-shell-pad), env(safe-area-inset-left));
-  transform: none;
+  bottom: auto;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.sj-app-shell.sj-layout-short-landscape .sj-game-controls .sj-chat-button:hover,
+.sj-app-shell.sj-layout-short-landscape .sj-game-controls .sj-chat-button:focus-visible {
+  transform: translate(-50%, -2px);
+}
+
+.sj-app-shell.sj-layout-short-landscape .sj-game-controls .sj-spectator-badge {
+  top: max(var(--sj-shell-pad), env(safe-area-inset-top));
 }
 
 .sj-layout-short-landscape .sj-chat-modal,
@@ -7427,12 +7492,12 @@ select:focus {
 }
 
 .sj-layout-short-landscape.sj-layout-chat-clearance .sj-opponents {
-  padding-bottom: 50px;
+  padding-bottom: 0;
 }
 
 .sj-layout-short-landscape.sj-layout-shared-two .sj-opponents {
-  align-content: flex-start;
-  align-items: flex-start;
+  align-content: center;
+  align-items: center;
 }
 
 .sj-layout-short-landscape.sj-layout-shared-two .sj-player-zone {
@@ -7444,7 +7509,7 @@ select:focus {
 
 .sj-layout-short-landscape.sj-layout-shared-two .sj-me-wrap {
   padding-bottom: 0;
-  place-items: end center;
+  place-items: center;
 }
 
 .sj-layout-stacked.sj-action-game:not(.sj-layout-short-landscape) .sj-me-wrap {

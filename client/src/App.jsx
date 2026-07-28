@@ -2422,6 +2422,10 @@ function GameScreen({
         !myActionState.actionCards.some((card) => card.type === preview.type)),
     ]
     : myActionState.actionCards;
+  const hasActionHandDock = !isSpectator
+    && isActionMode
+    && state.phase !== 'roundEnd'
+    && actionCardsForDisplay.length > 0;
   const viewedActionPlayer = viewedActionPlayerId
     ? state.players.find((player) => player.id === viewedActionPlayerId)
     : null;
@@ -2566,7 +2570,7 @@ function GameScreen({
     actionPanelRef,
     layoutReady,
     layoutClassName,
-  } = useAdaptiveBoardSizing(state.players.length, layoutKey, isActionMode);
+  } = useAdaptiveBoardSizing(state.players.length, layoutKey);
 
   useEffect(() => {
     if (isSpectator) return;
@@ -3385,7 +3389,7 @@ function GameScreen({
   return (
     <div
       ref={shellRef}
-      className={`sj-app-shell ${state.players.length === 2 ? 'sj-two-player-game' : ''} ${isActionMode ? 'sj-action-game' : ''} ${layoutClassName} ${layoutReady ? '' : 'sj-layout-pending'}`}
+      className={`sj-app-shell ${state.players.length === 2 ? 'sj-two-player-game' : ''} ${isActionMode ? 'sj-action-game' : ''} ${hasActionHandDock ? 'sj-action-hand-visible' : ''} ${layoutClassName} ${layoutReady ? '' : 'sj-layout-pending'}`}
     >
       <CardMotionLayer
         state={state}
@@ -3397,7 +3401,7 @@ function GameScreen({
         {chatButton}
         {leaveButton}
       </div>
-      {!isSpectator && isActionMode && state.phase !== 'roundEnd' && (
+      {hasActionHandDock && (
         <ActionHandDock
           cards={actionCardsForDisplay}
           onClick={() => setActionHandModalOpen(true)}
