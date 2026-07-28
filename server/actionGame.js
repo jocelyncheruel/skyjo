@@ -1163,6 +1163,7 @@ export function discardOwnedAction(state, playerId, cardId) {
   if (!card || card.availableAt > state.turnSerial) throw new Error('Cette carte ne peut être défaussée qu’au prochain tour.');
 
   player.actionCards.splice(index, 1);
+  recordPlayedAction(state, playerId, card);
   discardPlayedAction(state, card);
   state.starterTieNotice = null;
   advanceTurn(state);
