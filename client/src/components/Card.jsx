@@ -9,6 +9,19 @@ const CORNER_VALUE_INSET = 7;
 const CORNER_VALUE_CENTER_Y = 13.5;
 const CORNER_VALUE_SIZE = 13;
 const FACET_OPACITY = 0.32;
+const STAR_PATH = [
+  'M 44 32',
+  'L 51.94 51.08',
+  'L 72.53 52.73',
+  'L 56.84 66.17',
+  'L 61.63 86.27',
+  'L 44 75.5',
+  'L 26.37 86.27',
+  'L 31.16 66.17',
+  'L 15.47 52.73',
+  'L 36.06 51.08',
+  'Z',
+].join(' ');
 
 function cardRect(inset = 0) {
   const radius = Math.max(0, CARD_RADIUS - inset);
@@ -357,22 +370,16 @@ export default function Card({
         {displayValue}
       </text>}
       {kind === 'star' ? (
-        <text
-          x={CARD_W / 2}
-          y={CARD_H / 2 + 1}
-          textAnchor="middle"
-          dominantBaseline="central"
-          fontFamily="Arial, sans-serif"
-          fontWeight="900"
-          fontSize="56"
+        <path
+          className="sj-card-star"
+          d={STAR_PATH}
           fill="#ffffff"
           stroke="rgba(23, 42, 59, 0.64)"
           strokeWidth="3.5"
+          strokeLinecap="round"
           strokeLinejoin="round"
           paintOrder="stroke"
-        >
-          ★
-        </text>
+        />
       ) : (
         <text
           x={CARD_W / 2}
