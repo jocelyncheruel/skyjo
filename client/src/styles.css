@@ -3420,19 +3420,6 @@ button.sj-action-count-badge:focus-visible {
   overflow: hidden;
 }
 
-.sj-last-round-inline {
-  min-height: 16px;
-  display: inline-flex;
-  align-items: center;
-  border-radius: 999px;
-  background: rgba(98, 210, 127, 0.15);
-  color: #c7f5d1;
-  padding: 2px 5px;
-  font-size: 9px;
-  font-weight: 900;
-  white-space: nowrap;
-}
-
 .sj-player-dot {
   width: 8px;
   height: 8px;
@@ -6482,11 +6469,6 @@ button.sj-action-count-badge:focus-visible {
     font-size: clamp(11px, calc(var(--score-badge-height) * 0.52), 15px);
   }
 
-  .sj-last-round-inline {
-    min-height: 14px;
-    padding: 1px 4px;
-    font-size: 8px;
-  }
 }
 
 @media (max-width: 899px) {
@@ -7223,10 +7205,6 @@ select:focus {
 
 .sj-layout-short-landscape .sj-board {
   --board-shadow: 0 10px 22px rgba(0, 0, 0, 0.26);
-}
-
-.sj-layout-short-landscape .sj-last-round-inline {
-  display: none;
 }
 
 .sj-layout-short-landscape .sj-round-start-notice,

@@ -74,9 +74,6 @@ export default function PlayerBoard({
               <strong>{actionCardCount}</strong>
             </span>
           )}
-          {player.lastRoundScore !== null && player.lastRoundScore !== undefined && (
-            <span className="sj-last-round-inline">+{player.lastRoundScore}</span>
-          )}
         </div>
       </header>
 
