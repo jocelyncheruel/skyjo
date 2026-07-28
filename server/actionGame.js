@@ -689,6 +689,11 @@ export function decideActionGameCard(state, playerId, keep) {
   if (typeof keep !== 'boolean') throw new Error('Choix invalide.');
   if (keep) state.turnStage = 'place';
   else {
+    recordCardMove(state, {
+      type: 'discard',
+      source: state.drawnCard.from,
+      cards: [{ card: state.drawnCard.card }],
+    });
     state.discard.push(state.drawnCard.card);
     state.drawnCard = null;
     if (boardFinished(state.playersById[playerId])) advanceTurn(state);

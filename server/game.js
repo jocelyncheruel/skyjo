@@ -189,6 +189,11 @@ export function leavePlayer(state, id) {
 
   const wasCurrentPlayer = state.order[state.turnIndex] === id;
   if (wasCurrentPlayer && state.drawnCard?.card) {
+    recordCardMove(state, {
+      type: 'discard',
+      source: state.drawnCard.from,
+      cards: [{ card: state.drawnCard.card }],
+    });
     state.discard.push(state.drawnCard.card);
     state.drawnCard = null;
   }
@@ -486,6 +491,11 @@ export function decideDrawnCard(state, playerId, keep) {
   if (keep) {
     state.turnStage = 'place';
   } else {
+    recordCardMove(state, {
+      type: 'discard',
+      source: state.drawnCard.from,
+      cards: [{ card: state.drawnCard.card }],
+    });
     state.discard.push(state.drawnCard.card);
     state.drawnCard = null;
     state.turnStage = 'reveal';

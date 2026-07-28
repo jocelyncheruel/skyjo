@@ -151,6 +151,10 @@ function addDrawResolution(previousState, nextState, motions, seen, cardMoves) {
     (!cardMove.type || cardMove.type === 'placement')
     && cardMove.playerId === actorId
   )) || null;
+  const recordedDiscard = [...cardMoves].reverse().find((cardMove) => (
+    cardMove.type === 'discard'
+    && cardMove.cards?.some(({ card }) => !drawnId || card?.id === drawnId)
+  )) || null;
   const recordedDestination = recordedMove
     ? changes.find(({ slotIndex }) => slotIndex === recordedMove.slotIndex)
     : null;
@@ -159,11 +163,14 @@ function addDrawResolution(previousState, nextState, motions, seen, cardMoves) {
     : changes.find(({ nextSlot }) => nextSlot?.faceUp && !nextSlot?.removed));
 
   if (!destination) {
-    if (slotSignature(previousState.discardTop) !== slotSignature(nextState.discardTop)) {
+    const discardedCard = recordedDiscard?.cards?.find(
+      ({ card }) => !drawnId || card?.id === drawnId,
+    )?.card;
+    if (recordedDiscard && discardedCard) {
       addMotion(motions, seen, {
-        from: source,
+        from: pileAnchor(recordedDiscard.source || drawn.from || 'deck'),
         to: pileAnchor('discard'),
-        card: cardVisual(drawn.card || nextState.discardTop, true),
+        card: cardVisual(discardedCard, true),
         tone: 'discard',
       });
     }
@@ -362,7 +369,7 @@ function addRemovedCards(previousState, nextState, motions, seen, cardMoves) {
   });
 }
 
-function buildCardMotions(previousState, nextState) {
+export function buildCardMotions(previousState, nextState) {
   if (!previousState || !nextState || previousState.roomId !== nextState.roomId) return [];
   if (previousState.roundNumber !== nextState.roundNumber || previousState.phase !== 'playing') return [];
 
