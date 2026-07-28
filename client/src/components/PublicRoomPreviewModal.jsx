@@ -316,6 +316,7 @@ export default function PublicRoomPreviewModal({
       <section
         ref={modalRef}
         className="sj-public-preview-modal sj-pop-in"
+        style={{ '--sj-public-preview-ratio': ratio }}
         role="dialog"
         aria-modal="true"
         aria-labelledby="public-room-preview-title"
@@ -337,7 +338,6 @@ export default function PublicRoomPreviewModal({
           ref={previewViewportRef}
           className="sj-public-preview-viewport"
           style={{
-            '--sj-public-preview-ratio': ratio,
             aspectRatio: String(ratio),
           }}
           aria-live="polite"

@@ -1453,20 +1453,40 @@ input:focus {
 }
 
 .sj-public-preview-overlay {
+  --sj-modal-space-top: max(12px, env(safe-area-inset-top));
+  --sj-modal-space-right: max(12px, env(safe-area-inset-right));
+  --sj-modal-space-bottom: max(12px, env(safe-area-inset-bottom));
+  --sj-modal-space-left: max(12px, env(safe-area-inset-left));
   z-index: 94;
-  padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right))
-    max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
 }
 
 .sj-public-preview-modal {
-  width: min(760px, 100%);
-  max-height: calc(100dvh - 24px);
+  --sj-public-preview-height: min(
+    52dvh,
+    max(
+      120px,
+      calc(
+        100dvh
+        - var(--sj-modal-space-top)
+        - var(--sj-modal-space-bottom)
+        - 170px
+      )
+    )
+  );
+  width: min(
+    var(--sj-modal-width-large),
+    100%,
+    calc(var(--sj-public-preview-height) * var(--sj-public-preview-ratio) + 32px)
+  );
+  min-width: var(--sj-modal-min-width);
+  max-height: var(--sj-modal-available-height);
+  box-sizing: border-box;
   display: grid;
   justify-items: stretch;
   gap: 12px;
   overflow: auto;
   border: 1px solid rgba(113, 168, 255, 0.3);
-  border-radius: 18px;
+  border-radius: var(--sj-modal-radius);
   background:
     radial-gradient(circle at 50% 0%, rgba(113, 168, 255, 0.14), transparent 38%),
     linear-gradient(155deg, rgba(20, 36, 47, 0.98), rgba(9, 18, 22, 0.99));
@@ -1520,8 +1540,8 @@ input:focus {
 .sj-public-preview-viewport {
   container-type: size;
   position: relative;
-  width: min(100%, calc(52dvh * var(--sj-public-preview-ratio)));
-  max-height: 52dvh;
+  width: min(100%, calc(var(--sj-public-preview-height) * var(--sj-public-preview-ratio)));
+  max-height: var(--sj-public-preview-height);
   justify-self: center;
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.15);
@@ -1999,10 +2019,11 @@ input:focus {
 }
 
 .sj-qr-scanner-modal {
-  width: min(500px, 100%);
+  width: min(var(--sj-modal-width-standard), 100%);
   height: fit-content;
-  max-height: calc(100dvh - var(--sj-modal-space-top) - var(--sj-modal-space-bottom));
-  min-width: 0;
+  max-height: var(--sj-modal-available-height);
+  min-width: var(--sj-modal-min-width);
+  box-sizing: border-box;
   display: grid;
   grid-auto-rows: max-content;
   align-self: center;
@@ -2010,7 +2031,7 @@ input:focus {
   gap: 14px;
   overflow: auto;
   border: 1px solid rgba(113, 168, 255, 0.34);
-  border-radius: 18px;
+  border-radius: var(--sj-modal-radius);
   background:
     radial-gradient(circle at 50% 0%, rgba(113, 168, 255, 0.18), transparent 38%),
     linear-gradient(155deg, rgba(25, 36, 48, 0.99), rgba(14, 20, 29, 0.99));
@@ -2019,7 +2040,7 @@ input:focus {
 }
 
 .sj-qr-scanner-modal-compact {
-  width: min(420px, 100%);
+  width: min(var(--sj-modal-width-compact), 100%);
 }
 
 .sj-qr-scanner-camera {
@@ -2117,15 +2138,16 @@ input:focus {
 }
 
 .sj-invite-modal {
-  width: min(430px, 100%);
-  max-height: calc(100dvh - var(--sj-modal-space-top) - var(--sj-modal-space-bottom));
-  min-width: 0;
+  width: min(var(--sj-modal-width-compact), 100%);
+  max-height: var(--sj-modal-available-height);
+  min-width: var(--sj-modal-min-width);
+  box-sizing: border-box;
   display: grid;
   justify-items: center;
   gap: 14px;
   overflow: auto;
   border: 1px solid rgba(113, 168, 255, 0.34);
-  border-radius: 18px;
+  border-radius: var(--sj-modal-radius);
   background:
     radial-gradient(circle at 50% 0%, rgba(113, 168, 255, 0.18), transparent 38%),
     linear-gradient(155deg, rgba(25, 36, 48, 0.99), rgba(14, 20, 29, 0.99));
@@ -2230,7 +2252,7 @@ input:focus {
   .sj-invite-modal {
     width: 100%;
     gap: 12px;
-    border-radius: 15px;
+    border-radius: var(--sj-modal-radius);
     padding: 18px 16px;
   }
 
@@ -2242,7 +2264,7 @@ input:focus {
 
   .sj-qr-scanner-modal {
     gap: 12px;
-    border-radius: 15px;
+    border-radius: var(--sj-modal-radius);
     padding: 18px 16px;
   }
 
@@ -3598,6 +3620,21 @@ button.sj-action-count-badge:focus-visible {
   --sj-modal-space-right: max(10px, env(safe-area-inset-right));
   --sj-modal-space-bottom: max(10px, env(safe-area-inset-bottom));
   --sj-modal-space-left: max(10px, env(safe-area-inset-left));
+  --sj-modal-available-width: calc(
+    100vw - var(--sj-modal-space-left) - var(--sj-modal-space-right)
+  );
+  --sj-modal-available-height: calc(
+    100dvh - var(--sj-modal-space-top) - var(--sj-modal-space-bottom)
+  );
+  --sj-modal-width-compact: 400px;
+  --sj-modal-width-standard: 560px;
+  --sj-modal-width-large: 760px;
+  --sj-modal-width-extra-wide: 1080px;
+  --sj-modal-min-width: min(320px, 100%);
+  --sj-modal-radius-compact: 14px;
+  --sj-modal-radius: 18px;
+  --sj-modal-workspace-height: min(720px, 82dvh, var(--sj-modal-available-height));
+  --sj-modal-workspace-min-height: min(360px, var(--sj-modal-available-height));
   position: fixed;
   inset: 0;
   z-index: 100;
@@ -3615,11 +3652,13 @@ button.sj-action-count-badge:focus-visible {
 }
 
 .sj-confirm-modal {
-  width: min(380px, 100%);
-  max-height: calc(100dvh - var(--sj-modal-space-top) - var(--sj-modal-space-bottom));
+  width: min(var(--sj-modal-width-compact), 100%);
+  min-width: var(--sj-modal-min-width);
+  max-height: var(--sj-modal-available-height);
+  box-sizing: border-box;
   overflow: auto;
   border: 1px solid var(--line-strong);
-  border-radius: 10px;
+  border-radius: var(--sj-modal-radius-compact);
   background: #171b24;
   box-shadow: 0 24px 70px rgba(0, 0, 0, 0.52);
   padding: 22px;
@@ -3656,13 +3695,15 @@ button.sj-action-count-badge:focus-visible {
 }
 
 .sj-profile-modal {
-  width: min(1080px, 92vw);
-  max-height: calc(100dvh - var(--sj-modal-space-top) - var(--sj-modal-space-bottom));
+  width: min(var(--sj-modal-width-extra-wide), 92vw, var(--sj-modal-available-width));
+  min-width: var(--sj-modal-min-width);
+  max-height: var(--sj-modal-available-height);
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.13);
-  border-radius: 18px;
+  border-radius: var(--sj-modal-radius);
   background: #171b24;
   box-shadow: 0 28px 80px rgba(0, 0, 0, 0.62);
 }
@@ -4441,8 +4482,8 @@ button.sj-action-count-badge:focus-visible {
 
 @media (max-width: 1020px) {
   .sj-profile-modal {
-    width: min(640px, 100%);
-    border-radius: 15px;
+    width: min(var(--sj-modal-width-large), 100%);
+    border-radius: var(--sj-modal-radius);
   }
 
   .sj-profile-head {
@@ -4874,15 +4915,17 @@ button.sj-action-count-badge:focus-visible {
 }
 
 .sj-chat-modal {
-  width: min(540px, 100%);
-  height: min(720px, calc(100dvh - var(--sj-modal-space-top) - var(--sj-modal-space-bottom)));
-  max-height: calc(100dvh - var(--sj-modal-space-top) - var(--sj-modal-space-bottom));
-  min-height: min(420px, calc(100dvh - var(--sj-modal-space-top) - var(--sj-modal-space-bottom)));
+  width: min(var(--sj-modal-width-standard), 100%);
+  height: var(--sj-modal-workspace-height);
+  min-width: var(--sj-modal-min-width);
+  min-height: var(--sj-modal-workspace-min-height);
+  max-height: var(--sj-modal-available-height);
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
   overflow: hidden;
   border: 1px solid rgba(113, 168, 255, 0.38);
-  border-radius: 16px;
+  border-radius: var(--sj-modal-radius);
   background:
     radial-gradient(circle at 0% 0%, rgba(113, 168, 255, 0.18), transparent 38%),
     radial-gradient(circle at 100% 0%, rgba(222, 105, 177, 0.14), transparent 42%),
@@ -5379,13 +5422,15 @@ button.sj-action-count-badge:focus-visible {
 }
 
 .sj-action-draw-modal {
-  width: min(920px, 100%);
-  max-height: min(720px, calc(100dvh - var(--sj-modal-space-top) - var(--sj-modal-space-bottom)));
+  width: min(var(--sj-modal-width-large), 100%);
+  min-width: var(--sj-modal-min-width);
+  max-height: min(720px, var(--sj-modal-available-height));
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
   overflow: hidden;
   border: 1px solid rgba(222, 105, 177, 0.5);
-  border-radius: 12px;
+  border-radius: var(--sj-modal-radius);
   background:
     radial-gradient(circle at 100% 0%, rgba(128, 45, 114, 0.28), transparent 36%),
     #171b24;
@@ -6081,13 +6126,15 @@ button.sj-action-count-badge:focus-visible {
 
 .sj-action-hand-modal {
   position: relative;
-  width: min(920px, 100%);
-  max-height: min(720px, calc(100dvh - var(--sj-modal-space-top) - var(--sj-modal-space-bottom)));
+  width: min(var(--sj-modal-width-large), 100%);
+  min-width: var(--sj-modal-min-width);
+  max-height: min(720px, var(--sj-modal-available-height));
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
   overflow: hidden;
   border: 1px solid rgba(222, 105, 177, 0.5);
-  border-radius: 12px;
+  border-radius: var(--sj-modal-radius);
   background:
     radial-gradient(circle at 0% 0%, rgba(214, 74, 146, 0.2), transparent 38%),
     #171b24;
@@ -6532,10 +6579,10 @@ button.sj-action-count-badge:focus-visible {
 
   .sj-chat-modal {
     width: 100%;
-    height: min(88dvh, 720px);
-    max-height: min(88dvh, 720px);
-    min-height: 360px;
-    border-radius: 14px;
+    height: var(--sj-modal-workspace-height);
+    max-height: var(--sj-modal-available-height);
+    min-height: var(--sj-modal-workspace-min-height);
+    border-radius: var(--sj-modal-radius);
   }
 
   .sj-chat-head {
@@ -6699,7 +6746,7 @@ button.sj-action-count-badge:focus-visible {
 @media (min-width: 900px) and (min-height: 620px) {
   .sj-action-hand-modal,
   .sj-action-draw-modal {
-    width: min(760px, 92vw);
+    width: min(var(--sj-modal-width-large), 92vw);
   }
 
   .sj-action-hand-modal-grid {
@@ -7368,9 +7415,9 @@ select:focus {
 }
 
 .sj-chat-modal {
-  height: min(720px, calc(100dvh - var(--sj-modal-space-top) - var(--sj-modal-space-bottom)));
-  max-height: calc(100dvh - var(--sj-modal-space-top) - var(--sj-modal-space-bottom));
-  min-height: min(420px, calc(100dvh - var(--sj-modal-space-top) - var(--sj-modal-space-bottom)));
+  height: var(--sj-modal-workspace-height);
+  max-height: var(--sj-modal-available-height);
+  min-height: var(--sj-modal-workspace-min-height);
 }
 
 .sj-layout-stacked:not(.sj-layout-short-landscape):not(.sj-layout-shared-two) .sj-game-controls {
@@ -8266,15 +8313,17 @@ select:focus {
 }
 
 .sj-guide-modal {
-  width: min(860px, 100%);
-  height: min(760px, calc(100dvh - var(--sj-modal-space-top) - var(--sj-modal-space-bottom)));
-  max-height: calc(100dvh - var(--sj-modal-space-top) - var(--sj-modal-space-bottom));
-  min-height: min(540px, calc(100dvh - var(--sj-modal-space-top) - var(--sj-modal-space-bottom)));
+  width: min(var(--sj-modal-width-large), 100%);
+  height: var(--sj-modal-workspace-height);
+  min-width: var(--sj-modal-min-width);
+  min-height: var(--sj-modal-workspace-min-height);
+  max-height: var(--sj-modal-available-height);
+  box-sizing: border-box;
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr) auto;
   overflow: hidden;
   border: 1px solid rgba(113, 168, 255, 0.28);
-  border-radius: 18px;
+  border-radius: var(--sj-modal-radius);
   background:
     radial-gradient(circle at 12% 0%, rgba(113, 168, 255, 0.13), transparent 34%),
     radial-gradient(circle at 88% 8%, rgba(232, 137, 194, 0.1), transparent 30%),
@@ -8424,18 +8473,18 @@ select:focus {
 
 @media (max-width: 640px) {
   .sj-guide-overlay {
-    --sj-modal-space-top: env(safe-area-inset-top);
-    --sj-modal-space-right: env(safe-area-inset-right);
-    --sj-modal-space-bottom: env(safe-area-inset-bottom);
-    --sj-modal-space-left: env(safe-area-inset-left);
+    --sj-modal-space-top: max(10px, env(safe-area-inset-top));
+    --sj-modal-space-right: max(10px, env(safe-area-inset-right));
+    --sj-modal-space-bottom: max(10px, env(safe-area-inset-bottom));
+    --sj-modal-space-left: max(10px, env(safe-area-inset-left));
   }
 
   .sj-guide-modal {
     width: 100%;
-    height: calc(100dvh - var(--sj-modal-space-top) - var(--sj-modal-space-bottom));
-    max-height: none;
-    min-height: 0;
-    border-radius: 0;
+    height: var(--sj-modal-workspace-height);
+    max-height: var(--sj-modal-available-height);
+    min-height: var(--sj-modal-workspace-min-height);
+    border-radius: var(--sj-modal-radius);
   }
 
   .sj-guide-head {
