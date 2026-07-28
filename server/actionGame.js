@@ -96,7 +96,7 @@ function ensureActionFields(state) {
     return;
   }
 
-  if (resolveFinalTurnStarClaim(state)) return;
+  if (resolveSkippedStarClaim(state)) return;
 
   if (state.pendingStarClaim && !prepareActionClaimChoices(state)) {
     log(state, 'Aucune carte Action n’est disponible : le bonus Étoile est ignoré.');
@@ -233,31 +233,22 @@ function giveActionCard(state, playerId, source, marketIndex) {
   return card;
 }
 
-function grantAutomaticStarAction(state, playerId) {
-  if (!prepareActionClaimChoices(state)) {
-    log(state, 'Aucune carte Action n’est disponible : le bonus Étoile est ignoré.');
-    return false;
-  }
-
-  const source = availableActionDeckCount(state) > 0 ? 'deck' : 'market';
-  giveActionCard(state, playerId, source, source === 'market' ? 0 : undefined);
-  log(state, `${state.playersById[playerId].name} reçoit automatiquement une carte Action grâce à son Étoile.`);
-  return true;
-}
-
 function resolveAutomaticReveals(state, revealed) {
   if (revealed.length === 0) return;
   recordCardMove(state, { type: 'roundReveal', cards: revealed });
-  for (const { playerId, card } of revealed) {
-    if (isStar(card)) grantAutomaticStarAction(state, playerId);
-  }
 }
 
-function resolveFinalTurnStarClaim(state) {
-  const playerId = state.pendingStarClaim?.playerId;
-  if (!playerId || !state.roundEnderId) return false;
+function shouldSkipStarClaim(state, playerId) {
+  if (state.phase !== 'playing') return false;
+  const player = state.playersById[playerId];
+  return !!state.roundEnderId || !!player && boardFinished(player);
+}
 
-  grantAutomaticStarAction(state, playerId);
+function resolveSkippedStarClaim(state) {
+  const playerId = state.pendingStarClaim?.playerId;
+  if (!playerId || !shouldSkipStarClaim(state, playerId)) return false;
+
+  log(state, 'Le bonus Étoile n’est pas attribué pendant le dernier tour.');
   resumeAfterStarClaim(state);
   return true;
 }
@@ -276,7 +267,7 @@ function beginStarClaim(state, playerId, resume) {
   }
   state.pendingStarClaim = { playerId, resume };
   state.turnStage = 'starClaim';
-  if (resolveFinalTurnStarClaim(state)) return;
+  if (resolveSkippedStarClaim(state)) return;
   if (!prepareActionClaimChoices(state)) {
     log(state, 'Aucune carte Action n’est disponible : le bonus Étoile est ignoré.');
     resumeAfterStarClaim(state);
