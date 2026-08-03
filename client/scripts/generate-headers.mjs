@@ -39,7 +39,7 @@ const csp = [
   "base-uri 'none'",
   "form-action 'self'",
   "frame-ancestors 'none'",
-  "manifest-src 'none'",
+  "manifest-src 'self'",
   "upgrade-insecure-requests",
 ].join("; ");
 
@@ -62,6 +62,13 @@ const headers = `/*
 
 /skyjo-logo.svg
   Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; script-src 'none'; script-src-attr 'none'; connect-src 'none'; object-src 'none'; frame-ancestors 'none'; sandbox
+  Cache-Control: public, max-age=86400
+
+/site.webmanifest
+  Content-Type: application/manifest+json; charset=utf-8
+  Cache-Control: public, max-age=3600
+
+/app-icon-512.png
   Cache-Control: public, max-age=86400
 `;
 
