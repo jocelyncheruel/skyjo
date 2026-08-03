@@ -76,6 +76,7 @@ import {
   SOCKET_PROTOCOL_VERSION,
   socketClientPayload,
 } from '../../shared/socketProtocol.js';
+import { roomVariantLabel } from '../../shared/roomVariants.js';
 
 const AUTO_RECONNECT_TIMEOUT_MS = 5000;
 const ROOM_ROLE_KEY = 'sj-room-role';
@@ -971,6 +972,8 @@ function GameApp() {
                           {publicRoom.phase === 'lobby' ? 'Salle d’attente' : 'Partie en cours'}
                           {' · '}
                           créée par {publicRoom.creatorName || 'un joueur'}
+                          {' · '}
+                          {roomVariantLabel(publicRoom)}
                           {publicRoom.locked ? ' · verrouillée' : ''}
                         </small>
                       </span>
@@ -2209,6 +2212,8 @@ function GameScreen({
               {state.roomVisibility === 'public' ? 'Salle publique' : 'Salle privée'}
               {' · '}
               {state.players.length}/{state.roomSettings?.maxPlayers || 8} joueurs
+              {' · '}
+              {roomVariantLabel(state.roomSettings)}
               {state.roomSettings?.locked ? ' · Verrouillée' : ''}
             </p>
             <ul className="sj-player-list">

@@ -7,6 +7,7 @@ import { PileButton } from './GameTablePieces.jsx';
 import PlayerBoard from './PlayerBoard.jsx';
 import { ACTION_ART_URLS, ACTION_LABELS } from '../gameGuide.js';
 import { calculateAdaptiveBoardLayout, layoutClassNames } from '../responsiveLayout.js';
+import { roomVariantLabel } from '../../../shared/roomVariants.js';
 
 function PreviewBoard({
   player,
@@ -308,6 +309,7 @@ export default function PublicRoomPreviewModal({
   const spectatorsAllowed = preview?.roomSettings?.allowSpectators
     ?? roomMetadata.allowSpectators
     ?? true;
+  const variantSettings = preview?.roomSettings || roomMetadata;
   const spectatorCount = Number.isInteger(preview?.spectatorCount)
     ? Math.max(0, preview.spectatorCount)
     : Number.isInteger(roomMetadata.spectatorCount)
@@ -376,6 +378,8 @@ export default function PublicRoomPreviewModal({
           Créée par {roomMetadata.creatorName || 'un joueur'}
           {' · '}
           {previewPlayerCount}/{previewMaxPlayers} joueurs
+          {' · '}
+          {roomVariantLabel(variantSettings)}
           {roomLocked ? ' · Salle verrouillée' : ''}
           {!spectatorsAllowed ? ' · Spectateurs interdits' : ''}
         </p>

@@ -1,4 +1,4 @@
-export const SOCKET_PROTOCOL_VERSION = 13;
+export const SOCKET_PROTOCOL_VERSION = 15;
 
 export const SOCKET_EVENTS = Object.freeze({
   CONNECT: 'connect',
@@ -62,6 +62,9 @@ export const SOCKET_CLIENT_PAYLOAD_KEYS = Object.freeze({
     'locked',
     'allowSpectators',
     'chatEnabled',
+    'gameEndMode',
+    'scoreTarget',
+    'roundLimit',
   ]),
   [SOCKET_EVENTS.TRANSFER_ROOM_OWNERSHIP]: Object.freeze(['playerId']),
   [SOCKET_EVENTS.KICK_ROOM_PLAYER]: Object.freeze(['playerId']),

@@ -3808,11 +3808,22 @@ button.sj-action-count-badge:focus-visible {
 .sj-room-admin-body {
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1.08fr) minmax(0, 0.92fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
+  align-items: start;
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: 16px;
+}
+
+.sj-room-admin-format,
+.sj-room-admin-members {
+  grid-column: 1 / -1;
+}
+
+.sj-room-admin-access,
+.sj-room-admin-permissions {
+  align-self: stretch;
 }
 
 .sj-room-admin-section {
@@ -3948,8 +3959,153 @@ button.sj-action-count-badge:focus-visible {
   transform: translateX(16px);
 }
 
-.sj-room-admin-save {
+.sj-room-admin-variants {
+  min-width: 0;
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  border: 0;
+  padding: 0;
+}
+
+.sj-room-admin-variants small {
+  margin: 0;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.sj-admin-variant-options,
+.sj-admin-variant-presets {
+  display: grid;
+  gap: 5px;
+}
+
+.sj-admin-variant-options {
+  gap: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.075);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.025);
+  padding: 9px;
+}
+
+.sj-admin-variant-options > strong {
+  color: var(--text);
+  font-size: 12px;
+}
+
+.sj-admin-variant-presets {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.sj-admin-variant-presets button {
+  min-width: 0;
+  min-height: 34px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--muted);
+  padding: 5px 7px;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.sj-admin-variant-presets button:hover:not(:disabled),
+.sj-admin-variant-presets button:focus-visible,
+.sj-admin-variant-presets .sj-admin-variant-active {
+  border-color: rgba(240, 189, 87, 0.48);
+  background: rgba(240, 189, 87, 0.12);
+  color: #fff0c2;
+}
+
+.sj-admin-variant-presets button:focus-visible {
+  outline: 3px solid rgba(240, 189, 87, 0.16);
+  outline-offset: 1px;
+}
+
+.sj-admin-custom-number {
+  min-width: 0;
+  min-height: 34px;
+  display: block;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--muted);
+  padding: 3px;
+}
+
+.sj-admin-custom-number input {
+  appearance: textfield;
+  -moz-appearance: textfield;
   width: 100%;
+  min-width: 0;
+  min-height: 26px;
+  border: 0;
+  border-radius: 5px;
+  background: rgba(0, 0, 0, 0.2);
+  color: var(--text);
+  padding: 2px 3px;
+  font: inherit;
+  font-size: 11px;
+  text-align: center;
+}
+
+.sj-admin-custom-number input::-webkit-inner-spin-button,
+.sj-admin-custom-number input::-webkit-outer-spin-button {
+  margin: 0;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.sj-admin-custom-number input:focus {
+  outline: 0;
+}
+
+.sj-admin-custom-number-active {
+  border-color: rgba(240, 189, 87, 0.48);
+  background: rgba(240, 189, 87, 0.12);
+  color: #fff0c2;
+}
+
+.sj-admin-custom-number-invalid {
+  border-color: rgba(255, 111, 111, 0.55);
+}
+
+.sj-room-admin-variants:disabled {
+  opacity: 0.62;
+}
+
+.sj-room-admin-variants button:disabled,
+.sj-room-admin-variants input:disabled {
+  cursor: not-allowed;
+}
+
+.sj-room-admin-footer {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.09);
+  background: rgba(10, 14, 20, 0.68);
+  padding: 12px 16px;
+}
+
+.sj-room-admin-footer > span {
+  margin-right: auto;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.sj-room-admin-save {
+  width: auto;
+  min-width: 210px;
+  flex: 0 0 auto;
 }
 
 .sj-room-admin-empty {
@@ -3964,6 +4120,7 @@ button.sj-action-count-badge:focus-visible {
 
 .sj-room-admin-player-list {
   display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: 8px;
   margin: 0;
   padding: 0;
@@ -4020,6 +4177,21 @@ button.sj-action-count-badge:focus-visible {
   border-color: rgba(239, 106, 97, 0.5);
   background: rgba(239, 106, 97, 0.1);
   color: #ffc4c0;
+}
+
+@media (max-width: 700px) {
+  .sj-room-admin-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .sj-room-admin-format,
+  .sj-room-admin-members {
+    grid-column: auto;
+  }
+
+  .sj-room-admin-player-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .sj-disconnected-players-list {
@@ -9296,6 +9468,21 @@ select:focus {
 
   .sj-room-admin-section {
     padding: 11px;
+  }
+
+  .sj-room-admin-footer {
+    display: grid;
+    gap: 8px;
+    padding: 10px 12px 12px;
+  }
+
+  .sj-room-admin-footer > span {
+    text-align: center;
+  }
+
+  .sj-room-admin-save {
+    width: 100%;
+    min-width: 0;
   }
 
   .sj-room-admin-player-actions button {

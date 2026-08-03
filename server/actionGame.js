@@ -1,5 +1,6 @@
 import { ACTION_TYPES, buildActionDeck, buildActionGameDeck } from './actionDeck.js';
 import { shuffle } from './deck.js';
+import { hasReachedGameEnd } from '../shared/roomVariants.js';
 
 const COLUMNS = [[0, 4, 8], [1, 5, 9], [2, 6, 10], [3, 7, 11]];
 const ROWS = [[0, 1, 2, 3], [4, 5, 6, 7], [8, 9, 10, 11]];
@@ -1552,8 +1553,7 @@ function completeActionRoundEnd(state) {
   state.turnStage = null;
   state.roundScoresAt = Date.now() + ROUND_SCORE_PREVIEW_MS;
   state.nextRoundAt = state.roundScoresAt + ROUND_BREAK_MS;
-  const reached100 = state.order.some((id) => state.playersById[id].totalScore >= 100);
-  if (reached100) {
+  if (hasReachedGameEnd(state)) {
     const bestTotal = Math.min(...state.order.map((id) => state.playersById[id].totalScore));
     state.winnerIds = state.order.filter((id) => state.playersById[id].totalScore === bestTotal);
     state.winnerId = state.winnerIds.length === 1 ? state.winnerIds[0] : null;

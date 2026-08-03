@@ -30,6 +30,7 @@ import {
   isValidRoomState, normalizeChatMessage, normalizeOrigin,
   normalizePlayerName, normalizeRoomId, objectPayload, publicErrorPayload, requestId,
 } from './security.js';
+import { effectiveRoomVariantSettings } from '../shared/roomVariants.js';
 
 const DEFAULT_PORT = 4000;
 const MAX_RATE_BUCKETS = 20_000;
@@ -294,6 +295,7 @@ function effectiveRoomSettings(state) {
     locked: settings.locked === true,
     allowSpectators: settings.allowSpectators !== false,
     chatEnabled: settings.chatEnabled !== false,
+    ...effectiveRoomVariantSettings(settings),
   };
 }
 
@@ -501,6 +503,9 @@ async function listPublicRooms(userId) {
           : 'lobby',
         locked: settings.locked,
         allowSpectators: settings.allowSpectators,
+        gameEndMode: settings.gameEndMode,
+        scoreTarget: settings.scoreTarget,
+        roundLimit: settings.roundLimit,
         spectatorCount: spectatorCounts.get(row.room_id) || 0,
         updatedAt: Date.parse(row.updated_at),
       };

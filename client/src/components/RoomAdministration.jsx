@@ -10,12 +10,30 @@ import {
   UserMinus,
   X,
 } from 'lucide-react';
+import {
+  DEFAULT_GAME_END_MODE,
+  DEFAULT_ROUND_LIMIT,
+  DEFAULT_SCORE_TARGET,
+  effectiveRoomVariantSettings,
+  GAME_END_MODES,
+  isValidRoundLimit,
+  isValidScoreTarget,
+  ROUND_LIMIT_MAX,
+  ROUND_LIMIT_MIN,
+  ROUND_LIMIT_PRESETS,
+  SCORE_TARGET_MAX,
+  SCORE_TARGET_MIN,
+  SCORE_TARGET_PRESETS,
+} from '../../../shared/roomVariants.js';
 
 const DEFAULT_SETTINGS = Object.freeze({
   maxPlayers: 8,
   locked: false,
   allowSpectators: true,
   chatEnabled: true,
+  gameEndMode: DEFAULT_GAME_END_MODE,
+  scoreTarget: DEFAULT_SCORE_TARGET,
+  roundLimit: DEFAULT_ROUND_LIMIT,
 });
 
 const FOCUSABLE_SELECTOR = [
@@ -30,6 +48,7 @@ function initialDraft(state) {
   return {
     ...DEFAULT_SETTINGS,
     ...(state.roomSettings || {}),
+    ...effectiveRoomVariantSettings(state.roomSettings),
     roomVisibility: state.roomVisibility === 'public' ? 'public' : 'private',
   };
 }
@@ -89,6 +108,10 @@ export function RoomAdministrationModal({
   const liveAllowSpectators = state.roomSettings?.allowSpectators
     ?? DEFAULT_SETTINGS.allowSpectators;
   const liveChatEnabled = state.roomSettings?.chatEnabled ?? DEFAULT_SETTINGS.chatEnabled;
+  const liveVariant = effectiveRoomVariantSettings(state.roomSettings);
+  const liveGameEndMode = liveVariant.gameEndMode;
+  const liveScoreTarget = liveVariant.scoreTarget;
+  const liveRoundLimit = liveVariant.roundLimit;
   const liveVisibility = state.roomVisibility === 'public' ? 'public' : 'private';
 
   useEffect(() => {
@@ -98,14 +121,20 @@ export function RoomAdministrationModal({
       locked: liveLocked,
       allowSpectators: liveAllowSpectators,
       chatEnabled: liveChatEnabled,
+      gameEndMode: liveGameEndMode,
+      scoreTarget: liveScoreTarget,
+      roundLimit: liveRoundLimit,
       roomVisibility: liveVisibility,
     });
     setPendingAction(null);
   }, [
     liveAllowSpectators,
     liveChatEnabled,
+    liveGameEndMode,
     liveLocked,
     liveMaxPlayers,
+    liveRoundLimit,
+    liveScoreTarget,
     liveVisibility,
     open,
   ]);
@@ -136,6 +165,14 @@ export function RoomAdministrationModal({
   if (!open) return null;
 
   const currentPlayerCount = state.players.length;
+  const variantCanChange = ['lobby', 'gameEnd'].includes(state.phase);
+  const numericScoreTarget = Number(draft.scoreTarget);
+  const numericRoundLimit = Number(draft.roundLimit);
+  const scoreTargetValid = isValidScoreTarget(numericScoreTarget);
+  const roundLimitValid = isValidRoundLimit(numericRoundLimit);
+  const activeVariantValid = draft.gameEndMode === GAME_END_MODES.ROUND_COUNT
+    ? roundLimitValid
+    : scoreTargetValid;
   const otherPlayers = state.players.filter((player) => player.id !== myId);
   const pendingPlayer = pendingAction
     ? state.players.find((player) => player.id === pendingAction.playerId)
@@ -227,11 +264,11 @@ export function RoomAdministrationModal({
           </header>
 
           <div className="sj-room-admin-body">
-            <section className="sj-room-admin-section" aria-labelledby="room-access-title">
+            <section className="sj-room-admin-section sj-room-admin-access" aria-labelledby="room-access-title">
               <div className="sj-room-admin-section-head">
                 <div>
-                  <h3 id="room-access-title">Accès</h3>
-                  <p>Enregistrez pour appliquer ces réglages.</p>
+                  <h3 id="room-access-title">Accès à la salle</h3>
+                  <p>Visibilité et nombre de joueurs.</p>
                 </div>
               </div>
 
@@ -273,7 +310,15 @@ export function RoomAdministrationModal({
                   ))}
                 </select>
               </label>
+            </section>
 
+            <section className="sj-room-admin-section sj-room-admin-permissions" aria-labelledby="room-permissions-title">
+              <div className="sj-room-admin-section-head">
+                <div>
+                  <h3 id="room-permissions-title">Permissions</h3>
+                  <p>Fonctionnalités accessibles dans la salle.</p>
+                </div>
+              </div>
               <SettingSwitch
                 icon={draft.locked ? Lock : Unlock}
                 label="Verrouiller la salle"
@@ -292,20 +337,113 @@ export function RoomAdministrationModal({
                 checked={draft.chatEnabled}
                 onChange={(value) => updateDraft('chatEnabled', value)}
               />
-
-              <button
-                type="button"
-                className="sj-btn sj-btn-primary sj-room-admin-save"
-                onClick={() => {
-                  onSave(draft);
-                  onClose();
-                }}
-              >
-                Enregistrer les paramètres
-              </button>
             </section>
 
-            <section className="sj-room-admin-section" aria-labelledby="room-members-title">
+            <section className="sj-room-admin-section sj-room-admin-format" aria-labelledby="room-format-title">
+              <div className="sj-room-admin-section-head">
+                <div>
+                  <h3 id="room-format-title">Format de partie</h3>
+                  <p>Choisissez l’objectif de la partie.</p>
+                </div>
+              </div>
+              <fieldset
+                className="sj-room-admin-variants"
+                aria-label="Format de partie"
+                disabled={!variantCanChange}
+              >
+                <div
+                  className={`sj-room-visibility sj-admin-variant-mode ${draft.gameEndMode === GAME_END_MODES.ROUND_COUNT ? 'sj-room-visibility-public' : 'sj-room-visibility-private'}`}
+                  role="group"
+                  aria-label="Fin de la partie"
+                >
+                  <button
+                    type="button"
+                    className={`sj-room-visibility-option ${draft.gameEndMode === GAME_END_MODES.SCORE_TARGET ? 'sj-room-visibility-option-active' : ''}`}
+                    aria-pressed={draft.gameEndMode === GAME_END_MODES.SCORE_TARGET}
+                    disabled={!variantCanChange}
+                    onClick={() => updateDraft('gameEndMode', GAME_END_MODES.SCORE_TARGET)}
+                  >
+                    <strong>Objectif de points</strong>
+                  </button>
+                  <button
+                    type="button"
+                    className={`sj-room-visibility-option ${draft.gameEndMode === GAME_END_MODES.ROUND_COUNT ? 'sj-room-visibility-option-active' : ''}`}
+                    aria-pressed={draft.gameEndMode === GAME_END_MODES.ROUND_COUNT}
+                    disabled={!variantCanChange}
+                    onClick={() => updateDraft('gameEndMode', GAME_END_MODES.ROUND_COUNT)}
+                  >
+                    <strong>Nombre de manches</strong>
+                  </button>
+                </div>
+
+                {draft.gameEndMode === GAME_END_MODES.SCORE_TARGET ? (
+                  <div className="sj-admin-variant-options">
+                    <strong>Points à atteindre</strong>
+                    <div className="sj-admin-variant-presets" role="group" aria-label="Objectif de points">
+                      {SCORE_TARGET_PRESETS.map((target) => (
+                        <button
+                          key={target}
+                          type="button"
+                          className={numericScoreTarget === target ? 'sj-admin-variant-active' : ''}
+                          aria-pressed={numericScoreTarget === target}
+                          onClick={() => updateDraft('scoreTarget', target)}
+                        >
+                          {target}
+                        </button>
+                      ))}
+                      <label className={`sj-admin-custom-number ${!SCORE_TARGET_PRESETS.includes(numericScoreTarget) && draft.scoreTarget !== '' ? 'sj-admin-custom-number-active' : ''} ${!scoreTargetValid ? 'sj-admin-custom-number-invalid' : ''}`}>
+                        <input
+                          type="number"
+                          min={SCORE_TARGET_MIN}
+                          max={SCORE_TARGET_MAX}
+                          inputMode="numeric"
+                          aria-label="Objectif personnalisé en points"
+                          aria-invalid={!scoreTargetValid}
+                          placeholder="—"
+                          value={SCORE_TARGET_PRESETS.includes(numericScoreTarget) ? '' : draft.scoreTarget}
+                          onChange={(event) => updateDraft('scoreTarget', event.target.value === '' ? '' : Number(event.target.value))}
+                        />
+                      </label>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="sj-admin-variant-options">
+                    <strong>Nombre total de manches</strong>
+                    <div className="sj-admin-variant-presets" role="group" aria-label="Nombre de manches">
+                      {ROUND_LIMIT_PRESETS.map((limit) => (
+                        <button
+                          key={limit}
+                          type="button"
+                          className={numericRoundLimit === limit ? 'sj-admin-variant-active' : ''}
+                          aria-pressed={numericRoundLimit === limit}
+                          onClick={() => updateDraft('roundLimit', limit)}
+                        >
+                          {limit}
+                        </button>
+                      ))}
+                      <label className={`sj-admin-custom-number ${!ROUND_LIMIT_PRESETS.includes(numericRoundLimit) && draft.roundLimit !== '' ? 'sj-admin-custom-number-active' : ''} ${!roundLimitValid ? 'sj-admin-custom-number-invalid' : ''}`}>
+                        <input
+                          type="number"
+                          min={ROUND_LIMIT_MIN}
+                          max={ROUND_LIMIT_MAX}
+                          inputMode="numeric"
+                          aria-label="Nombre personnalisé de manches"
+                          aria-invalid={!roundLimitValid}
+                          placeholder="—"
+                          value={ROUND_LIMIT_PRESETS.includes(numericRoundLimit) ? '' : draft.roundLimit}
+                          onChange={(event) => updateDraft('roundLimit', event.target.value === '' ? '' : Number(event.target.value))}
+                        />
+                      </label>
+                    </div>
+                  </div>
+                )}
+                {!variantCanChange && (
+                  <small>Ces options se modifient entre deux parties.</small>
+                )}
+              </fieldset>
+            </section>
+
+            <section className="sj-room-admin-section sj-room-admin-members" aria-labelledby="room-members-title">
               <div className="sj-room-admin-section-head">
                 <div>
                   <h3 id="room-members-title">Joueurs</h3>
@@ -353,6 +491,26 @@ export function RoomAdministrationModal({
               )}
             </section>
           </div>
+          <footer className="sj-room-admin-footer">
+            {!activeVariantValid && (
+              <span role="alert">Saisissez une valeur personnalisée valide.</span>
+            )}
+            <button
+              type="button"
+              className="sj-btn sj-btn-primary sj-room-admin-save"
+              disabled={!activeVariantValid}
+              onClick={() => {
+                onSave({
+                  ...draft,
+                  scoreTarget: scoreTargetValid ? numericScoreTarget : DEFAULT_SCORE_TARGET,
+                  roundLimit: roundLimitValid ? numericRoundLimit : DEFAULT_ROUND_LIMIT,
+                });
+                onClose();
+              }}
+            >
+              Enregistrer les paramètres
+            </button>
+          </footer>
         </section>
       )}
     </div>

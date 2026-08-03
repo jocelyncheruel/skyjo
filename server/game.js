@@ -1,5 +1,15 @@
 import { buildDeck, shuffle } from './deck.js';
 import {
+  DEFAULT_GAME_END_MODE,
+  DEFAULT_ROUND_LIMIT,
+  DEFAULT_SCORE_TARGET,
+  effectiveRoomVariantSettings,
+  GAME_END_MODES,
+  hasReachedGameEnd,
+  isValidRoundLimit,
+  isValidScoreTarget,
+} from '../shared/roomVariants.js';
+import {
   assertActionCardIntegrity,
   claimStarAction,
   decideActionGameCard,
@@ -37,6 +47,9 @@ export const DEFAULT_ROOM_SETTINGS = Object.freeze({
   locked: false,
   allowSpectators: true,
   chatEnabled: true,
+  gameEndMode: DEFAULT_GAME_END_MODE,
+  scoreTarget: DEFAULT_SCORE_TARGET,
+  roundLimit: DEFAULT_ROUND_LIMIT,
 });
 
 function roomSettings(state) {
@@ -48,6 +61,7 @@ function roomSettings(state) {
     locked: settings.locked === true,
     allowSpectators: settings.allowSpectators !== false,
     chatEnabled: settings.chatEnabled !== false,
+    ...effectiveRoomVariantSettings(settings),
   };
 }
 
@@ -299,6 +313,9 @@ export function setRoomSettings(state, playerId, updates = {}) {
     'locked',
     'allowSpectators',
     'chatEnabled',
+    'gameEndMode',
+    'scoreTarget',
+    'roundLimit',
   ]);
   if (Object.keys(updates).some((key) => !allowedKeys.has(key))) {
     throw new Error('Paramètres de salle invalides.');
@@ -319,6 +336,34 @@ export function setRoomSettings(state, playerId, updates = {}) {
     if (!Object.prototype.hasOwnProperty.call(updates, key)) continue;
     if (typeof updates[key] !== 'boolean') throw new Error('Paramètres de salle invalides.');
     next[key] = updates[key];
+  }
+  const variantCanChange = ['lobby', 'gameEnd'].includes(state.phase);
+  if (Object.prototype.hasOwnProperty.call(updates, 'gameEndMode')) {
+    if (!Object.values(GAME_END_MODES).includes(updates.gameEndMode)) {
+      throw new Error('Variante de fin de partie invalide.');
+    }
+    if (!variantCanChange && updates.gameEndMode !== current.gameEndMode) {
+      throw new Error('La variante ne peut être modifiée qu’entre deux parties.');
+    }
+    next.gameEndMode = updates.gameEndMode;
+  }
+  if (Object.prototype.hasOwnProperty.call(updates, 'scoreTarget')) {
+    if (!isValidScoreTarget(updates.scoreTarget)) {
+      throw new Error('Objectif de points invalide.');
+    }
+    if (!variantCanChange && updates.scoreTarget !== current.scoreTarget) {
+      throw new Error('La variante ne peut être modifiée qu’entre deux parties.');
+    }
+    next.scoreTarget = updates.scoreTarget;
+  }
+  if (Object.prototype.hasOwnProperty.call(updates, 'roundLimit')) {
+    if (!isValidRoundLimit(updates.roundLimit)) {
+      throw new Error('Nombre de manches invalide.');
+    }
+    if (!variantCanChange && updates.roundLimit !== current.roundLimit) {
+      throw new Error('La variante ne peut être modifiée qu’entre deux parties.');
+    }
+    next.roundLimit = updates.roundLimit;
   }
   if (Object.prototype.hasOwnProperty.call(updates, 'roomVisibility')) {
     if (!['private', 'public'].includes(updates.roomVisibility)) {
@@ -698,8 +743,7 @@ function endRound(state, revealedBeforeRoundEnd = []) {
   state.nextRoundAt = state.roundScoresAt + ROUND_BREAK_MS;
   log(state, `Fin de la manche ${state.roundNumber}.`);
 
-  const reached100 = state.order.filter(id => state.playersById[id].totalScore >= 100);
-  if (reached100.length > 0) {
+  if (hasReachedGameEnd(state)) {
     const bestTotal = Math.min(...state.order.map((id) => state.playersById[id].totalScore));
     const winnerIds = state.order.filter((id) => state.playersById[id].totalScore === bestTotal);
     const winnerId = winnerIds.length === 1 ? winnerIds[0] : null;

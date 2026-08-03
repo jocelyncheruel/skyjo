@@ -1,5 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { isIP } from 'node:net';
+import {
+  GAME_END_MODES,
+  isValidRoundLimit,
+  isValidScoreTarget,
+  LEGACY_SINGLE_ROUND_MODE,
+} from '../shared/roomVariants.js';
 
 export const ROOM_SCHEMA_VERSION = 3;
 export const ROOM_TTL_MS = 24 * 60 * 60 * 1000;
@@ -131,6 +137,15 @@ export function isValidRoomState(state, roomId) {
     if (typeof settings.locked !== 'boolean'
       || typeof settings.allowSpectators !== 'boolean'
       || typeof settings.chatEnabled !== 'boolean') return false;
+    if (settings.gameEndMode !== undefined
+      && ![
+        ...Object.values(GAME_END_MODES),
+        LEGACY_SINGLE_ROUND_MODE,
+      ].includes(settings.gameEndMode)) return false;
+    if (settings.scoreTarget !== undefined
+      && !isValidScoreTarget(settings.scoreTarget)) return false;
+    if (settings.roundLimit !== undefined
+      && !isValidRoundLimit(settings.roundLimit)) return false;
   }
   if (state.bannedUserIds !== undefined) {
     if (!Array.isArray(state.bannedUserIds) || state.bannedUserIds.length > 256) return false;
