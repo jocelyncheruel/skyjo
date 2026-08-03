@@ -258,6 +258,8 @@ export function leavePlayer(state, id) {
     state.turnIndex = 0;
     state.turnStage = null;
     state.drawnCard = null;
+    state.nextRoundAt = null;
+    state.roundScoresAt = null;
     return;
   }
 
@@ -280,6 +282,8 @@ export function leavePlayer(state, id) {
     state.turnIndex = 0;
     state.turnStage = null;
     state.drawnCard = null;
+    state.nextRoundAt = null;
+    state.roundScoresAt = null;
     log(state, `${state.playersById[state.winnerId].name} gagne par abandon.`);
     return;
   }

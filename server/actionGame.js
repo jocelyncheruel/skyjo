@@ -780,13 +780,14 @@ function discardActionCardUnderTop(state, card) {
   state.actionDiscard.splice(state.actionDiscard.length - 1, 0, card);
 }
 
-function discardGameCardUnderTop(state, card) {
-  if (!card) return;
-  if (state.discard.length === 0) {
-    state.discard.push(card);
-    return;
-  }
-  state.discard.splice(state.discard.length - 1, 0, card);
+function discardRemovedGameCard(state, card) {
+  if (card) state.discard.push(card);
+}
+
+function discardGameCardsUnderTop(state, cards) {
+  const discardedCards = cards.filter(Boolean);
+  if (discardedCards.length === 0) return;
+  state.discard.splice(Math.max(0, state.discard.length - 1), 0, ...discardedCards);
 }
 
 function finishAction(state) {
@@ -816,7 +817,7 @@ function resolveRemoveEachTarget(state, pending, targetId, { slotIndex, actionCa
     const slot = validateSlot(state, targetId, slotIndex);
     const oldCard = slot.card;
     const oldFaceUp = slot.faceUp;
-    discardGameCardUnderTop(state, slot.card);
+    discardRemovedGameCard(state, slot.card);
     refillGameDeck(state);
     slot.card = state.deck.pop();
     replacementIsStar = isStar(slot.card);
@@ -1383,10 +1384,11 @@ export function resolveActionInput(state, playerId, payload = {}) {
         type: 'reveal',
         cards: [{ playerId: actorId, slotIndex: revealSlotIndex, card: slot.card }],
         discardedCards: [...pending.drawn],
+        animateDiscardedCards: false,
       });
       slot.faceUp = true;
       claimedStar = isStar(slot.card);
-      state.discard.push(...pending.drawn);
+      discardGameCardsUnderTop(state, pending.drawn);
     } else {
       const chosen = pending.drawn[choiceIndex];
       if (!chosen) throw new Error('Carte choisie invalide.');
@@ -1408,9 +1410,10 @@ export function resolveActionInput(state, playerId, payload = {}) {
         oldFaceUp,
         revealOldCard: true,
         discardedCards,
+        animateDiscardedCards: false,
       });
       claimedStar = isStar(chosen);
-      discardedCards.forEach((card) => state.discard.push(card));
+      discardGameCardsUnderTop(state, discardedCards);
     }
     if (claimedStar) {
       discardPlayedAction(state, pending.card);

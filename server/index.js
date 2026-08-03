@@ -891,7 +891,7 @@ function clearRoomTimers(roomId) {
   clearDisconnectTimersForRoom(roomId);
 }
 
-function scheduleNextRound(roomId, state) {
+function scheduleNextRound(roomId, state, retryDelayMs = 0) {
   const existing = nextRoundTimers.get(roomId);
   if (existing) clearTimeout(existing);
   nextRoundTimers.delete(roomId);
@@ -900,13 +900,18 @@ function scheduleNextRound(roomId, state) {
     nextRoundTimers.delete(roomId);
     try {
       const { state: latest } = await mutateRoom(roomId, (draft) => {
-        if (draft.phase !== 'roundEnd' || (draft.nextRoundAt && draft.nextRoundAt > Date.now())) return;
+        if (draft.phase !== 'roundEnd' || !draft.nextRoundAt || draft.nextRoundAt > Date.now()) return;
         nextRound(draft);
       });
       broadcastRoom(roomId);
+      scheduleNextRound(roomId, latest);
       scheduleDefensePrompt(roomId, latest);
-    } catch (error) { logInternal('next_round', error); }
-  }, Math.max(0, state.nextRoundAt - Date.now()));
+    } catch (error) {
+      logInternal('next_round', error);
+      const latest = rooms.get(roomId);
+      if (latest) scheduleNextRound(roomId, latest, 1_000);
+    }
+  }, Math.max(retryDelayMs, state.nextRoundAt - Date.now(), 0));
   timer.unref?.();
   nextRoundTimers.set(roomId, timer);
 }

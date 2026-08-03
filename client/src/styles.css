@@ -3406,6 +3406,7 @@ input:focus {
   --sj-action-count-card-offset-x: clamp(2px, calc(var(--score-badge-height) * 0.12), 3px);
   --sj-action-count-card-offset-y: clamp(1px, calc(var(--score-badge-height) * 0.08), 2px);
   flex: 0 0 auto;
+  margin-left: auto;
   min-width: var(--score-badge-width);
   height: var(--score-badge-height);
   display: inline-flex;

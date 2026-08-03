@@ -309,7 +309,6 @@ export function tutorialGameReducer(state, event) {
       faceUp: true,
     } : slot);
     const discardedCards = state.discardedDrawThreeCards;
-    const discardTop = discardedCards.at(-1) || oldCard;
     const motion = appendCardMoves(state, [{
       type: 'replacement',
       playerId: 'tutorial-player',
@@ -326,7 +325,7 @@ export function tutorialGameReducer(state, event) {
       ...motion,
       phase: TUTORIAL_PHASES.COMPLETE,
       board,
-      discardTop: { ...cardMove(discardTop), cardId: discardTop.id || discardTop.cardId },
+      discardTop: { ...cardMove(oldCard), cardId: oldCard.id || oldCard.cardId },
       actionCards: [],
       discardedDrawThreeCards: [],
     };
