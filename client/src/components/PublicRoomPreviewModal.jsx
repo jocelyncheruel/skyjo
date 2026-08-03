@@ -303,8 +303,19 @@ export default function PublicRoomPreviewModal({
   const previewPhase = preview?.phase || roomMetadata.phase;
   const previewGameMode = preview?.gameMode || roomMetadata.gameMode;
   const previewPlayerCount = preview?.players?.length ?? roomMetadata.playerCount;
+  const previewMaxPlayers = preview?.roomSettings?.maxPlayers ?? roomMetadata.maxPlayers;
+  const roomLocked = preview?.roomSettings?.locked ?? roomMetadata.locked ?? false;
+  const spectatorsAllowed = preview?.roomSettings?.allowSpectators
+    ?? roomMetadata.allowSpectators
+    ?? true;
+  const spectatorCount = Number.isInteger(preview?.spectatorCount)
+    ? Math.max(0, preview.spectatorCount)
+    : Number.isInteger(roomMetadata.spectatorCount)
+      ? Math.max(0, roomMetadata.spectatorCount)
+      : 0;
   const canJoin = previewPhase === 'lobby'
-    && previewPlayerCount < roomMetadata.maxPlayers;
+    && !roomLocked
+    && previewPlayerCount < previewMaxPlayers;
 
   return (
     <div
@@ -364,7 +375,9 @@ export default function PublicRoomPreviewModal({
         <p className="sj-public-preview-owner">
           Créée par {roomMetadata.creatorName || 'un joueur'}
           {' · '}
-          {previewPlayerCount}/{roomMetadata.maxPlayers} joueurs
+          {previewPlayerCount}/{previewMaxPlayers} joueurs
+          {roomLocked ? ' · Salle verrouillée' : ''}
+          {!spectatorsAllowed ? ' · Spectateurs interdits' : ''}
         </p>
 
         <div className="sj-public-preview-actions">
@@ -374,9 +387,16 @@ export default function PublicRoomPreviewModal({
               Rejoindre
             </button>
           )}
-          <button type="button" className="sj-btn sj-btn-primary" disabled={!connected || loading} onClick={onWatch}>
+          <button
+            type="button"
+            className="sj-btn sj-btn-primary"
+            disabled={!connected || loading || !spectatorsAllowed}
+            onClick={onWatch}
+          >
             <Eye aria-hidden="true" size={17} />
-            Regarder
+            {spectatorsAllowed
+              ? `Regarder${spectatorCount > 0 ? ` · ${spectatorCount}` : ''}`
+              : 'Spectateurs interdits'}
           </button>
         </div>
       </section>

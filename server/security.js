@@ -121,6 +121,24 @@ export function isValidRoomState(state, roomId) {
   if (!Array.isArray(state.order) || state.order.length > 8) return false;
   if (!state.playersById || typeof state.playersById !== 'object' || Array.isArray(state.playersById)) return false;
   if (!['private', 'public'].includes(state.roomVisibility || 'private')) return false;
+  if (state.roomSettings !== undefined) {
+    const settings = state.roomSettings;
+    if (!settings || typeof settings !== 'object' || Array.isArray(settings)) return false;
+    if (!Number.isInteger(settings.maxPlayers)
+      || settings.maxPlayers < 2
+      || settings.maxPlayers > 8
+      || settings.maxPlayers < state.order.length) return false;
+    if (typeof settings.locked !== 'boolean'
+      || typeof settings.allowSpectators !== 'boolean'
+      || typeof settings.chatEnabled !== 'boolean') return false;
+  }
+  if (state.bannedUserIds !== undefined) {
+    if (!Array.isArray(state.bannedUserIds) || state.bannedUserIds.length > 256) return false;
+    if (new Set(state.bannedUserIds).size !== state.bannedUserIds.length) return false;
+    if (!state.bannedUserIds.every((id) => (
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(id)
+    ))) return false;
+  }
   if (!Number.isSafeInteger(state.gameSerial ?? 0) || (state.gameSerial ?? 0) < 0) return false;
   if (new Set(state.order).size !== state.order.length) return false;
   if (Object.keys(state.playersById).length !== state.order.length) return false;

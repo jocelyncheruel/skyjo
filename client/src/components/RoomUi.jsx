@@ -139,15 +139,19 @@ export function ChatButton({ unreadCount = 0, onClick }) {
   );
 }
 
-export function SpectatorBadge({ connected = true }) {
+export function SpectatorBadge({ connected = true, count = 0 }) {
+  const spectatorCount = Number.isInteger(count) && count > 0 ? count : 0;
+  if (spectatorCount === 0) return null;
+
   return (
     <div
       className={`sj-spectator-badge ${connected ? 'sj-spectator-badge-live' : 'sj-spectator-badge-reconnecting'}`}
       role="status"
       aria-live="polite"
+      aria-label={`${spectatorCount} spectateur${spectatorCount > 1 ? 's' : ''} ${connected ? 'en direct' : 'en reconnexion'}`}
     >
-      <span className="sj-spectator-live-dot" aria-hidden="true" />
-      <span>{connected ? 'En direct' : 'Reconnexion…'}</span>
+      <Eye className="sj-spectator-eye" aria-hidden="true" size={15} strokeWidth={2.4} />
+      <strong className="sj-spectator-count-copy">{spectatorCount}</strong>
     </div>
   );
 }
@@ -202,6 +206,7 @@ export function ChatModal({
 
   function handleSubmit(event) {
     event.preventDefault();
+    if (readOnly) return;
     const text = draft.trim();
     if (!text) return;
     onSend(text);

@@ -1,4 +1,4 @@
-export const SOCKET_PROTOCOL_VERSION = 12;
+export const SOCKET_PROTOCOL_VERSION = 13;
 
 export const SOCKET_EVENTS = Object.freeze({
   CONNECT: 'connect',
@@ -13,12 +13,17 @@ export const SOCKET_EVENTS = Object.freeze({
   CHAT_MESSAGE: 'chatMessage',
   ROOM_EXPIRED: 'roomExpired',
   REMOVED_FROM_ROOM: 'removedFromRoom',
+  ROOM_ACCESS_REVOKED: 'roomAccessRevoked',
   JOIN_ROOM: 'joinRoom',
   LEAVE_ROOM: 'leaveRoom',
   SUBSCRIBE_PUBLIC_PREVIEW: 'subscribePublicPreview',
   UNSUBSCRIBE_PUBLIC_PREVIEW: 'unsubscribePublicPreview',
   START_GAME: 'startGame',
   REMOVE_PLAYER_FROM_LOBBY: 'removePlayerFromLobby',
+  UPDATE_ROOM_SETTINGS: 'updateRoomSettings',
+  TRANSFER_ROOM_OWNERSHIP: 'transferRoomOwnership',
+  KICK_ROOM_PLAYER: 'kickRoomPlayer',
+  BAN_ROOM_PLAYER: 'banRoomPlayer',
   RETURN_TO_LOBBY: 'returnToLobby',
   SET_GAME_MODE: 'setGameMode',
   FLIP_INITIAL: 'flipInitial',
@@ -51,6 +56,16 @@ export const SOCKET_CLIENT_PAYLOAD_KEYS = Object.freeze({
   [SOCKET_EVENTS.UNSUBSCRIBE_PUBLIC_PREVIEW]: Object.freeze(['roomId']),
   [SOCKET_EVENTS.START_GAME]: Object.freeze([]),
   [SOCKET_EVENTS.REMOVE_PLAYER_FROM_LOBBY]: Object.freeze(['playerId']),
+  [SOCKET_EVENTS.UPDATE_ROOM_SETTINGS]: Object.freeze([
+    'maxPlayers',
+    'roomVisibility',
+    'locked',
+    'allowSpectators',
+    'chatEnabled',
+  ]),
+  [SOCKET_EVENTS.TRANSFER_ROOM_OWNERSHIP]: Object.freeze(['playerId']),
+  [SOCKET_EVENTS.KICK_ROOM_PLAYER]: Object.freeze(['playerId']),
+  [SOCKET_EVENTS.BAN_ROOM_PLAYER]: Object.freeze(['playerId']),
   [SOCKET_EVENTS.RETURN_TO_LOBBY]: Object.freeze([]),
   [SOCKET_EVENTS.SET_GAME_MODE]: Object.freeze(['gameMode']),
   [SOCKET_EVENTS.FLIP_INITIAL]: Object.freeze(['slotIndex']),
@@ -86,6 +101,7 @@ export const SOCKET_SERVER_PAYLOAD_KEYS = Object.freeze({
   [SOCKET_EVENTS.CHAT_MESSAGE]: Object.freeze([
     'id', 't', 'type', 'playerId', 'playerName', 'text',
   ]),
+  [SOCKET_EVENTS.ROOM_ACCESS_REVOKED]: Object.freeze(['reason', 'message']),
 });
 
 export function socketPayloadKeys(eventName) {

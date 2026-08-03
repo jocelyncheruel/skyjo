@@ -30,6 +30,26 @@ const ROUND_SCORE_PREVIEW_MS = 3_000;
 const BOARD_SLOT_COUNT = 12;
 const CARD_MOVE_HISTORY_LIMIT = 64;
 export const MAX_PLAYERS_PER_ROOM = 8;
+export const MIN_PLAYERS_PER_ROOM = 2;
+export const MAX_ROOM_BANS = 256;
+export const DEFAULT_ROOM_SETTINGS = Object.freeze({
+  maxPlayers: MAX_PLAYERS_PER_ROOM,
+  locked: false,
+  allowSpectators: true,
+  chatEnabled: true,
+});
+
+function roomSettings(state) {
+  const settings = state.roomSettings || {};
+  return {
+    maxPlayers: Number.isInteger(settings.maxPlayers)
+      ? settings.maxPlayers
+      : MAX_PLAYERS_PER_ROOM,
+    locked: settings.locked === true,
+    allowSpectators: settings.allowSpectators !== false,
+    chatEnabled: settings.chatEnabled !== false,
+  };
+}
 
 function assertBoardSlotIndex(slotIndex) {
   if (!Number.isInteger(slotIndex) || slotIndex < 0 || slotIndex >= BOARD_SLOT_COUNT) {
@@ -83,6 +103,8 @@ export function newRoomState(roomId) {
   return {
     roomId,
     roomVisibility: 'private',
+    roomSettings: { ...DEFAULT_ROOM_SETTINGS },
+    bannedUserIds: [],
     phase: 'lobby',
     order: [],
     playersById: {},
@@ -116,8 +138,9 @@ function log(state, msg) {
 
 export function addPlayer(state, id, name) {
   if (state.playersById[id]) return;
-  if (state.order.length >= MAX_PLAYERS_PER_ROOM) {
-    throw new Error(`La salle est complète (${MAX_PLAYERS_PER_ROOM} joueurs max).`);
+  const maximum = roomSettings(state).maxPlayers;
+  if (state.order.length >= maximum) {
+    throw new Error(`La salle est complète (${maximum} joueurs max).`);
   }
   state.playersById[id] = createPlayer(id, name);
   state.order.push(id);
@@ -263,6 +286,89 @@ function assertCreator(state, playerId) {
   if (ensureCreator(state) !== playerId) {
     throw new Error('Seul le créateur de la salle peut effectuer cette action.');
   }
+}
+
+export function setRoomSettings(state, playerId, updates = {}) {
+  assertCreator(state, playerId);
+  if (!updates || typeof updates !== 'object' || Array.isArray(updates)) {
+    throw new Error('Paramètres de salle invalides.');
+  }
+  const allowedKeys = new Set([
+    'maxPlayers',
+    'roomVisibility',
+    'locked',
+    'allowSpectators',
+    'chatEnabled',
+  ]);
+  if (Object.keys(updates).some((key) => !allowedKeys.has(key))) {
+    throw new Error('Paramètres de salle invalides.');
+  }
+
+  const current = roomSettings(state);
+  const next = { ...current };
+  if (Object.prototype.hasOwnProperty.call(updates, 'maxPlayers')) {
+    if (!Number.isInteger(updates.maxPlayers)
+      || updates.maxPlayers < MIN_PLAYERS_PER_ROOM
+      || updates.maxPlayers > MAX_PLAYERS_PER_ROOM
+      || updates.maxPlayers < state.order.length) {
+      throw new Error(`Le nombre maximal de joueurs doit être compris entre ${Math.max(MIN_PLAYERS_PER_ROOM, state.order.length)} et ${MAX_PLAYERS_PER_ROOM}.`);
+    }
+    next.maxPlayers = updates.maxPlayers;
+  }
+  for (const key of ['locked', 'allowSpectators', 'chatEnabled']) {
+    if (!Object.prototype.hasOwnProperty.call(updates, key)) continue;
+    if (typeof updates[key] !== 'boolean') throw new Error('Paramètres de salle invalides.');
+    next[key] = updates[key];
+  }
+  if (Object.prototype.hasOwnProperty.call(updates, 'roomVisibility')) {
+    if (!['private', 'public'].includes(updates.roomVisibility)) {
+      throw new Error('Visibilité de salle invalide.');
+    }
+    state.roomVisibility = updates.roomVisibility;
+  }
+  state.roomSettings = next;
+  log(state, `${state.playersById[playerId].name} a modifié les paramètres de la salle.`);
+}
+
+export function transferRoomOwnership(state, playerId, targetPlayerId) {
+  assertCreator(state, playerId);
+  if (targetPlayerId === playerId) throw new Error('Vous êtes déjà propriétaire de la salle.');
+  const target = state.playersById[targetPlayerId];
+  if (!target) throw new Error('Ce joueur n’est plus dans la salle.');
+  state.creatorId = targetPlayerId;
+  log(state, `${target.name} devient le créateur de la salle.`);
+}
+
+export function kickRoomPlayer(state, playerId, targetPlayerId) {
+  assertCreator(state, playerId);
+  if (targetPlayerId === playerId) throw new Error('Vous ne pouvez pas vous exclure vous-même.');
+  const target = state.playersById[targetPlayerId];
+  if (!target) throw new Error('Ce joueur n’est plus dans la salle.');
+  leavePlayer(state, targetPlayerId);
+}
+
+export function banRoomPlayer(state, playerId, targetPlayerId, targetUserId) {
+  assertCreator(state, playerId);
+  if (targetPlayerId === playerId) throw new Error('Vous ne pouvez pas vous bannir vous-même.');
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(String(targetUserId || ''))) {
+    throw new Error('Compte joueur invalide.');
+  }
+  const target = state.playersById[targetPlayerId];
+  if (!target) throw new Error('Ce joueur n’est plus dans la salle.');
+  const bannedUserIds = [...new Set(state.bannedUserIds || [])];
+  if (!bannedUserIds.includes(targetUserId) && bannedUserIds.length >= MAX_ROOM_BANS) {
+    throw new Error('La limite de bannissements de cette salle est atteinte.');
+  }
+  state.bannedUserIds = bannedUserIds.includes(targetUserId)
+    ? bannedUserIds
+    : [...bannedUserIds, targetUserId];
+  const targetName = target.name;
+  leavePlayer(state, targetPlayerId);
+  log(state, `${targetName} a été banni de la salle.`);
+}
+
+export function isUserBanned(state, userId) {
+  return Array.isArray(state.bannedUserIds) && state.bannedUserIds.includes(userId);
 }
 
 export function setGameMode(state, playerId, gameMode) {
@@ -656,6 +762,7 @@ export function publicState(state, forPlayerId) {
   return {
     roomId: state.roomId,
     roomVisibility: state.roomVisibility === 'public' ? 'public' : 'private',
+    roomSettings: roomSettings(state),
     gameMode: state.gameMode || 'classic',
     creatorId,
     phase: state.phase,

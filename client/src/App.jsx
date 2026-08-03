@@ -31,6 +31,10 @@ import {
 } from './components/GameTablePieces.jsx';
 import PlayerBoard from './components/PlayerBoard.jsx';
 import PublicRoomPreviewModal from './components/PublicRoomPreviewModal.jsx';
+import {
+  RoomAdministrationButton,
+  RoomAdministrationModal,
+} from './components/RoomAdministration.jsx';
 import RoomInviteModal from './components/RoomInviteModal.jsx';
 import RoomQrScannerModal, { supportsQrScanner } from './components/RoomQrScannerModal.jsx';
 import {
@@ -52,7 +56,9 @@ import {
   extractRoomCodeFromInvite,
   ROOM_CODE_PATTERN,
 } from './inviteCode.js';
+import { isPublicRoomAvailable, publicRoomSelectionMode } from './publicRooms.js';
 import { useAdaptiveBoardSizing } from './useAdaptiveBoardSizing.js';
+import { useChatHistoryReload } from './useChatHistoryReload.js';
 import {
   ACTION_ART_URLS,
   ACTION_LABELS,
@@ -110,17 +116,25 @@ function releasePendingGameAction(socket) {
   if (socket) socketsWithPendingGameAction.delete(socket);
 }
 
-async function serverErrorMessage(response, fallback) {
+async function serverErrorDetails(response, fallback) {
   try {
     const payload = await response.json();
     const message = typeof payload?.error?.message === 'string'
       ? [...payload.error.message].slice(0, 200).join('')
       : fallback;
+    const code = typeof payload?.error?.code === 'string' ? payload.error.code : '';
     const requestId = /^[0-9a-f-]{36}$/i.test(payload?.requestId || '') ? payload.requestId : '';
-    return requestId ? `${message} Référence : ${requestId}` : message;
+    return {
+      code,
+      message: requestId ? `${message} Référence : ${requestId}` : message,
+    };
   } catch {
-    return fallback;
+    return { code: '', message: fallback };
   }
+}
+
+async function serverErrorMessage(response, fallback) {
+  return (await serverErrorDetails(response, fallback)).message;
 }
 
 function readRoomInviteFromFragment() {
@@ -306,6 +320,7 @@ function GameApp() {
   const [joinRoomInput, setJoinRoomInput] = useState(initialRoomInvite);
   const [nameInput, setNameInput] = useState(accountPlayerName || playerName);
   const [roomVisibilityInput, setRoomVisibilityInput] = useState('private');
+  const [maxPlayersInput, setMaxPlayersInput] = useState(8);
   const [publicRooms, setPublicRooms] = useState([]);
   const [publicRoomsLoading, setPublicRoomsLoading] = useState(false);
   const [selectedPublicRoom, setSelectedPublicRoom] = useState(null);
@@ -374,7 +389,9 @@ function GameApp() {
       if (!res.ok) throw new Error(await serverErrorMessage(res, 'Impossible de charger les salles publiques.'));
       const data = await res.json();
       if (publicRoomsRequestRef.current !== requestId) return;
-      setPublicRooms(Array.isArray(data.rooms) ? data.rooms : []);
+      setPublicRooms(Array.isArray(data.rooms)
+        ? data.rooms.filter(isPublicRoomAvailable)
+        : []);
     } catch {
       if (publicRoomsRequestRef.current !== requestId) return;
       setPublicRooms([]);
@@ -396,10 +413,24 @@ function GameApp() {
     try {
       const response = await apiFetch(`/api/rooms/public/${encodeURIComponent(targetRoomId)}/preview`);
       if (!response.ok) {
-        throw new Error(await serverErrorMessage(
+        const details = await serverErrorDetails(
           response,
           'Impossible de prévisualiser cette partie.',
-        ));
+        );
+        if (details.code === 'spectators_disabled') {
+          if (publicRoomPreviewRequestRef.current !== requestId) return;
+          setSelectedPublicRoom(null);
+          setPublicRoomPreview(null);
+          setPublicRoomPreviewError('');
+          setPublicRoomPreviewLoading(false);
+          setPublicRooms((current) => current
+            .map((room) => room.roomId === targetRoomId
+              ? { ...room, allowSpectators: false }
+              : room)
+            .filter(isPublicRoomAvailable));
+          return;
+        }
+        throw new Error(details.message);
       }
       const payload = await response.json();
       if (publicRoomPreviewRequestRef.current !== requestId) return;
@@ -490,7 +521,7 @@ function GameApp() {
     const previewRoomId = selectedPublicRoom?.roomId;
     if (!previewRoomId) return undefined;
     loadPublicRoomPreview(previewRoomId);
-    if (socket && connected) {
+    if (socket && connected && selectedPublicRoom.allowSpectators !== false) {
       emitSocket(socket, SOCKET_EVENTS.SUBSCRIBE_PUBLIC_PREVIEW, { roomId: previewRoomId });
     }
     return () => {
@@ -550,6 +581,29 @@ function GameApp() {
       setAutoReconnectPending(false);
     };
 
+    const resetRevokedRoomAccess = (message) => {
+      saveGameValue('sj-room-id', '');
+      saveGameValue(ROOM_ROLE_KEY, '');
+      nextSocket.auth = {
+        ...nextSocket.auth,
+        roomId: '',
+        roomRole: ROOM_ROLES.PLAYER,
+      };
+      setRoomId('');
+      setPlayerId('');
+      setRoomRole(ROOM_ROLES.PLAYER);
+      roomRoleRef.current = ROOM_ROLES.PLAYER;
+      setState(null);
+      setChatMessages([]);
+      setChatHasMore(false);
+      setChatBefore(null);
+      setJoinRoomInput('');
+      setHomePanel('home');
+      setAutoReconnectPending(false);
+      setPendingReconnectState(null);
+      showError(message, 5000);
+    };
+
     if (savedRoomId) {
       reconnectTimeout = window.setTimeout(() => {
         if (!autoReconnectPendingRef.current) return;
@@ -592,6 +646,26 @@ function GameApp() {
       const message = requestId ? `${baseMessage} Référence : ${requestId}` : baseMessage;
       const code = typeof payload === 'object' ? payload?.code : '';
       showError(message);
+      if (selectedPublicRoomRef.current && [
+        'room_unavailable',
+        'spectators_disabled',
+        'room_banned',
+      ].includes(code)) {
+        setPublicRoomPreview(null);
+        setPublicRoomPreviewLoading(false);
+        setPublicRoomPreviewError(code === 'spectators_disabled' ? '' : message);
+        if (code === 'spectators_disabled') {
+          const affectedRoomId = selectedPublicRoomRef.current.roomId;
+          setSelectedPublicRoom(null);
+          setPublicRooms((current) => current
+            .map((room) => room.roomId === affectedRoomId
+              ? { ...room, allowSpectators: false }
+              : room)
+            .filter(isPublicRoomAvailable));
+        } else if (code === 'room_banned') {
+          setSelectedPublicRoom(null);
+        }
+      }
       if (inviteJoinPendingRef.current && inviteJoinAttemptedRef.current) {
         inviteJoinPendingRef.current = false;
         setInviteJoinPending(false);
@@ -603,6 +677,8 @@ function GameApp() {
       if (autoReconnectPendingRef.current && (
         code === 'room_unavailable'
         || code === 'seat_unavailable'
+        || code === 'room_banned'
+        || code === 'spectators_disabled'
         || message === "Impossible de rejoindre cette salle."
       )) {
         stopReconnectScreen();
@@ -675,24 +751,13 @@ function GameApp() {
       showError('Cette salle a expiré après 24 heures d\'inactivité.');
     });
     nextSocket.on(SOCKET_EVENTS.REMOVED_FROM_ROOM, () => {
-      saveGameValue('sj-room-id', '');
-      saveGameValue(ROOM_ROLE_KEY, '');
-      nextSocket.auth = {
-        ...nextSocket.auth,
-        roomId: '',
-        roomRole: ROOM_ROLES.PLAYER,
-      };
-      setRoomId('');
-      setPlayerId('');
-      setRoomRole(ROOM_ROLES.PLAYER);
-      roomRoleRef.current = ROOM_ROLES.PLAYER;
-      setState(null);
-      setChatMessages([]);
-      setJoinRoomInput('');
-      setHomePanel('home');
-      setAutoReconnectPending(false);
-      setPendingReconnectState(null);
-      showError('Le propriétaire vous a retiré de la salle.', 5000);
+      resetRevokedRoomAccess('Le propriétaire vous a retiré de la salle.');
+    });
+    nextSocket.on(SOCKET_EVENTS.ROOM_ACCESS_REVOKED, (payload) => {
+      const message = typeof payload?.message === 'string'
+        ? [...payload.message].slice(0, 200).join('')
+        : 'Votre accès à cette salle a été retiré.';
+      resetRevokedRoomAccess(message);
     });
     return () => {
       if (reconnectTimeout) window.clearTimeout(reconnectTimeout);
@@ -714,7 +779,11 @@ function GameApp() {
       const res = await apiFetch('/api/rooms', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ roomVisibility: roomVisibilityInput, playerName: name }),
+        body: JSON.stringify({
+          roomVisibility: roomVisibilityInput,
+          playerName: name,
+          maxPlayers: maxPlayersInput,
+        }),
       });
       if (!res.ok) throw new Error(await serverErrorMessage(res, 'Impossible de créer la salle.'));
       const data = await res.json();
@@ -810,6 +879,16 @@ function GameApp() {
     loadPublicRooms();
   }
 
+  function selectPublicRoom(publicRoom) {
+    clearError();
+    const selectionMode = publicRoomSelectionMode(publicRoom);
+    if (selectionMode === 'join') {
+      joinRoomById(publicRoom.roomId);
+      return;
+    }
+    if (selectionMode === 'preview') setSelectedPublicRoom(publicRoom);
+  }
+
   function leaveRoom() {
     emitSocket(socket, SOCKET_EVENTS.LEAVE_ROOM);
     saveGameValue('sj-room-id', '');
@@ -884,7 +963,7 @@ function GameApp() {
                       key={publicRoom.roomId}
                       type="button"
                       className="sj-public-room-card"
-                      onClick={() => setSelectedPublicRoom(publicRoom)}
+                      onClick={() => selectPublicRoom(publicRoom)}
                     >
                       <span className="sj-public-room-main">
                         <strong>{publicRoom.gameMode === 'action' ? 'Skyjo Action' : 'Skyjo classique'}</strong>
@@ -892,6 +971,7 @@ function GameApp() {
                           {publicRoom.phase === 'lobby' ? 'Salle d’attente' : 'Partie en cours'}
                           {' · '}
                           créée par {publicRoom.creatorName || 'un joueur'}
+                          {publicRoom.locked ? ' · verrouillée' : ''}
                         </small>
                       </span>
                       <span className="sj-public-room-meta">
@@ -975,6 +1055,19 @@ function GameApp() {
                 </button>
               </div>
 
+              <label className="sj-create-room-capacity" htmlFor="create-room-max-players">
+                <span>Nombre maximal de joueurs</span>
+                <select
+                  id="create-room-max-players"
+                  value={maxPlayersInput}
+                  onChange={(event) => setMaxPlayersInput(Number(event.target.value))}
+                >
+                  {Array.from({ length: 7 }, (_, index) => index + 2).map((value) => (
+                    <option key={value} value={value}>{value}</option>
+                  ))}
+                </select>
+              </label>
+
               <button className="sj-btn sj-btn-primary" disabled={!connected} onClick={createRoom}>
                 Créer une salle {roomVisibilityInput === 'public' ? 'publique' : 'privée'}
               </button>
@@ -1041,7 +1134,7 @@ function GameApp() {
         onScan={handleRoomQrScan}
         onClose={closeQrScanner}
       />
-      {selectedPublicRoom && (
+      {selectedPublicRoom && selectedPublicRoom.allowSpectators !== false && (
         <PublicRoomPreviewModal
           roomMetadata={selectedPublicRoom}
           preview={publicRoomPreview}
@@ -1113,6 +1206,7 @@ function GameScreen({
   const [actionHandModalOpen, setActionHandModalOpen] = useState(false);
   const [viewedActionPlayerId, setViewedActionPlayerId] = useState(null);
   const [chatModalOpen, setChatModalOpen] = useState(false);
+  const [roomAdministrationOpen, setRoomAdministrationOpen] = useState(false);
   const [visibleActionPlayId, setVisibleActionPlayId] = useState(null);
   const [roundScoresReady, setRoundScoresReady] = useState(true);
   const [starterTieToast, setStarterTieToast] = useState(null);
@@ -1130,6 +1224,9 @@ function GameScreen({
   const initializedChatRoomRef = useRef('');
   const starterTieToastTimerRef = useRef(null);
   const closeChatModal = useCallback(() => setChatModalOpen(false), []);
+  const reloadChatHistory = useCallback(() => {
+    emitSocket(socket, SOCKET_EVENTS.LOAD_CHAT_HISTORY, { before: null });
+  }, [socket]);
   const closeInviteModal = useCallback(() => setInviteModalOpen(false), []);
   const handleCardMotionBatch = useCallback((endsAt) => {
     if (!Number.isFinite(endsAt)) return;
@@ -1194,6 +1291,11 @@ function GameScreen({
   const me = boardPlayers.find((player) => player.id === primaryPlayerId);
   const others = boardPlayers.filter((player) => player.id !== primaryPlayerId);
   const isCreator = state.creatorId === myId;
+  const chatEnabled = state.roomSettings?.chatEnabled !== false;
+  const spectatorCount = Number.isInteger(state.spectatorCount)
+    ? Math.max(0, state.spectatorCount)
+    : 0;
+  useChatHistoryReload({ roomId, enabled: chatEnabled, onReload: reloadChatHistory });
   const disconnectedPlayers = state.players.filter((player) => !player.connected);
   const isMyTurn = state.phase === 'playing' && state.currentPlayerId === myId;
   const selectableSlots = getSelectableSlots(state, isMyTurn, me);
@@ -1608,6 +1710,11 @@ function GameScreen({
     setLastSeenChatMessageId(latestChatMessageId);
   }, [chatModalOpen, latestChatMessageId]);
 
+  useEffect(() => {
+    if (chatEnabled) return;
+    setChatModalOpen(false);
+  }, [chatEnabled]);
+
   async function copyRoomCode() {
     const text = inviteUrl;
     if (!text) return;
@@ -1842,12 +1949,14 @@ function GameScreen({
   }
 
   function handleOpenChat() {
+    if (!chatEnabled) return;
+    reloadChatHistory();
     setChatModalOpen(true);
     setLastSeenChatMessageId(latestChatMessageId);
   }
 
   function handleSendChatMessage(text) {
-    if (isSpectator) return;
+    if (isSpectator || state.roomSettings?.chatEnabled === false) return;
     emitSocket(socket, SOCKET_EVENTS.SEND_CHAT_MESSAGE, { text });
   }
 
@@ -1889,12 +1998,42 @@ function GameScreen({
       }}
     />
   );
-  const chatButton = (
+  const chatButton = chatEnabled ? (
     <ChatButton unreadCount={unreadChatCount} onClick={handleOpenChat} />
-  );
+  ) : null;
+  const roomAdministrationButton = isCreator ? (
+    <RoomAdministrationButton onClick={() => setRoomAdministrationOpen(true)} />
+  ) : null;
+  const roomAdministrationModal = isCreator ? (
+    <RoomAdministrationModal
+      open={roomAdministrationOpen}
+      state={state}
+      myId={myId}
+      onClose={() => setRoomAdministrationOpen(false)}
+      onSave={(settings) => emitSocket(socket, SOCKET_EVENTS.UPDATE_ROOM_SETTINGS, settings)}
+      onTransfer={(targetPlayerId) => emitSocket(
+        socket,
+        SOCKET_EVENTS.TRANSFER_ROOM_OWNERSHIP,
+        { playerId: targetPlayerId },
+      )}
+      onKick={(targetPlayerId) => emitSocket(
+        socket,
+        SOCKET_EVENTS.KICK_ROOM_PLAYER,
+        { playerId: targetPlayerId },
+      )}
+      onBan={(targetPlayerId) => emitSocket(
+        socket,
+        SOCKET_EVENTS.BAN_ROOM_PLAYER,
+        { playerId: targetPlayerId },
+      )}
+    />
+  ) : null;
+  const spectatorBadge = spectatorCount > 0 ? (
+    <SpectatorBadge connected={connected} count={spectatorCount} />
+  ) : null;
   const chatModal = (
     <ChatModal
-      open={chatModalOpen}
+      open={chatEnabled && chatModalOpen}
       messages={chatMessages}
       hasMore={chatHasMore}
       myId={myId}
@@ -2040,7 +2179,8 @@ function GameScreen({
         <div className="sj-app-shell sj-lobby-room">
           {leaveButton}
           {chatButton}
-          {isSpectator && <SpectatorBadge connected={connected} />}
+          {roomAdministrationButton}
+          {spectatorBadge}
           <GameToast key={errorSerial} message={error} />
           <section className="sj-lobby-card sj-fade-in">
             <div className="sj-room-head">
@@ -2067,6 +2207,9 @@ function GameScreen({
             </div>
             <p className={`sj-room-visibility-badge ${state.roomVisibility === 'public' ? 'sj-room-visibility-badge-public' : ''}`}>
               {state.roomVisibility === 'public' ? 'Salle publique' : 'Salle privée'}
+              {' · '}
+              {state.players.length}/{state.roomSettings?.maxPlayers || 8} joueurs
+              {state.roomSettings?.locked ? ' · Verrouillée' : ''}
             </p>
             <ul className="sj-player-list">
               {state.players.map((player) => (
@@ -2140,6 +2283,7 @@ function GameScreen({
         </div>
         {leaveModal}
         {chatModal}
+        {roomAdministrationModal}
         {disconnectedPlayersModal}
         {gameGuideModal}
         {gameTutorial}
@@ -2172,7 +2316,8 @@ function GameScreen({
         <div className="sj-app-shell sj-lobby-room">
           {leaveButton}
           {chatButton}
-          {isSpectator && <SpectatorBadge connected={connected} />}
+          {roomAdministrationButton}
+          {spectatorBadge}
           <GameToast key={errorSerial} message={error} />
           <section className="sj-lobby-card sj-pop-in">
             <div className="sj-brand-mark"><SkyjoLogo label={isDraw ? 'Égalité' : `${winner?.name || 'Joueur'} gagne`} /></div>
@@ -2193,6 +2338,7 @@ function GameScreen({
         </div>
         {leaveModal}
         {chatModal}
+        {roomAdministrationModal}
       </>
     );
   }
@@ -2208,8 +2354,9 @@ function GameScreen({
         onMotionBatch={handleCardMotionBatch}
       />
       <div className="sj-game-controls" aria-label="Contrôles de la partie">
-        {isSpectator && <SpectatorBadge connected={connected} />}
+        {spectatorBadge}
         {chatButton}
+        {roomAdministrationButton}
         {leaveButton}
       </div>
       {hasActionHandDock && (
@@ -2343,6 +2490,7 @@ function GameScreen({
       )}
       {leaveModal}
       {chatModal}
+      {roomAdministrationModal}
       {actionDrawModal}
       {defensePromptModal}
       {starGroupChoiceModal}
