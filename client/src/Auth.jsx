@@ -27,6 +27,7 @@ import {
 import { AuthContext, useAuth } from "./authContext.js";
 
 const LAST_EMAIL_KEY = "skyjo_last_email";
+const AUTH_REMEMBER_PREFERENCE_SET_KEY = 'skyjo_auth_remember_preference_set';
 const AUTH_CONFIGURATION_ERROR =
   "La connexion n'est pas configurée. Ajoute l'URL publique du serveur Render au client.";
 const EMAIL_ACTION_PATH = "/auth/confirm";
@@ -169,6 +170,12 @@ async function authApi(path, options, fallback = "Une erreur d'authentification 
 
 function saveRememberPreference(remember) {
   localStorage.setItem(AUTH_REMEMBER_KEY, String(Boolean(remember)));
+  localStorage.setItem(AUTH_REMEMBER_PREFERENCE_SET_KEY, 'true');
+}
+
+function readRememberPreference() {
+  if (localStorage.getItem(AUTH_REMEMBER_PREFERENCE_SET_KEY) !== 'true') return true;
+  return localStorage.getItem(AUTH_REMEMBER_KEY) === 'true';
 }
 
 export function AuthProvider({ children }) {
@@ -1199,7 +1206,7 @@ export function AuthView() {
     lastName: "",
     confirmPassword: "",
     acceptTerms: false,
-    remember: false,
+    remember: readRememberPreference(),
   });
   const score = useMemo(
     () =>
