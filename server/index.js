@@ -37,9 +37,9 @@ const MAX_RATE_BUCKETS = 20_000;
 const MAX_SOCKETS_PER_USER = 3;
 const MAX_SPECTATORS_PER_ROOM = 50;
 const CHAT_PAGE_SIZE = 80;
-// Preserve the seat briefly for a reload or a transient network loss without
-// letting a disconnected current player block the whole table for minutes.
-const ACTIVE_GAME_DISCONNECT_GRACE_MS = 30 * 1000;
+// Public rooms release abandoned seats quickly; private rooms preserve them
+// until players explicitly leave so a game can be resumed much later.
+const PUBLIC_ROOM_DISCONNECT_GRACE_MS = 30 * 1000;
 const SYSTEM_CHAT_PLAYER_ID = '__system__';
 const SYSTEM_CHAT_PLAYER_NAME = 'Système';
 const SESSION_CHECK_CACHE_MS = 30_000;
@@ -1679,7 +1679,8 @@ io.on('connection', (socket) => {
     void mutateRoom(info.roomId, (draft) => removePlayer(draft, info.playerId))
       .then(({ state }) => {
         broadcastRoom(info.roomId);
-        if (state.phase === 'lobby' || socketIdsForPlayer(info.roomId, info.playerId).length) {
+        if (state.roomVisibility !== 'public'
+          || socketIdsForPlayer(info.roomId, info.playerId).length) {
           return;
         }
         const timer = setTimeout(async () => {
@@ -1702,7 +1703,7 @@ io.on('connection', (socket) => {
               await safelyAppendSystemChatMessage(info.roomId, `${leavingPlayerName} a quitté la salle.`);
             }
           } catch (error) { logInternal('disconnect_cleanup', error); }
-        }, ACTIVE_GAME_DISCONNECT_GRACE_MS);
+        }, PUBLIC_ROOM_DISCONNECT_GRACE_MS);
         timer.unref?.();
         disconnectTimers.set(key, timer);
       })
