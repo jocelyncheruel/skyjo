@@ -1457,6 +1457,29 @@ input:focus {
   gap: 2px;
 }
 
+.sj-public-room-title {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.sj-public-room-title > strong {
+  flex: 0 1 auto;
+}
+
+.sj-public-room-title > span {
+  flex: 0 0 auto;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: rgba(240, 189, 87, 0.14);
+  color: #ffe6aa;
+  font-size: 10px;
+  font-weight: 900;
+  line-height: 1;
+  white-space: nowrap;
+}
+
 .sj-public-room-main strong,
 .sj-public-room-main small {
   min-width: 0;

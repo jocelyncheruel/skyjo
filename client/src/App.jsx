@@ -983,13 +983,14 @@ function GameApp() {
                       onClick={() => selectPublicRoom(publicRoom)}
                     >
                       <span className="sj-public-room-main">
-                        <strong>{publicRoom.gameMode === 'action' ? 'Skyjo Action' : 'Skyjo classique'}</strong>
+                        <span className="sj-public-room-title">
+                          <strong>{publicRoom.gameMode === 'action' ? 'Skyjo Action' : 'Skyjo classique'}</strong>
+                          <span>{roomVariantLabel(publicRoom)}</span>
+                        </span>
                         <small>
                           {publicRoom.phase === 'lobby' ? 'Salle d’attente' : 'Partie en cours'}
                           {' · '}
                           administrée par {publicRoom.creatorName || 'un joueur'}
-                          {' · '}
-                          {roomVariantLabel(publicRoom)}
                           {publicRoom.locked ? ' · verrouillée' : ''}
                         </small>
                       </span>
