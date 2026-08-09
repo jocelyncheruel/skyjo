@@ -539,21 +539,18 @@ function startRoundIfReady(state) {
     || (state.pendingInitialStarClaims?.length || 0) > 0
     || ids.length < 2
     || !ids.every((id) => state.playersById[id].flippedCount >= 2)) return false;
-  let starterId = state.actionNextStarterId;
+  const sums = ids.map((id) => {
+    const sum = state.playersById[id].board
+      .filter((slot) => slot.faceUp && !slot.removed)
+      .reduce((total, slot) => total + (slot.card?.value || 0), 0);
+    return { id, sum };
+  });
+  const best = Math.max(...sums.map(({ sum }) => sum));
+  const tiedIds = sums.filter(({ sum }) => sum === best).map(({ id }) => id);
+  const starterId = tiedIds[0];
   let starterLogMessage = null;
-  if (!starterId || !ids.includes(starterId)) {
-    const sums = ids.map((id) => {
-      const sum = state.playersById[id].board
-        .filter((slot) => slot.faceUp && !slot.removed)
-        .reduce((total, slot) => total + (slot.card?.value || 0), 0);
-      return { id, sum };
-    });
-    const best = Math.max(...sums.map(({ sum }) => sum));
-    const tiedIds = sums.filter(({ sum }) => sum === best).map(({ id }) => id);
-    starterId = tiedIds[0];
-    if (tiedIds.length > 1) {
-      starterLogMessage = `Égalité : ${state.playersById[starterId].name} commence.`;
-    }
+  if (tiedIds.length > 1) {
+    starterLogMessage = `Égalité : ${state.playersById[starterId].name} commence.`;
   }
   state.turnIndex = state.order.indexOf(starterId);
   state.phase = 'playing';
@@ -649,7 +646,6 @@ function advanceTurn(state) {
   const finishedBoard = boardFinished(player);
   if (!state.roundEnderId && finishedBoard) {
     state.roundEnderId = finishingId;
-    state.actionNextStarterId = finishingId;
     log(state, `${player.name} termine son plateau. Dernier tour.`);
   }
   if (finishedBoard) {
