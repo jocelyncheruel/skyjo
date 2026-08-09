@@ -1977,6 +1977,18 @@ input:focus {
     -webkit-box-orient: vertical;
     -webkit-line-clamp: 2;
   }
+
+  .sj-my-turn-notice {
+    grid-template-columns: auto auto;
+    gap: 8px;
+    border-radius: 999px;
+    text-align: left;
+  }
+
+  .sj-my-turn-notice strong {
+    display: block;
+    white-space: nowrap;
+  }
 }
 
 .sj-copy-toast {

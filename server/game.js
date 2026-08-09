@@ -127,6 +127,7 @@ export function newRoomState(roomId) {
     deck: [],
     discard: [],
     turnIndex: 0,
+    turnSerial: 0,
     turnStage: null,
     drawnCard: null,
     lastCardMove: null,
@@ -204,6 +205,7 @@ function startRoundIfReady(state) {
   state.turnIndex = state.order.indexOf(bestId);
   state.phase = 'playing';
   state.turnStage = 'draw';
+  state.turnSerial = (state.turnSerial || 0) + 1;
   if (tiedIds.length > 1) {
     const message = `Égalité : ${state.playersById[bestId].name} commence.`;
     state.starterTieNotice = {
@@ -286,6 +288,10 @@ export function leavePlayer(state, id) {
     state.roundScoresAt = null;
     log(state, `${state.playersById[state.winnerId].name} gagne par abandon.`);
     return;
+  }
+
+  if (wasCurrentPlayer && state.phase === 'playing') {
+    state.turnSerial = (state.turnSerial || 0) + 1;
   }
 
   if (state.phase === 'initialFlip') {
@@ -615,6 +621,7 @@ function advanceTurn(state) {
   state.turnIndex = next;
   state.turnStage = 'draw';
   state.drawnCard = null;
+  state.turnSerial = (state.turnSerial || 0) + 1;
 }
 
 export function drawCard(state, playerId, source) {
@@ -816,6 +823,7 @@ export function publicState(state, forPlayerId) {
     phase: state.phase,
     order: state.order,
     turnIndex: state.turnIndex,
+    turnSerial: state.turnSerial || 0,
     turnStage: state.turnStage,
     currentPlayerId: state.phase === 'playing' ? state.order[state.turnIndex] || null : null,
     roundEnderId: state.roundEnderId,
