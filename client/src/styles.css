@@ -3486,7 +3486,8 @@ input:focus {
   white-space: nowrap;
   font-size: clamp(11px, calc(var(--card-width) * 0.15), 14px);
   font-weight: 900;
-  line-height: 1;
+  line-height: 1.2;
+  padding-block: 2px;
 }
 
 .sj-action-count-badge {
