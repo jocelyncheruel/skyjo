@@ -499,6 +499,25 @@ button {
   justify-content: center;
 }
 
+@media (max-width: 640px) {
+  .sj-app-shell.sj-lobby-room {
+    padding-top: calc(
+      max(clamp(8px, 1.5vh, 16px), env(safe-area-inset-top))
+      + 44px
+      + 10px
+    );
+    padding-bottom: calc(
+      max(10px, env(safe-area-inset-bottom))
+      + 42px
+      + 10px
+    );
+  }
+
+  .sj-lobby-room .sj-lobby-card {
+    max-height: 100%;
+  }
+}
+
 .sj-home-panel-stack {
   position: relative;
   width: min(440px, 94vw);
@@ -2034,7 +2053,9 @@ input:focus {
 .sj-room-visibility-badge {
   width: max-content;
   max-width: 100%;
+  min-width: 0;
   margin: -5px auto 0;
+  overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.05);
@@ -2043,6 +2064,17 @@ input:focus {
   font-size: 11px;
   font-weight: 900;
   letter-spacing: 0.02em;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 480px) {
+  .sj-room-visibility-badge {
+    padding-inline: clamp(6px, 2.4vw, 10px);
+    font-size: clamp(8px, 2.6vw, 11px);
+    letter-spacing: 0.01em;
+  }
 }
 
 .sj-room-visibility-badge-public {
