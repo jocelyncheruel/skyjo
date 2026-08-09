@@ -2211,7 +2211,7 @@ function GameScreen({
   if (state.phase === 'lobby') {
     return (
       <>
-        <div className="sj-app-shell sj-lobby-room">
+        <div className="sj-app-shell sj-lobby-room sj-room-controls-layout">
           {leaveButton}
           {chatButton}
           {roomAdministrationButton}
@@ -2350,7 +2350,7 @@ function GameScreen({
       .format(winners.map((player) => player.name));
     return (
       <>
-        <div className="sj-app-shell sj-lobby-room">
+        <div className="sj-app-shell sj-lobby-room sj-room-controls-layout">
           {leaveButton}
           {chatButton}
           {roomAdministrationButton}

@@ -500,7 +500,7 @@ button {
 }
 
 @media (max-width: 640px) {
-  .sj-app-shell.sj-lobby-room {
+  .sj-app-shell.sj-lobby-room.sj-room-controls-layout {
     padding-top: calc(
       max(clamp(8px, 1.5vh, 16px), env(safe-area-inset-top))
       + 44px
