@@ -1308,8 +1308,7 @@ export function resolveActionInput(state, playerId, payload = {}) {
     if (playerId !== actorId) throw new Error('Ce choix ne vous appartient pas.');
     if (pending.defensePrompt) throw new Error('Une défense est en attente.');
     const targetId = payload.targetPlayerId;
-    const expectedTargetId = pending.remaining[0];
-    if (!targetId || targetId !== expectedTargetId || targetId === actorId || !pending.remaining.includes(targetId)) {
+    if (!targetId || targetId === actorId || !pending.remaining.includes(targetId)) {
       throw new Error('Joueur cible invalide.');
     }
     const target = state.playersById[targetId];
@@ -1734,9 +1733,6 @@ export function publicActionState(state, forPlayerId) {
         ? !actionPausedForStarClaim && !actionPausedForGroupChoice && !actionPausedForDefense && pending.playerId === forPlayerId
         : !actionPausedForStarClaim && !actionPausedForGroupChoice && !actionPausedForDefense && pending.playerId === forPlayerId,
       remaining: pending.playerId === forPlayerId ? pending.remaining : undefined,
-      currentTargetId: pending.playerId === forPlayerId && pending.type === 'removeEach'
-        ? pending.remaining?.[0]
-        : undefined,
       drawn: pending.playerId === forPlayerId ? pending.drawn : undefined,
       selection: pending.playerId === forPlayerId ? pending.selection : undefined,
       playableDiscardCardIds,

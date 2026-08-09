@@ -1370,9 +1370,9 @@ function GameScreen({
     ? state.playersAction?.[viewedActionPlayerId]?.actionCards || []
     : [];
   const pendingAction = state.pendingAction;
-  const currentRemoveEachTargetId = pendingAction?.type === 'removeEach'
-    ? pendingAction.currentTargetId || pendingAction.remaining?.[0]
-    : null;
+  const remainingRemoveEachTargetIds = new Set(
+    pendingAction?.type === 'removeEach' ? pendingAction.remaining || [] : [],
+  );
   const pendingGroupChoice = state.pendingGroupChoice || null;
   const lastPlayedAction = state.lastPlayedAction || null;
   const actionPlayId = lastPlayedAction?.id || null;
@@ -1408,9 +1408,8 @@ function GameScreen({
   if (pendingAction?.mustRespond) {
     if (pendingAction.type === 'removeEach') {
       selectableByPlayer[myId] = [];
-      const currentTargetId = pendingAction.currentTargetId || pendingAction.remaining?.[0];
       for (const player of state.players) {
-        if (player.id !== currentTargetId) continue;
+        if (!remainingRemoveEachTargetIds.has(player.id)) continue;
         selectableByPlayer[player.id] = player.board
           .map((slot, index) => (!slot.removed ? index : -1))
           .filter((index) => index >= 0);
@@ -1849,8 +1848,7 @@ function GameScreen({
   function handleBoardSlotClick(playerId, slotIndex) {
     if (isSpectator) return;
     if (pendingAction?.mustRespond && pendingAction.type === 'removeEach') {
-      const currentTargetId = pendingAction.currentTargetId || pendingAction.remaining?.[0];
-      if (playerId !== myId && playerId === currentTargetId) {
+      if (playerId !== myId && remainingRemoveEachTargetIds.has(playerId)) {
         emitSocket(socket, SOCKET_EVENTS.RESOLVE_ACTION, { targetPlayerId: playerId, slotIndex });
       }
       return;
@@ -2122,7 +2120,7 @@ function GameScreen({
       cards={viewedActionCards}
       selectable={!!pendingAction?.mustRespond
         && pendingAction.type === 'removeEach'
-        && viewedActionPlayerId === currentRemoveEachTargetId}
+        && remainingRemoveEachTargetIds.has(viewedActionPlayerId)}
       onSelect={handleRemoveEachActionCardSelect}
       onClose={() => setViewedActionPlayerId(null)}
     />
