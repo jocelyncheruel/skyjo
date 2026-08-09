@@ -47,6 +47,7 @@ export const SOCKET_HANDSHAKE_KEYS = Object.freeze([
   'roomId',
   'playerName',
   'roomRole',
+  'discoverActiveRoom',
 ]);
 
 export const SOCKET_CLIENT_PAYLOAD_KEYS = Object.freeze({
