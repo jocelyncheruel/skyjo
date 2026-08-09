@@ -1664,7 +1664,7 @@ function GameScreen({
     );
     const timeout = window.setTimeout(() => setStarClaimModalReady(true), cardMotionSettleDelay);
     return () => window.clearTimeout(timeout);
-  }, [latestCardMoveType, motionSequenceEndsAt, state.pendingStarClaim]);
+  }, [latestCardMoveType, motionSequenceEndsAt, state.pendingStarClaim, state.pendingStarClaimId]);
 
   useEffect(() => {
     setGroupChoiceModalReadyId(null);

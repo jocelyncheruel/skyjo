@@ -63,6 +63,16 @@ function ensureActionFields(state) {
   state.pendingAction ||= null;
   state.pendingStarClaim ||= null;
   if (!Array.isArray(state.pendingInitialStarClaims)) state.pendingInitialStarClaims = [];
+  state.starClaimSerial ||= 0;
+  if (state.pendingStarClaim && !state.pendingStarClaim.id) {
+    state.starClaimSerial += 1;
+    state.pendingStarClaim.id = `star-claim-${state.starClaimSerial}`;
+  }
+  for (const claim of state.pendingInitialStarClaims) {
+    if (claim.id) continue;
+    state.starClaimSerial += 1;
+    claim.id = `star-claim-${state.starClaimSerial}`;
+  }
   state.pendingGroupChoice ||= null;
   state.turnSerial ||= 0;
   state.extraTurns ||= {};
@@ -259,14 +269,27 @@ function beginStarClaim(state, playerId, resume) {
     state.pendingInitialStarClaims = [];
   }
 
-  if (state.pendingStarClaim) {
-    if (state.phase !== 'initialFlip') {
-      throw new Error('Une carte Étoile doit d’abord être résolue.');
+  state.starClaimSerial = (state.starClaimSerial || 0) + 1;
+  const claim = {
+    id: `star-claim-${state.starClaimSerial}`,
+    playerId,
+    resume,
+  };
+
+  if (state.phase === 'initialFlip') {
+    state.pendingInitialStarClaims.push(claim);
+    if (!prepareActionClaimChoices(state)) {
+      state.pendingInitialStarClaims.pop();
+      log(state, 'Aucune carte Action n’est disponible : le bonus Étoile est ignoré.');
+      continueAfterStarClaim(state, claim.resume);
     }
-    state.pendingInitialStarClaims.push({ playerId, resume });
     return;
   }
-  state.pendingStarClaim = { playerId, resume };
+
+  if (state.pendingStarClaim) {
+    throw new Error('Une carte Étoile doit d’abord être résolue.');
+  }
+  state.pendingStarClaim = claim;
   state.turnStage = 'starClaim';
   if (resolveSkippedStarClaim(state)) return;
   if (!prepareActionClaimChoices(state)) {
@@ -275,29 +298,7 @@ function beginStarClaim(state, playerId, resume) {
   }
 }
 
-function activateNextInitialStarClaim(state) {
-  if (!Array.isArray(state.pendingInitialStarClaims)) {
-    state.pendingInitialStarClaims = [];
-  }
-
-  while (state.pendingInitialStarClaims.length > 0) {
-    const nextClaim = state.pendingInitialStarClaims.shift();
-    if (!state.playersById[nextClaim.playerId]) continue;
-    if (!prepareActionClaimChoices(state)) {
-      log(state, 'Aucune carte Action n’est disponible : le bonus Étoile est ignoré.');
-      continue;
-    }
-    state.pendingStarClaim = nextClaim;
-    state.turnStage = 'starClaim';
-    return true;
-  }
-  return false;
-}
-
-function resumeAfterStarClaim(state) {
-  const resume = state.pendingStarClaim?.resume;
-  state.pendingStarClaim = null;
-  if (activateNextInitialStarClaim(state)) return;
+function continueAfterStarClaim(state, resume) {
   if (resume?.type === 'clearGroups') {
     const player = state.playersById[resume.playerId];
     const next = resume.resume || { type: 'none' };
@@ -311,6 +312,12 @@ function resumeAfterStarClaim(state) {
   } else {
     state.turnStage = resume || 'choose';
   }
+}
+
+function resumeAfterStarClaim(state) {
+  const resume = state.pendingStarClaim?.resume;
+  state.pendingStarClaim = null;
+  continueAfterStarClaim(state, resume);
 }
 
 function isStar(card) {
@@ -616,7 +623,8 @@ export function startActionGame(state) {
 
 export function flipInitialActionCard(state, playerId, slotIndex) {
   if (state.phase !== 'initialFlip') throw new Error('Pas la phase de retournement initial.');
-  if (state.pendingStarClaim?.playerId === playerId) {
+  if (state.pendingStarClaim?.playerId === playerId
+    || state.pendingInitialStarClaims?.some((claim) => claim.playerId === playerId)) {
     throw new Error('Choisissez d’abord votre carte Action obtenue grâce à l’Étoile.');
   }
   const player = state.playersById[playerId];
@@ -754,12 +762,24 @@ export function revealActionGameCard(state, playerId, slotIndex) {
 
 export function claimStarAction(state, playerId, source, marketIndex) {
   ensureActionFields(state);
-  if (state.pendingStarClaim?.playerId !== playerId) throw new Error('Aucune carte Étoile à résoudre.');
+  const initialClaimIndex = state.pendingInitialStarClaims
+    .findIndex((claim) => claim.playerId === playerId);
+  const initialClaim = initialClaimIndex >= 0
+    ? state.pendingInitialStarClaims[initialClaimIndex]
+    : null;
+  if (state.pendingStarClaim?.playerId !== playerId && !initialClaim) {
+    throw new Error('Aucune carte Étoile à résoudre.');
+  }
   if (source === 'deck' && availableActionDeckCount(state) === 0) {
     throw new Error('La pioche Action est vide. Choisissez une carte visible.');
   }
   giveActionCard(state, playerId, source, marketIndex);
-  resumeAfterStarClaim(state);
+  if (initialClaim) {
+    state.pendingInitialStarClaims.splice(initialClaimIndex, 1);
+    continueAfterStarClaim(state, initialClaim.resume);
+  } else {
+    resumeAfterStarClaim(state);
+  }
 }
 
 function findDefenseIndex(player, { includeTemporary = true } = {}) {
@@ -1643,7 +1663,7 @@ export function handleActionPlayerLeave(state, playerId) {
 
   if (state.pendingStarClaim?.playerId === playerId) {
     state.pendingStarClaim = null;
-    if (!activateNextInitialStarClaim(state) && state.turnStage === 'starClaim') {
+    if (state.turnStage === 'starClaim') {
       state.turnStage = state.phase === 'playing' ? 'choose' : null;
     }
   }
@@ -1706,6 +1726,9 @@ export function publicActionState(state, forPlayerId) {
   const playableDiscardCardIds = pending?.type === 'playDiscard' && pending.playerId === forPlayerId
     ? replayableDiscardCards(state, pending.playerId).map((card) => card.id)
     : undefined;
+  const ownStarClaim = state.pendingStarClaim?.playerId === forPlayerId
+    ? state.pendingStarClaim
+    : state.pendingInitialStarClaims.find((claim) => claim.playerId === forPlayerId);
   return {
     actionMarket: state.actionMarket,
     actionDiscard: state.actionDiscard,
@@ -1713,7 +1736,8 @@ export function publicActionState(state, forPlayerId) {
     lastPlayedAction: state.lastPlayedAction && Date.now() - state.lastPlayedAction.t <= ACTION_PLAY_POPUP_MS
       ? state.lastPlayedAction
       : null,
-    pendingStarClaim: state.pendingStarClaim?.playerId === forPlayerId,
+    pendingStarClaim: !!ownStarClaim,
+    pendingStarClaimId: ownStarClaim?.id || null,
     pendingGroupChoice: state.pendingGroupChoice?.playerId === forPlayerId
       ? {
         id: state.pendingGroupChoice.id,
