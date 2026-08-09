@@ -481,7 +481,7 @@ async function listPublicRooms(userId) {
       banned_user_ids:state_json->bannedUserIds
     `)
     .eq('visibility', 'public')
-    .in('phase', ['lobby', 'initialFlip', 'playing', 'roundEnd', 'gameEnd'])
+    .in('phase', ['lobby', 'initialFlip', 'playing', 'roundEnd'])
     .is('quarantined_at', null)
     .gt('player_count', 0)
     .gt('updated_at', new Date(Date.now() - ROOM_TTL_MS).toISOString())
@@ -519,7 +519,7 @@ async function listPublicRooms(userId) {
 
 async function getPublicRoomPreview(roomId, userId) {
   const state = await getOrLoadRoom(roomId);
-  if (!state || state.roomVisibility !== 'public') return null;
+  if (!state || state.roomVisibility !== 'public' || state.phase === 'gameEnd') return null;
   if (isUserBanned(state, userId)) {
     throw new PublicError('room_banned', 'Vous êtes banni de cette salle.', 403);
   }
@@ -830,10 +830,19 @@ function broadcastRoom(roomId) {
     SOCKET_EVENTS.SPECTATOR_STATE,
     roomPublicState(state, null, spectatorCount),
   );
-  if (state.roomVisibility === 'public') {
+  if (state.roomVisibility === 'public' && state.phase !== 'gameEnd') {
     io.to(publicPreviewSocketRoom(roomId)).emit(
       SOCKET_EVENTS.PUBLIC_PREVIEW_STATE,
       roomPublicPreviewState(state, spectatorCount),
+    );
+  } else if (state.phase === 'gameEnd') {
+    revokePublicPreviewAccess(
+      roomId,
+      () => true,
+      {
+        code: 'room_unavailable',
+        message: 'Cette partie publique est terminée.',
+      },
     );
   }
   for (const [socketId, info] of socketToPlayer) {

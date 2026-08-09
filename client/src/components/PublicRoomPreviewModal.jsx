@@ -375,7 +375,7 @@ export default function PublicRoomPreviewModal({
         </div>
 
         <p className="sj-public-preview-owner">
-          Créée par {roomMetadata.creatorName || 'un joueur'}
+          Administrée par {roomMetadata.creatorName || 'un joueur'}
           {' · '}
           {previewPlayerCount}/{previewMaxPlayers} joueurs
           {' · '}

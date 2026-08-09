@@ -667,13 +667,14 @@ function GameApp() {
         setPublicRoomPreview(null);
         setPublicRoomPreviewLoading(false);
         setPublicRoomPreviewError(code === 'spectators_disabled' ? '' : message);
-        if (code === 'spectators_disabled') {
+        if (code === 'spectators_disabled' || code === 'room_unavailable') {
           const affectedRoomId = selectedPublicRoomRef.current.roomId;
           setSelectedPublicRoom(null);
           setPublicRooms((current) => current
-            .map((room) => room.roomId === affectedRoomId
+            .map((room) => code === 'spectators_disabled' && room.roomId === affectedRoomId
               ? { ...room, allowSpectators: false }
               : room)
+            .filter((room) => code !== 'room_unavailable' || room.roomId !== affectedRoomId)
             .filter(isPublicRoomAvailable));
         } else if (code === 'room_banned') {
           setSelectedPublicRoom(null);
@@ -984,7 +985,7 @@ function GameApp() {
                         <small>
                           {publicRoom.phase === 'lobby' ? 'Salle d’attente' : 'Partie en cours'}
                           {' · '}
-                          créée par {publicRoom.creatorName || 'un joueur'}
+                          administrée par {publicRoom.creatorName || 'un joueur'}
                           {' · '}
                           {roomVariantLabel(publicRoom)}
                           {publicRoom.locked ? ' · verrouillée' : ''}
