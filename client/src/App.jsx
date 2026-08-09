@@ -637,6 +637,7 @@ function GameApp() {
         roomId: savedRoomId,
         playerName: savedPlayerName,
         roomRole: initialRoomRole,
+        discoverActiveRoom: !initialRoomInvite && !savedRoomId,
       },
     });
     setSocket(nextSocket);
@@ -715,6 +716,7 @@ function GameApp() {
         roomId: rid,
         playerName: normalizePlayerNameInput(readGameValue('sj-player-name')),
         roomRole: joinedRole,
+        discoverActiveRoom: false,
       };
     });
     const applyRoomState = (nextState) => {

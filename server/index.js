@@ -444,6 +444,30 @@ async function findMemberByPlayer(roomId, playerId) {
   return data || null;
 }
 
+async function findLatestActiveMembership(userId) {
+  const { data, error } = await supabase.from('room_members')
+    .select('room_id, player_id, created_at')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(20);
+  if (error) throw error;
+
+  let latestGame = null;
+  let latestLobby = null;
+  for (const member of data || []) {
+    const state = await getOrLoadRoom(member.room_id);
+    if (!state || state.phase === 'gameEnd') continue;
+    if (!state.playersById[member.player_id]) continue;
+    const candidate = { member, updatedAt: state.updatedAt || 0 };
+    if (state.phase === 'lobby') {
+      if (!latestLobby || candidate.updatedAt > latestLobby.updatedAt) latestLobby = candidate;
+    } else if (!latestGame || candidate.updatedAt > latestGame.updatedAt) {
+      latestGame = candidate;
+    }
+  }
+  return latestGame?.member || latestLobby?.member || null;
+}
+
 async function createRoom({ ownerUserId, playerName, roomVisibility, maxPlayers }) {
   for (let attempt = 0; attempt < 20; attempt += 1) {
     const roomId = generateRoomId();
@@ -738,6 +762,12 @@ async function attachExistingMember(socket, roomId, playerName = '') {
   if (!state.playersById[member.player_id]) return null;
   await attachSocket(socket, roomId, member.player_id, playerName);
   return member;
+}
+
+async function attachLatestActiveMember(socket, playerName = '') {
+  const member = await findLatestActiveMembership(socket.data.auth.user.id);
+  if (!member) return null;
+  return attachExistingMember(socket, member.room_id, playerName);
 }
 
 async function ensureSocketSession(socket, { force = false } = {}) {
@@ -1299,13 +1329,21 @@ io.on('connection', (socket) => {
   scheduleSocketExpiry(socket);
   const initialRoomId = normalizeRoomId(socket.handshake.auth?.roomId);
   const initialRoomRole = normalizeRoomRole(socket.handshake.auth?.roomRole);
+  const discoverActiveRoom = socket.handshake.auth?.discoverActiveRoom === true;
   const initialAttach = initialRoomRole === 'spectator'
     ? attachSpectator(socket, initialRoomId)
-    : attachExistingMember(
-      socket,
-      initialRoomId,
-      normalizePlayerName(socket.handshake.auth?.playerName),
-    );
+    : initialRoomId
+      ? attachExistingMember(
+        socket,
+        initialRoomId,
+        normalizePlayerName(socket.handshake.auth?.playerName),
+      )
+      : discoverActiveRoom
+        ? attachLatestActiveMember(
+          socket,
+          normalizePlayerName(socket.handshake.auth?.playerName),
+        )
+        : Promise.resolve(null);
   socket.data.attachPromise = initialAttach.then((connection) => {
     if (initialRoomId && !connection) {
       socket.emit(SOCKET_EVENTS.ERROR, socketServerPayload(SOCKET_EVENTS.ERROR, {
