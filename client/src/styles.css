@@ -475,6 +475,11 @@ button {
   to { opacity: 1; transform: translate(-50%, 0); }
 }
 
+@keyframes sjTurnNoticeIn {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 .sj-fade-in { animation: sjFadeIn 0.24s ease both; }
 .sj-pop-in { animation: sjPopIn 0.2s ease both; }
 
@@ -1832,18 +1837,26 @@ input:focus {
   white-space: nowrap;
 }
 
-.sj-last-turn-notice {
+.sj-turn-notice-stack {
   position: fixed;
   top: clamp(48px, 7vh, 72px);
   left: 50%;
   z-index: 49;
+  width: calc(100vw - 32px);
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.sj-last-turn-notice {
   width: max-content;
-  max-width: calc(100vw - 32px);
+  max-width: 100%;
   display: grid;
   grid-template-columns: auto auto;
   align-items: center;
   gap: 10px;
-  transform: translateX(-50%);
   padding: 9px 14px 9px 9px;
   border: 1px solid rgba(239, 106, 97, 0.54);
   border-radius: 999px;
@@ -1856,7 +1869,27 @@ input:focus {
     inset 0 0 0 1px rgba(255, 255, 255, 0.06);
   font-size: clamp(12px, 1.8vw, 14px);
   pointer-events: none;
-  animation: sjToastIn 0.2s ease both;
+  animation: sjTurnNoticeIn 0.2s ease both;
+}
+
+.sj-my-turn-notice {
+  border-color: rgba(74, 199, 160, 0.58);
+  background:
+    linear-gradient(135deg, rgba(19, 62, 53, 0.96), rgba(28, 39, 49, 0.96));
+  color: #effff9;
+  box-shadow:
+    0 18px 48px rgba(0, 0, 0, 0.38),
+    0 0 0 4px rgba(74, 199, 160, 0.11),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+.sj-my-turn-notice .sj-last-turn-kicker {
+  background:
+    linear-gradient(135deg, rgba(57, 188, 145, 0.98), rgba(24, 126, 104, 0.98));
+  color: #f4fffb;
+  box-shadow:
+    0 8px 18px rgba(0, 0, 0, 0.24),
+    0 0 0 3px rgba(74, 199, 160, 0.13);
 }
 
 .sj-last-turn-kicker {
@@ -1906,9 +1939,11 @@ input:focus {
     white-space: nowrap;
   }
 
+  .sj-turn-notice-stack {
+    width: calc(100vw - 24px);
+  }
+
   .sj-last-turn-notice {
-    width: max-content;
-    max-width: calc(100vw - 24px);
     grid-template-columns: 1fr;
     justify-items: center;
     gap: 8px;
@@ -7781,13 +7816,17 @@ select:focus {
   --board-shadow: 0 10px 22px rgba(0, 0, 0, 0.26);
 }
 
-.sj-layout-short-landscape .sj-last-turn-notice {
+.sj-layout-short-landscape .sj-turn-notice-stack {
   top: auto;
   bottom: calc(
     max(var(--sj-shell-pad), env(safe-area-inset-bottom))
     + var(--sj-landscape-control-size)
     + 6px
   );
+  width: min(46vw, 360px);
+}
+
+.sj-layout-short-landscape .sj-last-turn-notice {
   max-width: min(46vw, 360px);
   padding: 5px 8px;
   gap: 5px;

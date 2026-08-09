@@ -148,6 +148,8 @@ const SHOW_ALL_ACTION_CARDS_PREVIEW = false;
 const MIN_RECONNECT_SCREEN_MS = 1000;
 const ACTION_PLAY_POPUP_MS = 3400;
 const STARTER_TIE_TOAST_MS = 3500;
+const TURN_NOTICE_MS = 3500;
+const TURN_VIBRATION_MS = 200;
 const MAX_PLAYER_NAME_LENGTH = 20;
 const ACTION_CARD_PREVIEWS = Object.keys(ACTION_LABELS).map((type) => ({
   id: `preview-${type}`,
@@ -1217,6 +1219,7 @@ function GameScreen({
   const [dismissedPeekId, setDismissedPeekId] = useState(null);
   const [lastSeenChatMessageId, setLastSeenChatMessageId] = useState(null);
   const [visibleLastTurnNoticeId, setVisibleLastTurnNoticeId] = useState(null);
+  const [visibleMyTurnNoticeId, setVisibleMyTurnNoticeId] = useState(null);
   const [roundCountdown, setRoundCountdown] = useState(10);
   const [starClaimModalReady, setStarClaimModalReady] = useState(false);
   const tutorialCheckedRef = useRef(false);
@@ -1315,6 +1318,11 @@ function GameScreen({
   const showLastTurnNotice = state.phase === 'playing'
     && !!roundEnder
     && visibleLastTurnNoticeId === lastTurnNoticeId;
+  const myTurnNoticeId = isMyTurn && !isSpectator
+    ? `${state.roundNumber || 0}-${state.turnSerial ?? `seat-${state.turnIndex}`}-${myId}`
+    : null;
+  const showMyTurnNotice = !!myTurnNoticeId
+    && visibleMyTurnNoticeId === myTurnNoticeId;
   const latestChatMessageId = chatMessages.at(-1)?.id || null;
   const chatRoomInitialized = initializedChatRoomRef.current === roomId;
   const unreadChatCount = chatModalOpen || !chatRoomInitialized
@@ -1549,10 +1557,34 @@ function GameScreen({
       setVisibleLastTurnNoticeId((currentId) => (
         currentId === lastTurnNoticeId ? null : currentId
       ));
-    }, 3500);
+    }, TURN_NOTICE_MS);
 
     return () => window.clearTimeout(timeout);
   }, [lastTurnNoticeId, state.phase]);
+
+  useEffect(() => {
+    if (!myTurnNoticeId) {
+      setVisibleMyTurnNoticeId(null);
+      return undefined;
+    }
+
+    setVisibleMyTurnNoticeId(myTurnNoticeId);
+    if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+      try {
+        navigator.vibrate(TURN_VIBRATION_MS);
+      } catch {
+        // Certains navigateurs exposent l'API sans autoriser la vibration.
+      }
+    }
+
+    const timeout = window.setTimeout(() => {
+      setVisibleMyTurnNoticeId((currentId) => (
+        currentId === myTurnNoticeId ? null : currentId
+      ));
+    }, TURN_NOTICE_MS);
+
+    return () => window.clearTimeout(timeout);
+  }, [myTurnNoticeId]);
 
   useEffect(() => {
     if (!['roundEnd', 'gameEnd'].includes(state.phase) || !roundScoreDeadline) {
@@ -2375,19 +2407,29 @@ function GameScreen({
         message={error || starterTieToast?.message}
         tone={error ? 'error' : 'info'}
       />
-      {showLastTurnNotice && (
-        <div className="sj-last-turn-notice" aria-live="polite">
-          <span className="sj-last-turn-kicker">Dernier tour</span>
-          <strong>
-            {roundEnder.id === myId ? (
-              'Vous avez découvert votre dernière carte.'
-            ) : (
-              <>
-                <span className="sj-action-modal-title-name">{roundEnder.name}</span>
-                {' a découvert sa dernière carte.'}
-              </>
-            )}
-          </strong>
+      {(showLastTurnNotice || showMyTurnNotice) && (
+        <div className="sj-turn-notice-stack">
+          {showLastTurnNotice && (
+            <div className="sj-last-turn-notice" aria-live="polite">
+              <span className="sj-last-turn-kicker">Dernier tour</span>
+              <strong>
+                {roundEnder.id === myId ? (
+                  'Vous avez découvert votre dernière carte.'
+                ) : (
+                  <>
+                    <span className="sj-action-modal-title-name">{roundEnder.name}</span>
+                    {' a découvert sa dernière carte.'}
+                  </>
+                )}
+              </strong>
+            </div>
+          )}
+          {showMyTurnNotice && (
+            <div className="sj-last-turn-notice sj-my-turn-notice" aria-live="assertive">
+              <span className="sj-last-turn-kicker">À votre tour</span>
+              <strong>C’est à vous de jouer !</strong>
+            </div>
+          )}
         </div>
       )}
 
