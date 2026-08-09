@@ -117,6 +117,16 @@ function releasePendingGameAction(socket) {
   if (socket) socketsWithPendingGameAction.delete(socket);
 }
 
+function clearSocketRoomAuth(socket) {
+  if (!socket) return;
+  socket.auth = {
+    ...socket.auth,
+    protocolVersion: SOCKET_PROTOCOL_VERSION,
+    roomId: '',
+    roomRole: ROOM_ROLES.PLAYER,
+  };
+}
+
 async function serverErrorDetails(response, fallback) {
   try {
     const payload = await response.json();
@@ -893,6 +903,7 @@ function GameApp() {
   }
 
   function leaveRoom() {
+    clearSocketRoomAuth(socket);
     emitSocket(socket, SOCKET_EVENTS.LEAVE_ROOM);
     saveGameValue('sj-room-id', '');
     saveGameValue(ROOM_ROLE_KEY, '');
