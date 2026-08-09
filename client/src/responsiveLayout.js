@@ -8,6 +8,8 @@ export const MIN_COMFORTABLE_OPPONENT_CARD_WIDTH = 36;
 export const PREFERRED_OPPONENT_CARD_WIDTH = 46;
 export const CHAT_EDGE_CLEARANCE = 44;
 export const MIN_CHAT_BOARD_GAP = 16;
+export const MAX_PLAYER_CARD_WIDTH = 140;
+const MAX_DESKTOP_PLAYER_CARD_WIDTH = 120;
 
 export function compensateViewportMeasurement({
   visualWidth,
@@ -106,9 +108,20 @@ function optimizeStackedMultiPlayerLayout({
       / Math.max(1, opponentCount),
     );
   const verticalBudget = Math.max(0, measuredBoardHeight - playGap * 2);
-  const meHeightShare = 0.5;
+  const tabletFillLayout = meMax > MAX_DESKTOP_PLAYER_CARD_WIDTH;
+  const minimumReservedHeight = boardMetrics(MIN_USABLE_CARD_WIDTH, {
+    compactOpponent: true,
+  }).height + pileHeightFor(minimumPileCardWidth);
+  const maxMeHeightBudget = tabletFillLayout
+    ? Math.max(96, verticalBudget - minimumReservedHeight)
+    : verticalBudget * 0.5;
   const maxMeCardWidth = quantizeLayoutSize(
-    fitBoardCardWidth(meWidthBudget, verticalBudget * meHeightShare, meMin, meMax),
+    fitBoardCardWidth(
+      meWidthBudget,
+      maxMeHeightBudget,
+      meMin,
+      meMax,
+    ),
     meMin,
     meMax,
   );
@@ -129,6 +142,8 @@ function optimizeStackedMultiPlayerLayout({
     for (let me = minimumMeCardWidth; me <= maxMeCardWidth; me += 2) {
       const meHeight = boardMetrics(me).height;
       for (let opponent = minimumOpponentCardWidth; opponent <= maxOpponentCardWidth; opponent += 2) {
+        const maximumSizeRatio = tabletFillLayout ? 2.4 : 2;
+        if (me / opponent > maximumSizeRatio) continue;
         const opponentHeight = boardMetrics(opponent, { compactOpponent: true }).height;
         for (let pile = minimumPileWidth; pile <= preferredPileCardWidth; pile += 2) {
           const usedHeight = meHeight + opponentHeight + pileHeightFor(pile);
@@ -142,9 +157,11 @@ function optimizeStackedMultiPlayerLayout({
           const balance = Math.min(...normalizedSizes) * 6
             + normalizedSizes.reduce((sum, value) => sum + value, 0);
           const slack = verticalBudget - usedHeight;
-          const score = slack <= 10
-            ? 100000 + balance * 100 - slack
-            : fill * 10000 + balance;
+          const score = tabletFillLayout
+            ? fill * 10000 + balance * 500
+            : slack <= 10
+              ? 100000 + balance * 100 - slack
+              : fill * 10000 + balance;
           if (!best || score > best.score) {
             best = { meCardWidth: me, opponentCardWidth: opponent, pileCardWidth: pile, usedHeight, score };
           }
@@ -165,7 +182,13 @@ function optimizeStackedMultiPlayerLayout({
       MIN_USABLE_CARD_WIDTH,
       maxOpponentCardWidth,
     ),
-    minimumPileWidth: minimumPileCardWidth,
+    minimumPileWidth: tabletFillLayout
+      ? quantizeLayoutSize(
+        preferredPileCardWidth * 0.8,
+        minimumPileCardWidth,
+        preferredPileCardWidth,
+      )
+      : minimumPileCardWidth,
   };
   for (let minimumMeCardWidth = preferredFloors.minimumMeCardWidth;
     minimumMeCardWidth >= meMin;
@@ -379,9 +402,13 @@ export function calculateAdaptiveBoardLayout({
   const meMin = mode.stacked ? MIN_USABLE_CARD_WIDTH : viewportHeight < 700 ? 38 : 44;
   const meMax = mode.shortLandscape
     ? 72
-    : mode.desktop || viewportWidth >= 600
-      ? 120
-      : 88;
+    : mode.desktop
+      ? MAX_DESKTOP_PLAYER_CARD_WIDTH
+      : viewportWidth >= 700
+        ? MAX_PLAYER_CARD_WIDTH
+        : viewportWidth >= 600
+          ? MAX_DESKTOP_PLAYER_CARD_WIDTH
+          : 88;
   let meCardWidth = fitBoardCardWidth(meWidthBudget, meHeightBudget, meMin, meMax, {
     shared: sharedTwoPlayer,
   });
@@ -615,7 +642,11 @@ export function calculateAdaptiveBoardLayout({
     && !mode.shortLandscape
     && opponentCount > 1
     && (opponentsRail || centeredOpponentRight > opponentsRightLimit);
-  const finalMeCardWidth = quantizeLayoutSize(meCardWidth, MIN_USABLE_CARD_WIDTH, 120);
+  const finalMeCardWidth = quantizeLayoutSize(
+    meCardWidth,
+    MIN_USABLE_CARD_WIDTH,
+    MAX_PLAYER_CARD_WIDTH,
+  );
 
   if (mode.stacked && !mode.shortLandscape && !sharedTwoPlayer && !chatClearance) {
     const renderedMeBoardWidth = boardMetrics(finalMeCardWidth).width;
