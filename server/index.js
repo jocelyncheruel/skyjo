@@ -665,13 +665,12 @@ async function attachSocket(
       409,
     );
   }
-  const { state, result: attachedPlayerName } = await mutateRoom(roomId, (draft) => {
+  const { state } = await mutateRoom(roomId, (draft) => {
     assertUserRoomAccess(draft, socket.data.auth.user.id);
     const player = draft.playersById[playerId];
     if (!player) throw new PublicError('seat_unavailable', 'Impossible de rejoindre cette salle.', 409);
     player.connected = true;
     if (playerName) player.name = playerName;
-    return player.name;
   });
   if (!socket.connected) {
     const hasAnotherSocket = socketIdsForPlayer(roomId, playerId).length > 0;
@@ -699,10 +698,6 @@ async function attachSocket(
   await safelySendInitialChatHistory(socket, state);
   scheduleNextRound(roomId, state);
   scheduleDefensePrompt(roomId, state);
-  if (socket.data.presenceEvent === 'join') {
-    await safelyAppendSystemChatMessage(roomId, `${attachedPlayerName} a rejoint la salle.`);
-  }
-  socket.data.presenceEvent = null;
 }
 
 async function attachSpectator(socket, roomId) {
@@ -1425,7 +1420,6 @@ io.on('connection', (socket) => {
       }
     }
     if (!state.playersById[member.player_id]) throw new PublicError('seat_unavailable', 'Impossible de rejoindre cette salle.', 409);
-    socket.data.presenceEvent = memberCreated ? 'join' : null;
     await attachSocket(socket, roomId, member.player_id, playerName, {
       removeMemberOnDisconnect: memberCreated,
     });
