@@ -2401,6 +2401,9 @@ function GameScreen({
         state={state}
         enabled={layoutReady}
         onMotionBatch={handleCardMotionBatch}
+        anchorRootRef={shellRef}
+        coordinateRootRef={shellRef}
+        portalRootRef={shellRef}
       />
       <div className="sj-game-controls" aria-label="Contrôles de la partie">
         {spectatorBadge}
