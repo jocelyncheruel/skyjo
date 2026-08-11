@@ -31,10 +31,6 @@ function recordCardMove(state, move) {
     .slice(-CARD_MOVE_HISTORY_LIMIT);
 }
 
-function connectedIds(state) {
-  return state.order.filter((id) => state.playersById[id]?.connected);
-}
-
 function currentPlayerId(state) {
   return state.order[state.turnIndex];
 }
@@ -375,12 +371,14 @@ function removeCompletedGroup(state, player, indexes, starBonus) {
 
 function actionTargetsAfterActor(state, actorId) {
   const actorIndex = state.order.indexOf(actorId);
-  if (actorIndex < 0) return connectedIds(state).filter((id) => id !== actorId);
+  if (actorIndex < 0) {
+    return state.order.filter((id) => id !== actorId && state.playersById[id]);
+  }
 
   const ordered = [];
   for (let offset = 1; offset < state.order.length; offset += 1) {
     const id = state.order[(actorIndex + offset) % state.order.length];
-    if (id !== actorId && state.playersById[id]?.connected) ordered.push(id);
+    if (id !== actorId && state.playersById[id]) ordered.push(id);
   }
   return ordered;
 }
@@ -1337,7 +1335,7 @@ export function resolveActionInput(state, playerId, payload = {}) {
     if (hasSlotTarget === hasActionTarget) throw new Error('Carte à retirer invalide.');
     if (hasSlotTarget) validateSlot(state, targetId, payload.slotIndex);
     if (hasActionTarget && !selectedActionCardId) throw new Error('Carte Action invalide.');
-    if (findDefenseIndex(state.playersById[targetId]) >= 0) {
+    if (target.connected && findDefenseIndex(target) >= 0) {
       beginDefensePrompt(state, pending, targetId, hasSlotTarget
         ? { slotIndex: payload.slotIndex }
         : { actionCardId: selectedActionCardId });
