@@ -1732,6 +1732,14 @@ input:focus {
     max-height: 92dvh;
     overflow: auto;
     gap: 12px;
+    padding-bottom: 0;
+  }
+
+  .sj-home-card::after {
+    content: "";
+    display: block;
+    flex: 0 0 clamp(16px, 3.2vh, 26px);
+    width: 100%;
   }
 
   .sj-home-card .sj-brand-logo-mark {
