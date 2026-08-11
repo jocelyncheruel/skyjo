@@ -93,6 +93,7 @@ export function RoomAdministrationButton({ onClick }) {
 export function RoomAdministrationModal({
   open,
   state,
+  roomId,
   myId,
   onClose,
   onSave,
@@ -270,6 +271,11 @@ export function RoomAdministrationModal({
                   <h3 id="room-access-title">Accès à la salle</h3>
                   <p>Visibilité et nombre de joueurs.</p>
                 </div>
+              </div>
+
+              <div className="sj-room-admin-room-code" aria-label={`Code de la partie ${roomId}`}>
+                <span>Code de la partie</span>
+                <strong>{roomId}</strong>
               </div>
 
               <div

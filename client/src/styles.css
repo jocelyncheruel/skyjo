@@ -3949,8 +3949,8 @@ button.sj-action-count-badge:focus-visible {
   grid-column: 1 / -1;
 }
 
-.sj-room-admin-access,
-.sj-room-admin-permissions {
+.sj-room-admin-section.sj-room-admin-access,
+.sj-room-admin-section.sj-room-admin-permissions {
   align-self: stretch;
 }
 
@@ -3974,6 +3974,36 @@ button.sj-action-count-badge:focus-visible {
   color: var(--muted);
   font-size: 12px;
   line-height: 1.4;
+}
+
+.sj-room-admin-room-code {
+  min-height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 2px 3px 7px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.09);
+}
+
+.sj-room-admin-room-code span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.sj-room-admin-room-code strong {
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+  padding: 4px 8px;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.06em;
+}
+
+.sj-room-admin-access > .sj-room-visibility {
+  margin-top: auto;
 }
 
 .sj-room-admin-capacity {

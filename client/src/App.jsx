@@ -2056,6 +2056,7 @@ function GameScreen({
     <RoomAdministrationModal
       open={roomAdministrationOpen}
       state={state}
+      roomId={roomId}
       myId={myId}
       onClose={() => setRoomAdministrationOpen(false)}
       onSave={(settings) => emitSocket(socket, SOCKET_EVENTS.UPDATE_ROOM_SETTINGS, settings)}
