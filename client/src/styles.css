@@ -549,6 +549,20 @@ button {
 
 .sj-lobby-room .sj-lobby-card.sj-fade-in {
   gap: 17px;
+  overflow: hidden;
+}
+
+.sj-lobby-room .sj-lobby-card > * {
+  flex-shrink: 0;
+}
+
+.sj-lobby-room .sj-lobby-card > .sj-player-list {
+  flex: 1 1 auto;
+  min-height: 44px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior-y: none;
+  scrollbar-gutter: stable;
 }
 
 .sj-brand-mark {
