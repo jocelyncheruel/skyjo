@@ -657,6 +657,8 @@ function advanceTurn(state) {
   }
   const revealedBeforeRoundEnd = isFinalTurn ? revealRemainingCards(player) : [];
   resolveAutomaticReveals(state, revealedBeforeRoundEnd);
+  if (revealedBeforeRoundEnd.length > 0
+    && clearCompletedGroups(state, player, { type: 'advance' })) return;
   const next = (state.turnIndex + 1) % state.order.length;
   if (state.roundEnderId && state.order[next] === state.roundEnderId) {
     endActionRound(state);
