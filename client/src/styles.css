@@ -8585,8 +8585,9 @@ select:focus {
   min-width: 0;
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: max-content max-content;
   grid-template-rows: max-content;
+  column-gap: clamp(16px, 4cqw, 56px);
   place-content: center;
   place-items: center;
   container-type: size;
@@ -8623,11 +8624,9 @@ select:focus {
   --sj-pile-card-width: clamp(36px, min(14vw, 20vh), 140px);
   --sj-pile-card-width: clamp(36px, min(14cqw, 20cqh), 140px);
   --pile-effect-space: clamp(6px, 1.8cqh, 12px);
-  position: absolute;
-  top: 50%;
-  right: auto;
-  bottom: auto;
-  left: calc(50% + clamp(170px, 26cqw, 285px));
+  position: static;
+  grid-column: 2;
+  grid-row: 1;
   z-index: 6;
   width: auto;
   min-width: 0;
@@ -8635,7 +8634,6 @@ select:focus {
   display: grid;
   place-items: center;
   translate: 0 var(--sj-tutorial-play-area-offset);
-  transform: translateY(-50%);
   overflow: visible;
 }
 
@@ -8682,6 +8680,8 @@ select:focus {
 
 .sj-tutorial-action-overlay {
   z-index: 180;
+  background: rgba(5, 8, 12, 0.94);
+  backdrop-filter: blur(9px);
 }
 
 .sj-tutorial-action-overlay .sj-action-draw-three-choice {
@@ -8938,6 +8938,14 @@ select:focus {
 
   .sj-tutorial-copy p {
     font-size: 10px;
+  }
+
+  .sj-tutorial-player .sj-board-me {
+    --sj-me-card-width: clamp(28px, min(13cqw, 17cqh), 96px);
+  }
+
+  .sj-tutorial-pile-zone {
+    --sj-pile-card-width: clamp(32px, min(12cqw, 17cqh), 88px);
   }
 
   .sj-tutorial-completion {
