@@ -408,14 +408,14 @@ export function AuthProvider({ children }) {
     setRecoveryIntent("password-reset");
   }, []);
 
-  const updateProfile = useCallback(async ({ firstName, lastName, playerName }) => {
+  const updateProfile = useCallback(async ({ firstName, lastName, playerName, leaderboardVisible, leaderboardNameFormat }) => {
     setError("");
     requireAuthConfiguration(setError);
     try {
       const data = await authApi('/api/auth/profile', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ firstName, lastName, playerName }),
+        body: JSON.stringify({ firstName, lastName, playerName, leaderboardVisible, leaderboardNameFormat }),
       }, 'Impossible de mettre à jour le profil.');
       if (!data?.user) throw new Error('Le profil mis à jour est indisponible.');
       setUser(data.user);

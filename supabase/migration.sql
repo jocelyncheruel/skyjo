@@ -7,20 +7,6 @@ CREATE TABLE IF NOT EXISTS public.skyjo_schema_migrations (
 
 REVOKE ALL ON TABLE public.skyjo_schema_migrations FROM PUBLIC, anon, authenticated;
 
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM public.skyjo_schema_migrations WHERE version = 'v4'
-  ) THEN
-    IF to_regclass('public.rooms') IS NOT NULL THEN
-      TRUNCATE TABLE public.rooms CASCADE;
-    END IF;
-    INSERT INTO public.skyjo_schema_migrations (version)
-    VALUES ('v4');
-  END IF;
-END;
-$$;
-
 CREATE TABLE IF NOT EXISTS public.rooms (
   room_id TEXT PRIMARY KEY,
   state_json JSONB NOT NULL,
@@ -41,45 +27,6 @@ CREATE TABLE IF NOT EXISTS public.rooms (
   CONSTRAINT rooms_schema_version_check CHECK (state_schema_version = 3),
   CONSTRAINT rooms_id_check CHECK (room_id ~ '^[0-9]{6}$')
 );
-
-ALTER TABLE public.rooms ADD COLUMN IF NOT EXISTS owner_user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE;
-ALTER TABLE public.rooms ADD COLUMN IF NOT EXISTS state_revision BIGINT NOT NULL DEFAULT 0;
-ALTER TABLE public.rooms ADD COLUMN IF NOT EXISTS state_schema_version SMALLINT NOT NULL DEFAULT 3;
-ALTER TABLE public.rooms ADD COLUMN IF NOT EXISTS visibility TEXT NOT NULL DEFAULT 'private';
-ALTER TABLE public.rooms ADD COLUMN IF NOT EXISTS phase TEXT NOT NULL DEFAULT 'lobby';
-ALTER TABLE public.rooms ADD COLUMN IF NOT EXISTS game_mode TEXT NOT NULL DEFAULT 'classic';
-ALTER TABLE public.rooms ADD COLUMN IF NOT EXISTS player_count SMALLINT NOT NULL DEFAULT 0;
-ALTER TABLE public.rooms ADD COLUMN IF NOT EXISTS creator_name TEXT NOT NULL DEFAULT '';
-ALTER TABLE public.rooms ADD COLUMN IF NOT EXISTS quarantined_at TIMESTAMPTZ;
-ALTER TABLE public.rooms ADD COLUMN IF NOT EXISTS quarantine_reason TEXT;
-ALTER TABLE public.rooms ALTER COLUMN state_schema_version SET DEFAULT 3;
-
-DELETE FROM public.rooms
-WHERE state_schema_version IS DISTINCT FROM 3
-   OR room_id !~ '^[0-9]{6}$';
-
-ALTER TABLE public.rooms ALTER COLUMN state_schema_version SET NOT NULL;
-
-ALTER TABLE public.rooms DROP CONSTRAINT IF EXISTS rooms_id_check;
-ALTER TABLE public.rooms ADD CONSTRAINT rooms_id_check
-  CHECK (room_id ~ '^[0-9]{6}$');
-ALTER TABLE public.rooms DROP CONSTRAINT IF EXISTS rooms_schema_version_check;
-ALTER TABLE public.rooms ADD CONSTRAINT rooms_schema_version_check
-  CHECK (state_schema_version = 3);
-
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'rooms_visibility_check') THEN
-    ALTER TABLE public.rooms ADD CONSTRAINT rooms_visibility_check CHECK (visibility IN ('private', 'public'));
-  END IF;
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'rooms_player_count_check') THEN
-    ALTER TABLE public.rooms ADD CONSTRAINT rooms_player_count_check CHECK (player_count BETWEEN 0 AND 8);
-  END IF;
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'rooms_state_size_check') THEN
-    ALTER TABLE public.rooms ADD CONSTRAINT rooms_state_size_check CHECK (octet_length(state_json::text) <= 2097152);
-  END IF;
-END;
-$$;
 
 CREATE INDEX IF NOT EXISTS rooms_updated_at_idx ON public.rooms (updated_at);
 CREATE INDEX IF NOT EXISTS rooms_public_idx
@@ -160,9 +107,12 @@ CREATE TABLE IF NOT EXISTS public.user_game_participations (
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   player_id TEXT NOT NULL,
   game_mode TEXT NOT NULL,
+  room_visibility TEXT NOT NULL DEFAULT 'private',
   outcome TEXT NOT NULL DEFAULT 'active',
   rounds_played INTEGER NOT NULL DEFAULT 0,
   final_score INTEGER,
+  final_rank INTEGER,
+  participant_count INTEGER,
   started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   finished_at TIMESTAMPTZ,
   PRIMARY KEY (room_id, game_serial, user_id),
@@ -170,15 +120,39 @@ CREATE TABLE IF NOT EXISTS public.user_game_participations (
   CONSTRAINT user_game_participations_serial_check CHECK (game_serial > 0),
   CONSTRAINT user_game_participations_player_id_check CHECK (player_id ~ '^[A-Za-z0-9_-]{10,40}$'),
   CONSTRAINT user_game_participations_mode_check CHECK (game_mode IN ('classic', 'action')),
+  CONSTRAINT user_game_participations_visibility_check CHECK (room_visibility IN ('private', 'public')),
   CONSTRAINT user_game_participations_outcome_check CHECK (outcome IN ('active', 'won', 'lost', 'draw', 'abandoned')),
   CONSTRAINT user_game_participations_rounds_check CHECK (rounds_played >= 0)
 );
 
-ALTER TABLE public.user_game_participations
-  DROP CONSTRAINT IF EXISTS user_game_participations_outcome_check;
-ALTER TABLE public.user_game_participations
-  ADD CONSTRAINT user_game_participations_outcome_check
-  CHECK (outcome IN ('active', 'won', 'lost', 'draw', 'abandoned'));
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM public.skyjo_schema_migrations WHERE version = 'v5') THEN
+    ALTER TABLE public.user_game_participations
+      ADD COLUMN IF NOT EXISTS room_visibility TEXT NOT NULL DEFAULT 'private',
+      ADD COLUMN IF NOT EXISTS final_rank INTEGER,
+      ADD COLUMN IF NOT EXISTS participant_count INTEGER;
+
+    IF NOT EXISTS (
+      SELECT 1
+      FROM pg_constraint
+      WHERE conrelid = 'public.user_game_participations'::regclass
+        AND conname = 'user_game_participations_visibility_check'
+    ) THEN
+      ALTER TABLE public.user_game_participations
+        ADD CONSTRAINT user_game_participations_visibility_check
+        CHECK (room_visibility IN ('private', 'public'));
+    END IF;
+
+    DROP FUNCTION IF EXISTS public.skyjo_auth_account_exists(TEXT);
+    DROP FUNCTION IF EXISTS public.commit_skyjo_room(
+      TEXT, JSONB, BIGINT, SMALLINT, UUID, TEXT, TEXT, TEXT, SMALLINT, TEXT, UUID, TEXT
+    );
+
+    INSERT INTO public.skyjo_schema_migrations (version) VALUES ('v5');
+  END IF;
+END;
+$$;
 
 CREATE INDEX IF NOT EXISTS user_game_participations_user_idx
   ON public.user_game_participations (user_id, started_at DESC);
@@ -216,11 +190,6 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.account_consents TO service
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.app_sessions TO service_role;
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.user_game_participations TO service_role;
 
-DROP FUNCTION IF EXISTS public.skyjo_auth_account_exists(TEXT);
-
-DROP FUNCTION IF EXISTS public.commit_skyjo_room(
-  TEXT, JSONB, BIGINT, SMALLINT, UUID, TEXT, TEXT, TEXT, SMALLINT, TEXT, UUID, TEXT
-);
 CREATE OR REPLACE FUNCTION public.commit_skyjo_room(
   p_room_id TEXT,
   p_state_json JSONB,
@@ -308,10 +277,11 @@ BEGIN
 
   IF v_game_serial > 0 AND p_phase <> 'lobby' THEN
     INSERT INTO public.user_game_participations (
-      room_id, game_serial, user_id, player_id, game_mode
+      room_id, game_serial, user_id, player_id, game_mode, room_visibility
     )
     SELECT p_room_id, v_game_serial, member.user_id, member.player_id,
-      CASE WHEN p_game_mode = 'action' THEN 'action' ELSE 'classic' END
+      CASE WHEN p_game_mode = 'action' THEN 'action' ELSE 'classic' END,
+      CASE WHEN p_visibility = 'public' THEN 'public' ELSE 'private' END
     FROM public.room_members AS member
     WHERE member.room_id = p_room_id
     ON CONFLICT (room_id, game_serial, user_id) DO NOTHING;
@@ -372,6 +342,24 @@ BEGIN
         finished_at = COALESCE(participation.finished_at, NOW())
     WHERE participation.room_id = p_room_id
       AND participation.game_serial = v_game_serial;
+
+    WITH final_placements AS (
+      SELECT ranked.player_id,
+        RANK() OVER (ORDER BY ranked.final_score ASC) AS final_rank,
+        COUNT(*) OVER () AS participant_count
+      FROM public.user_game_participations AS ranked
+      WHERE ranked.room_id = p_room_id
+        AND ranked.game_serial = v_game_serial
+        AND ranked.outcome <> 'abandoned'
+        AND ranked.final_score IS NOT NULL
+    )
+    UPDATE public.user_game_participations AS participation
+    SET final_rank = placements.final_rank,
+        participant_count = placements.participant_count
+    FROM final_placements AS placements
+    WHERE participation.room_id = p_room_id
+      AND participation.game_serial = v_game_serial
+      AND participation.player_id = placements.player_id;
   END IF;
 
   RETURN v_revision;
@@ -432,8 +420,32 @@ AS $$
 $$;
 
 DROP FUNCTION IF EXISTS public.get_skyjo_user_stats(UUID);
+DROP FUNCTION IF EXISTS public.get_skyjo_leaderboard(INTEGER);
+DROP FUNCTION IF EXISTS public.skyjo_placement_trophies(INTEGER, INTEGER);
 
-CREATE OR REPLACE FUNCTION public.get_skyjo_user_stats(
+CREATE FUNCTION public.skyjo_placement_trophies(p_rank INTEGER, p_player_count INTEGER)
+RETURNS INTEGER
+LANGUAGE sql
+IMMUTABLE
+STRICT
+SET search_path = ''
+AS $$
+  SELECT CASE
+    WHEN p_player_count < 2 OR p_rank < 1 OR p_rank > p_player_count THEN 0
+    WHEN p_player_count = 2 THEN CASE WHEN p_rank = 1 THEN 20 ELSE -5 END
+    WHEN p_rank = CEIL(p_player_count / 2.0) THEN 0
+    WHEN p_rank < CEIL(p_player_count / 2.0) THEN GREATEST(
+      6,
+      ROUND(20.0 * (CEIL(p_player_count / 2.0) - p_rank) / (CEIL(p_player_count / 2.0) - 1))::INTEGER
+    )
+    ELSE LEAST(
+      -1,
+      -ROUND(5.0 * (p_rank - CEIL(p_player_count / 2.0)) / (p_player_count - CEIL(p_player_count / 2.0)))::INTEGER
+    )
+  END;
+$$;
+
+CREATE FUNCTION public.get_skyjo_user_stats(
   p_user_id UUID
 )
 RETURNS TABLE (
@@ -447,13 +459,31 @@ RETURNS TABLE (
   action_games BIGINT,
   rounds_played BIGINT,
   best_score INTEGER,
-  last_game_at TIMESTAMPTZ
+  last_game_at TIMESTAMPTZ,
+  competitive_rating BIGINT,
+  current_win_streak BIGINT,
+  recent_games JSONB,
+  usage_metrics JSONB
 )
 LANGUAGE sql
 STABLE
 SECURITY DEFINER
 SET search_path = ''
 AS $$
+  WITH ordered_results AS (
+    SELECT participation.*,
+      COUNT(*) FILTER (WHERE outcome <> 'won') OVER (
+        PARTITION BY user_id ORDER BY COALESCE(finished_at, started_at), room_id, game_serial
+      ) AS streak_group
+    FROM public.user_game_participations AS participation
+    WHERE user_id = p_user_id
+  ), scored_results AS (
+    SELECT ordered_results.*,
+      CASE WHEN outcome = 'won' THEN COUNT(*) FILTER (WHERE outcome = 'won') OVER (
+        PARTITION BY user_id, streak_group ORDER BY COALESCE(finished_at, started_at), room_id, game_serial
+      ) ELSE 0 END AS win_streak
+    FROM ordered_results
+  )
   SELECT
     COUNT(*) FILTER (WHERE outcome IN ('won', 'lost', 'draw', 'abandoned')) AS games_played,
     COUNT(*) FILTER (WHERE outcome = 'won') AS games_won,
@@ -473,9 +503,149 @@ AS $$
     MIN(final_score) FILTER (WHERE outcome IN ('won', 'lost', 'draw')) AS best_score,
     MAX(COALESCE(finished_at, started_at)) FILTER (
       WHERE outcome IN ('won', 'lost', 'draw', 'abandoned')
-    ) AS last_game_at
-  FROM public.user_game_participations
-  WHERE user_id = p_user_id;
+    ) AS last_game_at,
+    GREATEST(0, COALESCE(SUM(
+      CASE WHEN outcome = 'abandoned' THEN -8
+        WHEN final_rank IS NULL OR participant_count IS NULL OR participant_count < 2 THEN 0
+        ELSE public.skyjo_placement_trophies(final_rank, participant_count)
+          + CASE WHEN final_rank = 1 THEN LEAST(GREATEST(win_streak - 1, 0), 5) ELSE 0 END
+      END
+    ), 0)) AS competitive_rating,
+    COALESCE((ARRAY_AGG(win_streak ORDER BY COALESCE(finished_at, started_at) DESC, room_id DESC, game_serial DESC)
+      FILTER (WHERE outcome IN ('won', 'lost', 'draw', 'abandoned')))[1], 0) AS current_win_streak,
+    COALESCE((
+      SELECT JSONB_AGG(JSONB_BUILD_OBJECT(
+        'outcome', recent.outcome,
+        'mode', recent.game_mode
+      ) ORDER BY recent.finished_at ASC)
+      FROM (
+        SELECT result.outcome, result.game_mode,
+          COALESCE(result.finished_at, result.started_at) AS finished_at
+        FROM scored_results AS result
+        WHERE result.outcome IN ('won', 'lost', 'draw')
+        ORDER BY COALESCE(result.finished_at, result.started_at) DESC,
+          result.room_id DESC, result.game_serial DESC
+        LIMIT 10
+      ) AS recent
+    ), '[]'::JSONB) AS recent_games,
+    JSONB_BUILD_OBJECT(
+      'last7', COUNT(*) FILTER (
+        WHERE outcome IN ('won', 'lost', 'draw', 'abandoned')
+          AND COALESCE(finished_at, started_at) >= NOW() - INTERVAL '7 days'
+      ),
+      'last30', COUNT(*) FILTER (
+        WHERE outcome IN ('won', 'lost', 'draw', 'abandoned')
+          AND COALESCE(finished_at, started_at) >= NOW() - INTERVAL '30 days'
+      ),
+      'activeDays30', COUNT(DISTINCT DATE(COALESCE(finished_at, started_at))) FILTER (
+        WHERE outcome IN ('won', 'lost', 'draw', 'abandoned')
+          AND COALESCE(finished_at, started_at) >= NOW() - INTERVAL '30 days'
+      ),
+      'weekdays', JSONB_BUILD_ARRAY(
+        COUNT(*) FILTER (WHERE outcome IN ('won', 'lost', 'draw', 'abandoned') AND EXTRACT(ISODOW FROM COALESCE(finished_at, started_at)) = 1),
+        COUNT(*) FILTER (WHERE outcome IN ('won', 'lost', 'draw', 'abandoned') AND EXTRACT(ISODOW FROM COALESCE(finished_at, started_at)) = 2),
+        COUNT(*) FILTER (WHERE outcome IN ('won', 'lost', 'draw', 'abandoned') AND EXTRACT(ISODOW FROM COALESCE(finished_at, started_at)) = 3),
+        COUNT(*) FILTER (WHERE outcome IN ('won', 'lost', 'draw', 'abandoned') AND EXTRACT(ISODOW FROM COALESCE(finished_at, started_at)) = 4),
+        COUNT(*) FILTER (WHERE outcome IN ('won', 'lost', 'draw', 'abandoned') AND EXTRACT(ISODOW FROM COALESCE(finished_at, started_at)) = 5),
+        COUNT(*) FILTER (WHERE outcome IN ('won', 'lost', 'draw', 'abandoned') AND EXTRACT(ISODOW FROM COALESCE(finished_at, started_at)) = 6),
+        COUNT(*) FILTER (WHERE outcome IN ('won', 'lost', 'draw', 'abandoned') AND EXTRACT(ISODOW FROM COALESCE(finished_at, started_at)) = 7)
+      ),
+      'periods', JSONB_BUILD_ARRAY(
+        COUNT(*) FILTER (WHERE outcome IN ('won', 'lost', 'draw', 'abandoned') AND EXTRACT(HOUR FROM COALESCE(finished_at, started_at) AT TIME ZONE 'Europe/Paris') BETWEEN 5 AND 11),
+        COUNT(*) FILTER (WHERE outcome IN ('won', 'lost', 'draw', 'abandoned') AND EXTRACT(HOUR FROM COALESCE(finished_at, started_at) AT TIME ZONE 'Europe/Paris') BETWEEN 12 AND 17),
+        COUNT(*) FILTER (WHERE outcome IN ('won', 'lost', 'draw', 'abandoned') AND EXTRACT(HOUR FROM COALESCE(finished_at, started_at) AT TIME ZONE 'Europe/Paris') BETWEEN 18 AND 22),
+        COUNT(*) FILTER (WHERE outcome IN ('won', 'lost', 'draw', 'abandoned') AND (EXTRACT(HOUR FROM COALESCE(finished_at, started_at) AT TIME ZONE 'Europe/Paris') >= 23 OR EXTRACT(HOUR FROM COALESCE(finished_at, started_at) AT TIME ZONE 'Europe/Paris') < 5))
+      )
+    ) AS usage_metrics
+  FROM scored_results;
+$$;
+
+CREATE FUNCTION public.get_skyjo_leaderboard(
+  p_limit INTEGER DEFAULT 100
+)
+RETURNS TABLE (
+  rank_position BIGINT,
+  user_id UUID,
+  player_name TEXT,
+  competitive_rating BIGINT,
+  games_played BIGINT,
+  games_won BIGINT,
+  current_win_streak BIGINT
+)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+  WITH ordered_results AS (
+    SELECT participation.*,
+      COUNT(*) FILTER (WHERE outcome <> 'won') OVER (
+        PARTITION BY user_id ORDER BY COALESCE(finished_at, started_at), room_id, game_serial
+      ) AS streak_group
+    FROM public.user_game_participations AS participation
+    WHERE participation.user_id IS NOT NULL
+  ), scored_results AS (
+    SELECT ordered_results.*,
+      CASE WHEN outcome = 'won' THEN COUNT(*) FILTER (WHERE outcome = 'won') OVER (
+        PARTITION BY user_id, streak_group ORDER BY COALESCE(finished_at, started_at), room_id, game_serial
+      ) ELSE 0 END AS win_streak
+    FROM ordered_results
+  ), player_results AS (
+    SELECT
+      user_id,
+      COUNT(*) FILTER (WHERE outcome IN ('won', 'lost', 'draw', 'abandoned')) AS games_played,
+      COUNT(*) FILTER (WHERE outcome = 'won') AS games_won,
+      GREATEST(0, COALESCE(SUM(
+        CASE WHEN outcome = 'abandoned' THEN -8
+          WHEN final_rank IS NULL OR participant_count IS NULL OR participant_count < 2 THEN 0
+          ELSE public.skyjo_placement_trophies(final_rank, participant_count)
+            + CASE WHEN final_rank = 1 THEN LEAST(GREATEST(win_streak - 1, 0), 5) ELSE 0 END
+        END
+      ), 0)) AS rating,
+      COALESCE((ARRAY_AGG(win_streak ORDER BY COALESCE(finished_at, started_at) DESC, room_id DESC, game_serial DESC)
+        FILTER (WHERE outcome IN ('won', 'lost', 'draw', 'abandoned')))[1], 0) AS current_win_streak
+    FROM scored_results
+    GROUP BY user_id
+  ), ranked AS (
+    SELECT
+      ROW_NUMBER() OVER (
+        ORDER BY COALESCE(results.rating, 0) DESC,
+          COALESCE(results.games_won, 0) DESC,
+          COALESCE(results.games_played, 0) ASC,
+          user_account.created_at ASC,
+          user_account.id
+      ) AS rank_position,
+      user_account.id AS user_id,
+      LEFT(CASE COALESCE(user_account.raw_user_meta_data ->> 'leaderboard_name_format', 'player_name')
+        WHEN 'first_name' THEN COALESCE(NULLIF(user_account.raw_user_meta_data ->> 'first_name', ''), 'Joueur')
+        WHEN 'first_initial' THEN CONCAT(
+          COALESCE(NULLIF(user_account.raw_user_meta_data ->> 'first_name', ''), 'Joueur'),
+          CASE WHEN NULLIF(user_account.raw_user_meta_data ->> 'last_name', '') IS NULL THEN ''
+            ELSE CONCAT(' ', LEFT(user_account.raw_user_meta_data ->> 'last_name', 1), '.') END
+        )
+        WHEN 'full_name' THEN COALESCE(NULLIF(CONCAT_WS(' ',
+          NULLIF(user_account.raw_user_meta_data ->> 'first_name', ''),
+          NULLIF(user_account.raw_user_meta_data ->> 'last_name', '')
+        ), ''), 'Joueur')
+        ELSE COALESCE(
+          NULLIF(user_account.raw_user_meta_data ->> 'player_name', ''),
+          NULLIF(user_account.raw_user_meta_data ->> 'first_name', ''),
+          'Joueur'
+        )
+      END, 20) AS player_name,
+      COALESCE(results.rating, 0) AS competitive_rating,
+      COALESCE(results.games_played, 0) AS games_played,
+      COALESCE(results.games_won, 0) AS games_won,
+      COALESCE(results.current_win_streak, 0) AS current_win_streak
+    FROM auth.users AS user_account
+    LEFT JOIN player_results AS results ON results.user_id = user_account.id
+    WHERE user_account.raw_user_meta_data ->> 'leaderboard_visible' = 'true'
+  )
+  SELECT ranked.rank_position, ranked.user_id, ranked.player_name,
+    ranked.competitive_rating, ranked.games_played, ranked.games_won, ranked.current_win_streak
+  FROM ranked
+  ORDER BY ranked.rank_position, ranked.user_id
+  LIMIT LEAST(GREATEST(COALESCE(p_limit, 100), 1), 100);
 $$;
 
 CREATE OR REPLACE FUNCTION public.delete_stale_skyjo_rooms()
@@ -524,6 +694,7 @@ REVOKE ALL ON FUNCTION public.commit_skyjo_room(TEXT, JSONB, BIGINT, SMALLINT, U
 REVOKE ALL ON FUNCTION public.append_skyjo_message(TEXT, TEXT, TEXT, TEXT, TEXT, TIMESTAMPTZ) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.is_skyjo_session_active(UUID, UUID) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.get_skyjo_user_stats(UUID) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.get_skyjo_leaderboard(INTEGER) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.delete_stale_skyjo_rooms() FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.delete_expired_skyjo_app_sessions() FROM PUBLIC, anon, authenticated;
 
@@ -531,6 +702,7 @@ GRANT EXECUTE ON FUNCTION public.commit_skyjo_room(TEXT, JSONB, BIGINT, SMALLINT
 GRANT EXECUTE ON FUNCTION public.append_skyjo_message(TEXT, TEXT, TEXT, TEXT, TEXT, TIMESTAMPTZ) TO service_role;
 GRANT EXECUTE ON FUNCTION public.is_skyjo_session_active(UUID, UUID) TO service_role;
 GRANT EXECUTE ON FUNCTION public.get_skyjo_user_stats(UUID) TO service_role;
+GRANT EXECUTE ON FUNCTION public.get_skyjo_leaderboard(INTEGER) TO service_role;
 GRANT EXECUTE ON FUNCTION public.delete_stale_skyjo_rooms() TO service_role;
 GRANT EXECUTE ON FUNCTION public.delete_expired_skyjo_app_sessions() TO service_role;
 

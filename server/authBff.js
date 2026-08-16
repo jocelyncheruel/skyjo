@@ -209,6 +209,11 @@ function publicUser(user) {
     lastName,
     displayName,
     playerName: normalizePlayerName(metadata.player_name || firstName || displayName || fallback),
+    leaderboardVisible: metadata.leaderboard_visible === true,
+    leaderboardNameFormat: ['player_name', 'first_name', 'first_initial', 'full_name']
+      .includes(metadata.leaderboard_name_format)
+      ? metadata.leaderboard_name_format
+      : 'player_name',
     preferredLocale: normalizeLocale(metadata.preferred_locale || metadata.locale || ''),
     provider,
     providers,
@@ -224,6 +229,18 @@ function publicGameStats(row) {
   };
   const score = Number(row?.best_score);
   const lastGameTimestamp = Date.parse(String(row?.last_game_at || ''));
+  const recentGames = (Array.isArray(row?.recent_games) ? row.recent_games : []).slice(-10).map((game) => ({
+    outcome: ['won', 'lost', 'draw'].includes(game?.outcome) ? game.outcome : 'draw',
+    mode: game?.mode === 'action' ? 'action' : 'classic',
+  }));
+  const usage = row?.usage_metrics && typeof row.usage_metrics === 'object' ? row.usage_metrics : {};
+  const usageMetrics = {
+    last7: count(usage.last7),
+    last30: count(usage.last30),
+    activeDays30: count(usage.activeDays30),
+    weekdays: (Array.isArray(usage.weekdays) ? usage.weekdays : []).slice(0, 7).map(count),
+    periods: (Array.isArray(usage.periods) ? usage.periods : []).slice(0, 4).map(count),
+  };
   return {
     gamesPlayed: count(row?.games_played),
     gamesWon: count(row?.games_won),
@@ -238,7 +255,27 @@ function publicGameStats(row) {
     lastGameAt: Number.isFinite(lastGameTimestamp)
       ? new Date(lastGameTimestamp).toISOString()
       : '',
+    currentWinStreak: count(row?.current_win_streak),
+    recentGames,
+    usageMetrics,
   };
+}
+
+function publicLeaderboard(rows, userId) {
+  return (Array.isArray(rows) ? rows : []).slice(0, 100).map((row, index) => ({
+    rank: countSafe(row?.rank_position) || index + 1,
+    playerName: normalizePlayerName(row?.player_name) || 'Joueur',
+    rating: countSafe(row?.competitive_rating),
+    gamesPlayed: countSafe(row?.games_played),
+    gamesWon: countSafe(row?.games_won),
+    currentWinStreak: countSafe(row?.current_win_streak),
+    isCurrentUser: String(row?.user_id || '') === String(userId || ''),
+  }));
+}
+
+function countSafe(value) {
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : 0;
 }
 
 function authFailure() {
@@ -627,23 +664,39 @@ export function createAuthBff({
 
   router.get('/profile/stats', rateLimit('auth-profile-stats', 30, 60_000), requireAuth, requireStandardSession, async (req, res, next) => {
     try {
-      const { data, error } = await serviceClient.rpc('get_skyjo_user_stats', {
-        p_user_id: req.auth.user.id,
+      const [statisticsResult, leaderboardResult] = await Promise.all([
+        serviceClient.rpc('get_skyjo_user_stats', { p_user_id: req.auth.user.id }),
+        serviceClient.rpc('get_skyjo_leaderboard', { p_limit: 100 }),
+      ]);
+      if (statisticsResult.error) throw statisticsResult.error;
+      const row = Array.isArray(statisticsResult.data) ? statisticsResult.data[0] : statisticsResult.data;
+      res.json({
+        stats: {
+          ...publicGameStats(row || {}),
+          competitiveRating: countSafe(row?.competitive_rating),
+          leaderboard: leaderboardResult.error
+            ? []
+            : publicLeaderboard(leaderboardResult.data, req.auth.user.id),
+        },
       });
-      if (error) throw error;
-      const row = Array.isArray(data) ? data[0] : data;
-      res.json({ stats: publicGameStats(row || {}) });
     } catch (error) { next(error); }
   });
 
   router.post('/profile', rateLimit('auth-profile', 10, 60_000), requireAuth, requireStandardSession, requireCsrf, async (req, res, next) => {
     try {
-      const body = objectPayload(req.body, ['firstName', 'lastName', 'playerName']);
+      const body = objectPayload(req.body, [
+        'firstName', 'lastName', 'playerName', 'leaderboardVisible', 'leaderboardNameFormat',
+      ]);
       const firstName = normalizeName(body.firstName);
       const lastName = normalizeName(body.lastName);
       const playerName = normalizePlayerName(body.playerName);
+      const leaderboardVisible = body.leaderboardVisible === true;
+      const leaderboardNameFormat = String(body.leaderboardNameFormat || 'player_name');
       if (!firstName || !lastName || !playerName) {
         throw new PublicError('invalid_profile', 'Renseignez un prénom, un nom et un pseudonyme valides.', 400);
+      }
+      if (!['player_name', 'first_name', 'first_initial', 'full_name'].includes(leaderboardNameFormat)) {
+        throw new PublicError('invalid_profile', 'Format du nom de classement invalide.', 400);
       }
 
       const client = buildAuthClient();
@@ -665,6 +718,8 @@ export function createAuthBff({
         last_name: lastName,
         display_name: normalizeName(`${firstName} ${lastName}`),
         player_name: playerName,
+        leaderboard_visible: leaderboardVisible,
+        leaderboard_name_format: leaderboardNameFormat,
         ...(identityChanged ? { profile_source: 'user' } : {}),
       };
       const { data, error } = await client.auth.updateUser({

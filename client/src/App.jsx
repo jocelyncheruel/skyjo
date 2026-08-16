@@ -46,7 +46,7 @@ import {
   LeaveRoomModal,
   SpectatorBadge,
 } from './components/RoomUi.jsx';
-import ProfileModal, { ProfileButton } from './ProfileModal.jsx';
+import ProfileModal, { ActivityButton, ProfileButton } from './ProfileModal.jsx';
 import { AuthView, ConsentGate, LegalPage, ResetPasswordView } from './Auth.jsx';
 import { useAuth } from './authContext.js';
 import { apiFetch, AUTH_REMEMBER_KEY, SERVER_URL } from './apiClient.js';
@@ -342,6 +342,7 @@ function GameApp() {
   const [publicRoomPreviewError, setPublicRoomPreviewError] = useState('');
   const [homePanel, setHomePanel] = useState('home');
   const [profileOpen, setProfileOpen] = useState(false);
+  const [activityOpen, setActivityOpen] = useState(false);
   const [qrScannerSupported, setQrScannerSupported] = useState(false);
   const [qrScannerOpen, setQrScannerOpen] = useState(false);
   const [state, setState] = useState(null);
@@ -957,6 +958,7 @@ function GameApp() {
             className="sj-lobby-card sj-home-card sj-public-search-card"
           >
             <div className="sj-account-controls">
+              <ActivityButton onClick={() => setActivityOpen(true)} />
               <ProfileButton onClick={() => setProfileOpen(true)} />
               <button
                 type="button"
@@ -1021,6 +1023,7 @@ function GameApp() {
             inert={homePanel === 'public' ? '' : undefined}
           >
             <div className="sj-account-controls">
+              <ActivityButton onClick={() => setActivityOpen(true)} />
               <ProfileButton onClick={() => setProfileOpen(true)} />
               <button
                 type="button"
@@ -1148,6 +1151,11 @@ function GameApp() {
           setPlayerName(nextPlayerName);
           saveGameValue('sj-player-name', nextPlayerName);
         }}
+      />
+      <ProfileModal
+        mode="activity"
+        open={activityOpen}
+        onClose={() => setActivityOpen(false)}
       />
       <RoomQrScannerModal
         open={qrScannerOpen}
