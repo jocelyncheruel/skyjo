@@ -30,6 +30,7 @@ import {
   PileButton,
 } from './components/GameTablePieces.jsx';
 import PlayerBoard from './components/PlayerBoard.jsx';
+import GameEndCelebration from './components/GameEndCelebration.jsx';
 import PublicRoomPreviewModal from './components/PublicRoomPreviewModal.jsx';
 import {
   RoomAdministrationButton,
@@ -314,7 +315,7 @@ function SkyjoApp() {
 }
 
 function GameApp() {
-  const { user, logout } = useAuth();
+  const { user, logout, getProfileStats } = useAuth();
   const accountPlayerName = normalizePlayerNameInput(user?.playerName || user?.firstName || user?.displayName || '');
   const [initialRoomInvite] = useState(() => readRoomInviteFromFragment());
   const [socket, setSocket] = useState(null);
@@ -1199,6 +1200,7 @@ function GameApp() {
       onLeaveRoom={leaveRoom}
       chatMessages={chatMessages}
       chatHasMore={chatHasMore}
+      getProfileStats={getProfileStats}
       onLoadOlderChat={() => {
         if (chatHasMore && chatBefore) emitSocket(socket, SOCKET_EVENTS.LOAD_CHAT_HISTORY, { before: chatBefore });
       }}
@@ -1224,6 +1226,7 @@ function GameScreen({
   socket, state, myId, roomId, isSpectator = false, connected = true,
   error, errorSerial, onLeaveRoom,
   chatMessages = [], chatHasMore = false, onLoadOlderChat,
+  getProfileStats,
 }) {
   const [copied, setCopied] = useState(false);
   const [inviteModalOpen, setInviteModalOpen] = useState(false);
@@ -1250,6 +1253,11 @@ function GameScreen({
   const [cardMotionEndsAt, setCardMotionEndsAt] = useState(0);
   const [visibleRoundRevealId, setVisibleRoundRevealId] = useState(null);
   const [roundRevealEndsAt, setRoundRevealEndsAt] = useState(0);
+  const [gameEndStats, setGameEndStats] = useState(null);
+  const [gameEndStatsLoading, setGameEndStatsLoading] = useState(false);
+  const preGameStatsRef = useRef(null);
+  const statsGameSerialRef = useRef(null);
+  const gameEndSnapshotRef = useRef(null);
   const initializedChatRoomRef = useRef('');
   const starterTieToastTimerRef = useRef(null);
   const closeChatModal = useCallback(() => setChatModalOpen(false), []);
@@ -1281,6 +1289,70 @@ function GameScreen({
   );
   const concealRoundReveal = !!roundRevealId && visibleRoundRevealId !== roundRevealId;
   const motionSequenceEndsAt = Math.max(cardMotionEndsAt, roundRevealEndsAt);
+  if (
+    state.phase === 'gameEnd'
+    && (!gameEndSnapshotRef.current || gameEndSnapshotRef.current.gameSerial !== state.gameSerial)
+  ) {
+    gameEndSnapshotRef.current = {
+      gameSerial: state.gameSerial,
+      players: state.players.map((player) => ({ ...player })),
+      winnerIds: Array.isArray(state.winnerIds) && state.winnerIds.length > 0
+        ? [...state.winnerIds]
+        : state.winnerId ? [state.winnerId] : [],
+    };
+  }
+
+  useEffect(() => {
+    if (isSpectator || !getProfileStats || !state.gameSerial) return undefined;
+    if (!['lobby', 'gameEnd'].includes(state.phase) && statsGameSerialRef.current !== state.gameSerial) {
+      statsGameSerialRef.current = state.gameSerial;
+      let cancelled = false;
+      getProfileStats({ force: true }).then((stats) => {
+        if (!cancelled) preGameStatsRef.current = stats;
+      }).catch(() => {});
+      return () => { cancelled = true; };
+    }
+    return undefined;
+  }, [getProfileStats, isSpectator, state.gameSerial, state.phase]);
+
+  useEffect(() => {
+    if (state.phase !== 'gameEnd' || isSpectator || !getProfileStats) {
+      if (state.phase !== 'gameEnd') setGameEndStats(null);
+      return undefined;
+    }
+    let cancelled = false;
+    let retryTimer;
+    setGameEndStatsLoading(true);
+    const loadStats = async (attempt = 0) => {
+      try {
+        const stats = await getProfileStats({ force: true });
+        const previousGames = Number(preGameStatsRef.current?.gamesPlayed || 0);
+        if (!cancelled && attempt < 2 && Number(stats?.gamesPlayed || 0) <= previousGames) {
+          retryTimer = window.setTimeout(() => {
+            retryTimer = undefined;
+            loadStats(attempt + 1);
+          }, 700 + attempt * 500);
+          return;
+        }
+        if (!cancelled) setGameEndStats(stats);
+      } catch {
+        if (!cancelled && attempt < 2) {
+          retryTimer = window.setTimeout(() => {
+            retryTimer = undefined;
+            loadStats(attempt + 1);
+          }, 900);
+          return;
+        }
+      } finally {
+        if (!cancelled && !retryTimer) setGameEndStatsLoading(false);
+      }
+    };
+    loadStats();
+    return () => {
+      cancelled = true;
+      if (retryTimer) window.clearTimeout(retryTimer);
+    };
+  }, [getProfileStats, isSpectator, state.gameSerial, state.phase]);
 
   const roundScorePhase = ['roundEnd', 'gameEnd'].includes(state.phase);
   const roundScoreDeadline = Math.max(state.roundScoresAt || 0, motionSequenceEndsAt);
@@ -2360,16 +2432,11 @@ function GameScreen({
   }
 
   if (state.phase === 'gameEnd' && roundScoresVisible) {
-    const winnerIds = Array.isArray(state.winnerIds) && state.winnerIds.length > 0
-      ? state.winnerIds
-      : state.winnerId ? [state.winnerId] : [];
-    const winners = winnerIds
-      .map((winnerId) => state.players.find((player) => player.id === winnerId))
-      .filter(Boolean);
-    const isDraw = winnerIds.length > 1;
-    const winner = winners[0];
-    const drawNames = new Intl.ListFormat('fr-FR', { style: 'long', type: 'conjunction' })
-      .format(winners.map((player) => player.name));
+    const finalSnapshot = gameEndSnapshotRef.current
+      && gameEndSnapshotRef.current.gameSerial === state.gameSerial
+      ? gameEndSnapshotRef.current
+      : { players: state.players, winnerIds: state.winnerIds || [] };
+    const winnerIds = finalSnapshot.winnerIds;
     return (
       <>
         <div className="sj-app-shell sj-lobby-room sj-room-controls-layout">
@@ -2378,22 +2445,19 @@ function GameScreen({
           {roomAdministrationButton}
           {spectatorBadge}
           <GameToast key={errorSerial} message={error} />
-          <section className="sj-lobby-card sj-pop-in">
-            <div className="sj-brand-mark"><SkyjoLogo label={isDraw ? 'Égalité' : `${winner?.name || 'Joueur'} gagne`} /></div>
-            {isDraw && (
-              <p className="sj-hint">
-                {drawNames || 'Plusieurs joueurs'} terminent avec le même plus petit score.
-              </p>
-            )}
-            <ScoreTable players={state.players} />
-            {isCreator ? (
-              <button className="sj-btn sj-btn-primary" onClick={() => emitSocket(socket, SOCKET_EVENTS.RETURN_TO_LOBBY)}>
-                Nouvelle partie
-              </button>
-            ) : (
-              <p className="sj-hint">En attente du créateur pour ouvrir une nouvelle partie</p>
-            )}
-          </section>
+          <GameEndCelebration
+            players={finalSnapshot.players}
+            myId={myId}
+            winnerIds={winnerIds}
+            isSpectator={isSpectator}
+            beforeStats={preGameStatsRef.current}
+            afterStats={gameEndStats}
+            statsLoading={gameEndStatsLoading}
+            roundNumber={state.roundNumber}
+            gameMode={state.gameMode}
+            isCreator={isCreator}
+            onNewGame={() => emitSocket(socket, SOCKET_EVENTS.RETURN_TO_LOBBY)}
+          />
         </div>
         {leaveModal}
         {chatModal}
