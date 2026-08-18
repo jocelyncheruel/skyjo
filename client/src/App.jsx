@@ -1807,10 +1807,14 @@ function GameScreen({
 
   useEffect(() => {
     if (!viewedActionPlayerId) return;
-    if (!isActionMode || !state.players.some((player) => player.id === viewedActionPlayerId)) {
+    if (
+      !isActionMode
+      || !state.players.some((player) => player.id === viewedActionPlayerId)
+      || viewedActionCards.length === 0
+    ) {
       setViewedActionPlayerId(null);
     }
-  }, [isActionMode, state.players, viewedActionPlayerId]);
+  }, [isActionMode, state.players, viewedActionCards.length, viewedActionPlayerId]);
 
   useEffect(() => {
     if (state.phase !== 'roundEnd' || !state.nextRoundAt) {
