@@ -170,12 +170,22 @@ export default function ProfileModal({ open, onClose, onProfileUpdated, mode = '
   const normalizedFirstName = firstName.trim();
   const normalizedLastName = lastName.trim();
   const normalizedPlayerName = playerName.trim();
-  const leaderboardNameOptions = [
+  const rawLeaderboardNameOptions = [
     { value: 'player_name', label: normalizedPlayerName || 'Pseudo' },
     { value: 'first_name', label: normalizedFirstName || 'Prénom' },
     { value: 'first_initial', label: `${normalizedFirstName || 'Prénom'} ${normalizedLastName ? `${normalizedLastName[0]}.` : 'N.'}` },
     { value: 'full_name', label: [normalizedFirstName, normalizedLastName].filter(Boolean).join(' ') || 'Prénom Nom' },
   ];
+  const leaderboardNameOptionsByLabel = new Map();
+  rawLeaderboardNameOptions.forEach((option) => {
+    const labelKey = option.label.normalize('NFKC').trim().toLocaleLowerCase('fr-FR');
+    const existing = leaderboardNameOptionsByLabel.get(labelKey);
+    if (!existing || option.value === leaderboardNameFormat) {
+      leaderboardNameOptionsByLabel.set(labelKey, option);
+    }
+  });
+  const leaderboardNameOptions = [...leaderboardNameOptionsByLabel.values()];
+  const leaderboardNameOptionCount = leaderboardNameOptions.length;
   const selectedLeaderboardName = leaderboardNameOptions.find(
     (option) => option.value === leaderboardNameFormat,
   )?.label || leaderboardNameOptions[0].label;
@@ -202,13 +212,13 @@ export default function ProfileModal({ open, onClose, onProfileUpdated, mode = '
     const triggerRect = trigger.getBoundingClientRect();
     const viewportHeight = window.visualViewport?.height || window.innerHeight;
     const touchLayout = window.matchMedia?.('(pointer: coarse)').matches;
-    const expectedMenuHeight = 4 * (touchLayout ? 40 : 29) + 12;
+    const expectedMenuHeight = leaderboardNameOptionCount * (touchLayout ? 40 : 29) + 12;
     const availableBelow = viewportHeight - triggerRect.bottom - 12;
     const availableAbove = triggerRect.top - 12;
     setLeaderboardFormatPlacement(
       availableBelow >= expectedMenuHeight || availableBelow >= availableAbove ? 'down' : 'up',
     );
-  }, []);
+  }, [leaderboardNameOptionCount]);
   const focusLeaderboardFormatTrigger = useCallback(() => {
     window.requestAnimationFrame(() => {
       leaderboardFormatRef.current
