@@ -70,6 +70,7 @@ function ensureActionFields(state) {
     claim.id = `star-claim-${state.starClaimSerial}`;
   }
   state.pendingGroupChoice ||= null;
+  if (!Array.isArray(state.pendingGroupChoices)) state.pendingGroupChoices = [];
   state.turnSerial ||= 0;
   state.extraTurns ||= {};
   for (const id of state.order) {
@@ -116,7 +117,8 @@ function ensureActionFields(state) {
     && state.turnStage === 'action'
     && !state.pendingAction
     && !state.pendingStarClaim
-    && !state.pendingGroupChoice;
+    && !state.pendingGroupChoice
+    && state.pendingGroupChoices.length === 0;
   if (actionIsOrphaned) state.turnStage = 'choose';
 }
 
@@ -383,10 +385,20 @@ function actionTargetsAfterActor(state, actorId) {
   return ordered;
 }
 
-function beginGroupChoice(state, player, groupType, groupIndex, indexes, slots, starBonus, resume) {
+function beginGroupChoice(
+  state,
+  player,
+  groupType,
+  groupIndex,
+  indexes,
+  slots,
+  starBonus,
+  resume,
+  { parallel = false } = {},
+) {
   const signature = groupSignature(slots);
   const key = groupChoiceKey(groupType, groupIndex);
-  state.pendingGroupChoice = {
+  const choice = {
     id: `group-choice-${Date.now()}-${player.id}-${key}`,
     playerId: player.id,
     playerName: player.name,
@@ -400,11 +412,21 @@ function beginGroupChoice(state, player, groupType, groupIndex, indexes, slots, 
     starBonus,
     resume,
   };
+  if (parallel) state.pendingGroupChoices.push(choice);
+  else state.pendingGroupChoice = choice;
   state.turnStage = 'groupChoice';
 }
 
-function clearCompletedGroups(state, player, resume = { type: 'none' }, { promptStarGroups = true } = {}) {
+function clearCompletedGroups(
+  state,
+  player,
+  resume = { type: 'none' },
+  { promptStarGroups = true, parallel = false } = {},
+) {
+  if (!Array.isArray(state.pendingGroupChoices)) state.pendingGroupChoices = [];
   if (state.pendingGroupChoice) return true;
+  if (parallel && state.pendingGroupChoices.some((choice) => choice.playerId === player.id)) return true;
+  if (!parallel && state.pendingGroupChoices.length > 0) return true;
   let changed = true;
   while (changed) {
     changed = false;
@@ -418,7 +440,17 @@ function clearCompletedGroups(state, player, resume = { type: 'none' }, { prompt
           const key = groupChoiceKey(groupType, groupIndex);
           const signature = groupSignature(slots);
           if (player.groupChoiceSkips?.[key] === signature) continue;
-          beginGroupChoice(state, player, groupType, groupIndex, indexes, slots, starBonus, resume);
+          beginGroupChoice(
+            state,
+            player,
+            groupType,
+            groupIndex,
+            indexes,
+            slots,
+            starBonus,
+            resume,
+            { parallel },
+          );
           return true;
         }
         removeCompletedGroup(state, player, indexes, starBonus);
@@ -447,6 +479,11 @@ function continueActionRoundEnd(state, playerIds = state.order) {
 }
 
 function continueAfterGroupChoice(state, resume = { type: 'none' }) {
+  if (resume.type === 'parallelClearPlayersThenFinishAction') {
+    continueParallelGroupChoices(state, resume);
+    return;
+  }
+
   if (resume.type === 'advance') {
     advanceTurn(state);
     return;
@@ -516,6 +553,21 @@ function continueAfterGroupChoice(state, resume = { type: 'none' }) {
   state.turnStage = resume.turnStage || (state.phase === 'playing' ? 'choose' : null);
 }
 
+function continueParallelGroupChoices(state, resume) {
+  const playerIds = [...new Set(resume.playerIds || [])];
+  let waiting = state.pendingGroupChoices.length > 0;
+  for (const playerId of playerIds) {
+    const player = state.playersById[playerId];
+    if (!player) continue;
+    if (clearCompletedGroups(state, player, resume, { parallel: true })) waiting = true;
+  }
+  if (waiting || state.pendingGroupChoices.length > 0) {
+    state.turnStage = 'groupChoice';
+    return;
+  }
+  finishPendingAction(state);
+}
+
 function boardFinished(player) {
   return player.board.every((slot) => slot.removed || slot.faceUp);
 }
@@ -578,6 +630,7 @@ function dealRound(state) {
   state.pendingStarClaim = null;
   state.pendingInitialStarClaims = [];
   state.pendingGroupChoice = null;
+  state.pendingGroupChoices = [];
   state.roundEnderId = null;
   state.roundNumber += 1;
   state.extraTurns = {};
@@ -949,10 +1002,11 @@ function completeSwapPlayersAction(state, pending, first, second) {
   });
   [a.card, b.card] = [b.card, a.card];
   [a.faceUp, b.faceUp] = [b.faceUp, a.faceUp];
-  const resume = { type: 'clearPlayersThenFinishAction', playerIds: [first.playerId, second.playerId] };
-  if (clearCompletedGroups(state, state.playersById[first.playerId], resume)) return;
-  if (clearCompletedGroups(state, state.playersById[second.playerId], resume)) return;
-  finishPendingAction(state);
+  const resume = {
+    type: 'parallelClearPlayersThenFinishAction',
+    playerIds: [first.playerId, second.playerId],
+  };
+  continueParallelGroupChoices(state, resume);
 }
 
 function resolveDefensePromptCore(state, useDefense, { expired = false } = {}) {
@@ -1621,7 +1675,12 @@ export function expireDefensePrompt(state) {
 
 export function resolveGroupChoice(state, playerId, remove) {
   ensureActionFields(state);
-  const choice = state.pendingGroupChoice;
+  const parallelChoiceIndex = state.pendingGroupChoices
+    .findIndex((pendingChoice) => pendingChoice.playerId === playerId);
+  const parallelChoice = parallelChoiceIndex >= 0
+    ? state.pendingGroupChoices[parallelChoiceIndex]
+    : null;
+  const choice = parallelChoice || state.pendingGroupChoice;
   if (!choice) throw new Error('Aucun groupe à résoudre.');
   if (choice.playerId !== playerId) throw new Error('Ce choix ne vous appartient pas.');
   if (typeof remove !== 'boolean') throw new Error('Choix invalide.');
@@ -1632,7 +1691,8 @@ export function resolveGroupChoice(state, playerId, remove) {
     && slots.every((slot) => slot && !slot.removed && slot.faceUp && slot.card)
     && groupSignature(slots) === choice.signature;
   const resume = choice.resume || { type: 'none' };
-  state.pendingGroupChoice = null;
+  if (parallelChoice) state.pendingGroupChoices.splice(parallelChoiceIndex, 1);
+  else state.pendingGroupChoice = null;
 
   if (stillValid && remove) {
     removeCompletedGroup(state, player, choice.indexes, choice.starBonus);
@@ -1642,6 +1702,11 @@ export function resolveGroupChoice(state, playerId, remove) {
     log(state, `${player.name} conserve sa ${choice.groupType === 'row' ? 'ligne' : 'colonne'} avec étoile.`);
   }
 
+  if (parallelChoice) {
+    if (player) clearCompletedGroups(state, player, resume, { parallel: true });
+    continueParallelGroupChoices(state, resume);
+    return;
+  }
   if (player && clearCompletedGroups(state, player, resume)) return;
   continueAfterGroupChoice(state, resume);
 }
@@ -1668,6 +1733,20 @@ export function handleActionPlayerLeave(state, playerId) {
     const resume = state.pendingGroupChoice.resume || { type: 'none' };
     state.pendingGroupChoice = null;
     continueAfterGroupChoice(state, resume);
+  }
+
+  const leavingParallelChoices = state.pendingGroupChoices
+    .filter((choice) => choice.playerId === playerId);
+  if (leavingParallelChoices.length > 0) {
+    state.pendingGroupChoices = state.pendingGroupChoices
+      .filter((choice) => choice.playerId !== playerId);
+    if (state.pendingGroupChoices.length === 0) {
+      const resume = leavingParallelChoices[0].resume || { type: 'none' };
+      continueParallelGroupChoices(state, {
+        ...resume,
+        playerIds: (resume.playerIds || []).filter((id) => id !== playerId),
+      });
+    }
   }
 
   const pending = state.pendingAction;
@@ -1714,7 +1793,8 @@ export function publicActionState(state, forPlayerId) {
   const ownPeek = state.playersById[forPlayerId]?.peek;
   const visibleOwnPeek = ownPeek?.expiresAt > Date.now() ? ownPeek : null;
   const actionPausedForStarClaim = !!state.pendingStarClaim;
-  const actionPausedForGroupChoice = !!state.pendingGroupChoice;
+  const actionPausedForGroupChoice = !!state.pendingGroupChoice
+    || state.pendingGroupChoices.length > 0;
   const defensePrompt = pending?.defensePrompt || null;
   const actionPausedForDefense = !!defensePrompt;
   const canSeeDefensePrompt = defensePrompt
@@ -1725,6 +1805,9 @@ export function publicActionState(state, forPlayerId) {
   const ownStarClaim = state.pendingStarClaim?.playerId === forPlayerId
     ? state.pendingStarClaim
     : state.pendingInitialStarClaims.find((claim) => claim.playerId === forPlayerId);
+  const ownGroupChoice = state.pendingGroupChoice?.playerId === forPlayerId
+    ? state.pendingGroupChoice
+    : state.pendingGroupChoices.find((choice) => choice.playerId === forPlayerId);
   return {
     actionMarket: state.actionMarket,
     actionDiscard: state.actionDiscard,
@@ -1734,16 +1817,16 @@ export function publicActionState(state, forPlayerId) {
       : null,
     pendingStarClaim: !!ownStarClaim,
     pendingStarClaimId: ownStarClaim?.id || null,
-    pendingGroupChoice: state.pendingGroupChoice?.playerId === forPlayerId
+    pendingGroupChoice: ownGroupChoice
       ? {
-        id: state.pendingGroupChoice.id,
-        playerId: state.pendingGroupChoice.playerId,
-        playerName: state.pendingGroupChoice.playerName,
-        groupType: state.pendingGroupChoice.groupType,
-        indexes: state.pendingGroupChoice.indexes,
-        cards: state.pendingGroupChoice.cards,
-        allStars: state.pendingGroupChoice.allStars,
-        starBonus: state.pendingGroupChoice.starBonus,
+        id: ownGroupChoice.id,
+        playerId: ownGroupChoice.playerId,
+        playerName: ownGroupChoice.playerName,
+        groupType: ownGroupChoice.groupType,
+        indexes: ownGroupChoice.indexes,
+        cards: ownGroupChoice.cards,
+        allStars: ownGroupChoice.allStars,
+        starBonus: ownGroupChoice.starBonus,
       }
       : null,
     pendingAction: pending ? {

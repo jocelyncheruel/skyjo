@@ -515,6 +515,7 @@ export function returnToLobby(state, playerId) {
   state.pendingAction = null;
   state.pendingStarClaim = null;
   state.pendingGroupChoice = null;
+  state.pendingGroupChoices = [];
   state.extraTurns = {};
   state.actionNextStarterId = null;
   state.turnSerial = 0;
@@ -882,6 +883,7 @@ export function publicPreviewState(state) {
   delete preview.pendingAction;
   delete preview.pendingStarClaim;
   delete preview.pendingGroupChoice;
+  delete preview.pendingGroupChoices;
   return preview;
 }
 
