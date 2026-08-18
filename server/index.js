@@ -468,6 +468,24 @@ async function findLatestActiveMembership(userId) {
   return latestGame?.member || latestLobby?.member || null;
 }
 
+async function findOwnedRoomMembership(userId) {
+  const { data, error } = await supabase.from('rooms')
+    .select('room_id, updated_at')
+    .eq('owner_user_id', userId)
+    .is('quarantined_at', null)
+    .order('updated_at', { ascending: false })
+    .limit(20);
+  if (error) throw error;
+
+  for (const room of data || []) {
+    const member = await findMemberByUser(room.room_id, userId);
+    if (!member) continue;
+    const state = await getOrLoadRoom(room.room_id);
+    if (state?.playersById?.[member.player_id]) return { state, member };
+  }
+  return null;
+}
+
 async function createRoom({ ownerUserId, playerName, roomVisibility, maxPlayers }) {
   for (let attempt = 0; attempt < 20; attempt += 1) {
     const roomId = generateRoomId();
@@ -1227,11 +1245,34 @@ app.post('/api/rooms', requireHttpAuth, authBff.requireStandardSession, authBff.
           400,
         );
       }
-      const { state, playerId } = await createRoom({
-        ownerUserId: req.auth.user.id, playerName,
-        roomVisibility: payload.roomVisibility === 'public' ? 'public' : 'private',
-        maxPlayers,
-      });
+      const existingRoom = await findOwnedRoomMembership(req.auth.user.id);
+      if (existingRoom) {
+        res.json({
+          roomId: existingRoom.state.roomId,
+          playerId: existingRoom.member.player_id,
+          existing: true,
+        });
+        return;
+      }
+      let createdRoom;
+      try {
+        createdRoom = await createRoom({
+          ownerUserId: req.auth.user.id, playerName,
+          roomVisibility: payload.roomVisibility === 'public' ? 'public' : 'private',
+          maxPlayers,
+        });
+      } catch (createError) {
+        if (!String(createError?.message || '').includes('active_room_exists')) throw createError;
+        const concurrentRoom = await findOwnedRoomMembership(req.auth.user.id);
+        if (!concurrentRoom) throw createError;
+        res.json({
+          roomId: concurrentRoom.state.roomId,
+          playerId: concurrentRoom.member.player_id,
+          existing: true,
+        });
+        return;
+      }
+      const { state, playerId } = createdRoom;
       res.status(201).json({ roomId: state.roomId, playerId });
     } catch (error) { next(error); }
   });

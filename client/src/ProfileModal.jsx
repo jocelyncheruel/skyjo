@@ -151,8 +151,8 @@ export default function ProfileModal({ open, onClose, onProfileUpdated, mode = '
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [playerName, setPlayerName] = useState('');
-  const [leaderboardVisible, setLeaderboardVisible] = useState(false);
-  const [leaderboardNameFormat, setLeaderboardNameFormat] = useState('player_name');
+  const [leaderboardVisible, setLeaderboardVisible] = useState(true);
+  const [leaderboardNameFormat, setLeaderboardNameFormat] = useState('first_initial');
   const [leaderboardFormatOpen, setLeaderboardFormatOpen] = useState(false);
   const [leaderboardFormatPlacement, setLeaderboardFormatPlacement] = useState('down');
   const [busy, setBusy] = useState(false);
@@ -290,8 +290,8 @@ export default function ProfileModal({ open, onClose, onProfileUpdated, mode = '
     setFirstName(user.firstName || '');
     setLastName(user.lastName || '');
     setPlayerName(user.playerName || user.firstName || '');
-    setLeaderboardVisible(user.leaderboardVisible === true);
-    setLeaderboardNameFormat(user.leaderboardNameFormat || 'player_name');
+    setLeaderboardVisible(user.leaderboardVisible !== false);
+    setLeaderboardNameFormat(user.leaderboardNameFormat || 'first_initial');
     setLeaderboardFormatOpen(false);
     setLeaderboardFormatPlacement('down');
     setSecurityBusy('');

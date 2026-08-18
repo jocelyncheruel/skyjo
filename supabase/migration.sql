@@ -217,6 +217,7 @@ DECLARE
   v_previous_game_serial BIGINT := 0;
   v_game_serial BIGINT := 0;
   v_rounds_played INTEGER := 0;
+  v_existing_room_id TEXT;
 BEGIN
   IF COALESCE(p_state_json ->> 'gameSerial', '') ~ '^[0-9]+$' THEN
     v_game_serial := (p_state_json ->> 'gameSerial')::BIGINT;
@@ -226,6 +227,25 @@ BEGIN
   END IF;
 
   IF p_expected_revision = -1 THEN
+    IF p_owner_user_id IS NOT NULL THEN
+      PERFORM pg_catalog.pg_advisory_xact_lock(
+        pg_catalog.hashtextextended(p_owner_user_id::TEXT, 0)
+      );
+      SELECT existing_room.room_id
+      INTO v_existing_room_id
+      FROM public.rooms AS existing_room
+      INNER JOIN public.room_members AS existing_member
+        ON existing_member.room_id = existing_room.room_id
+        AND existing_member.user_id = p_owner_user_id
+      WHERE existing_room.owner_user_id = p_owner_user_id
+        AND existing_room.quarantined_at IS NULL
+      ORDER BY existing_room.updated_at DESC
+      LIMIT 1;
+      IF v_existing_room_id IS NOT NULL THEN
+        RAISE EXCEPTION 'active_room_exists' USING ERRCODE = 'P0001';
+      END IF;
+    END IF;
+
     INSERT INTO public.rooms (
       room_id, state_json, owner_user_id, state_revision, state_schema_version,
       visibility, phase, game_mode, player_count, creator_name, updated_at
@@ -616,7 +636,7 @@ AS $$
           user_account.id
       ) AS rank_position,
       user_account.id AS user_id,
-      LEFT(CASE COALESCE(user_account.raw_user_meta_data ->> 'leaderboard_name_format', 'player_name')
+      LEFT(CASE COALESCE(user_account.raw_user_meta_data ->> 'leaderboard_name_format', 'first_initial')
         WHEN 'first_name' THEN COALESCE(NULLIF(user_account.raw_user_meta_data ->> 'first_name', ''), 'Joueur')
         WHEN 'first_initial' THEN CONCAT(
           COALESCE(NULLIF(user_account.raw_user_meta_data ->> 'first_name', ''), 'Joueur'),
@@ -639,7 +659,7 @@ AS $$
       COALESCE(results.current_win_streak, 0) AS current_win_streak
     FROM auth.users AS user_account
     LEFT JOIN player_results AS results ON results.user_id = user_account.id
-    WHERE user_account.raw_user_meta_data ->> 'leaderboard_visible' = 'true'
+    WHERE COALESCE(user_account.raw_user_meta_data ->> 'leaderboard_visible', 'true') = 'true'
   )
   SELECT ranked.rank_position, ranked.user_id, ranked.player_name,
     ranked.competitive_rating, ranked.games_played, ranked.games_won, ranked.current_win_streak

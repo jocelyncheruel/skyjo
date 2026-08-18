@@ -151,6 +151,13 @@ export function googleProfileMetadata(user, providerProfile = null, browserLocal
   if (!currentLocale && preferredLocale) {
     update.preferred_locale = preferredLocale;
   }
+  if (typeof metadata.leaderboard_visible !== 'boolean') {
+    update.leaderboard_visible = true;
+  }
+  if (!['player_name', 'first_name', 'first_initial', 'full_name']
+    .includes(metadata.leaderboard_name_format)) {
+    update.leaderboard_name_format = 'first_initial';
+  }
   return Object.keys(update).length ? update : null;
 }
 
@@ -209,11 +216,11 @@ function publicUser(user) {
     lastName,
     displayName,
     playerName: normalizePlayerName(metadata.player_name || firstName || displayName || fallback),
-    leaderboardVisible: metadata.leaderboard_visible === true,
+    leaderboardVisible: metadata.leaderboard_visible !== false,
     leaderboardNameFormat: ['player_name', 'first_name', 'first_initial', 'full_name']
       .includes(metadata.leaderboard_name_format)
       ? metadata.leaderboard_name_format
-      : 'player_name',
+      : 'first_initial',
     preferredLocale: normalizeLocale(metadata.preferred_locale || metadata.locale || ''),
     provider,
     providers,
@@ -691,7 +698,7 @@ export function createAuthBff({
       const lastName = normalizeName(body.lastName);
       const playerName = normalizePlayerName(body.playerName);
       const leaderboardVisible = body.leaderboardVisible === true;
-      const leaderboardNameFormat = String(body.leaderboardNameFormat || 'player_name');
+      const leaderboardNameFormat = String(body.leaderboardNameFormat || 'first_initial');
       if (!firstName || !lastName || !playerName) {
         throw new PublicError('invalid_profile', 'Renseignez un prénom, un nom et un pseudonyme valides.', 400);
       }
@@ -835,6 +842,8 @@ export function createAuthBff({
             last_name: lastName,
             display_name: `${firstName} ${lastName}`.trim(),
             player_name: firstName,
+            leaderboard_visible: true,
+            leaderboard_name_format: 'first_initial',
             source: 'skyjo',
             ...(preferredLocale ? { preferred_locale: preferredLocale } : {}),
           },
