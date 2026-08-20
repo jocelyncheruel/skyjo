@@ -516,6 +516,7 @@ async function listPublicRooms(userId) {
   const { data, error } = await supabase.from('rooms')
     .select(`
       room_id,
+      players_by_id:state_json->playersById,
       player_count,
       creator_name,
       game_mode,
@@ -531,8 +532,30 @@ async function listPublicRooms(userId) {
     .gt('updated_at', new Date(Date.now() - ROOM_TTL_MS).toISOString())
     .order('updated_at', { ascending: false }).limit(30);
   if (error) throw error;
+  const abandonedBefore = new Date(Date.now() - PUBLIC_ROOM_DISCONNECT_GRACE_MS).toISOString();
+  const abandonedRoomIds = new Set((data || [])
+    .filter((row) => {
+      if (row.updated_at > abandonedBefore) return false;
+      const players = Object.values(row.players_by_id || {});
+      return players.length > 0 && players.every((player) => player?.connected === false);
+    })
+    .map((row) => row.room_id));
+  if (abandonedRoomIds.size) {
+    await Promise.all([...abandonedRoomIds].map(async (roomId) => {
+      const { error: deleteError } = await supabase.from('rooms')
+        .delete()
+        .eq('room_id', roomId)
+        .eq('visibility', 'public')
+        .lte('updated_at', abandonedBefore);
+      if (deleteError) throw deleteError;
+      rooms.delete(roomId);
+      roomMeta.delete(roomId);
+      clearRoomTimers(roomId);
+    }));
+  }
   const spectatorCounts = roomSpectatorCounts();
   return (data || [])
+    .filter((row) => !abandonedRoomIds.has(row.room_id))
     .filter((row) => !isUserBanned({ bannedUserIds: row.banned_user_ids }, userId))
     .map((row) => {
       const settings = effectiveRoomSettings({ roomSettings: row.room_settings });
