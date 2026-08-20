@@ -71,8 +71,11 @@ import { useAuth } from './authContext.js';
 import { apiFetch, AUTH_REMEMBER_KEY, SERVER_URL } from './apiClient.js';
 import { connectErrorUserMessage } from './connectionError.js';
 import {
+  clearRememberedRoomInvite,
   createRoomInviteUrl,
   extractRoomCodeFromInvite,
+  readRememberedRoomInvite,
+  rememberRoomInvite,
   ROOM_CODE_PATTERN,
 } from './inviteCode.js';
 import { isPublicRoomAvailable, publicRoomSelectionMode } from './publicRooms.js';
@@ -171,7 +174,8 @@ function readRoomInviteFromFragment() {
   if (typeof window === 'undefined') return '';
   const params = new URLSearchParams(window.location.hash.replace(/^#/, ''));
   const candidate = params.get('room') || '';
-  return ROOM_CODE_PATTERN.test(candidate) ? candidate : '';
+  if (ROOM_CODE_PATTERN.test(candidate)) return rememberRoomInvite(candidate);
+  return readRememberedRoomInvite();
 }
 const SHOW_ALL_ACTION_CARDS_PREVIEW = false;
 const MIN_RECONNECT_SCREEN_MS = 1000;
@@ -746,6 +750,7 @@ function GameApp() {
       if (inviteJoinPendingRef.current && inviteJoinAttemptedRef.current) {
         inviteJoinPendingRef.current = false;
         setInviteJoinPending(false);
+        clearRememberedRoomInvite(initialRoomInvite);
         if (code === 'room_unavailable') {
           setJoinRoomInput('');
           setHomePanel('home');
@@ -777,6 +782,7 @@ function GameApp() {
       roomRoleRef.current = joinedRole;
       saveGameValue('sj-room-id', rid);
       saveGameValue(ROOM_ROLE_KEY, joinedRole);
+      clearRememberedRoomInvite(rid);
       nextSocket.auth = {
         protocolVersion: SOCKET_PROTOCOL_VERSION,
         roomId: rid,
