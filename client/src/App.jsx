@@ -1,6 +1,23 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { io } from 'socket.io-client';
-import { ChevronRight, Eye, LogOut, QrCode, ScanLine, Trash2 } from 'lucide-react';
+import {
+  Check,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Crown,
+  Eye,
+  Gamepad2,
+  Globe2,
+  Info,
+  LockKeyhole,
+  LogOut,
+  QrCode,
+  ScanLine,
+  Sparkles,
+  UserMinus,
+  Users,
+} from 'lucide-react';
 import Card from './components/Card.jsx';
 import CardMotionLayer from './components/CardMotionLayer.jsx';
 import {
@@ -31,6 +48,7 @@ import {
 } from './components/GameTablePieces.jsx';
 import PlayerBoard from './components/PlayerBoard.jsx';
 import GameEndCelebration from './components/GameEndCelebration.jsx';
+import LobbyGameFormat from './components/LobbyGameFormat.jsx';
 import PublicRoomPreviewModal from './components/PublicRoomPreviewModal.jsx';
 import {
   RoomAdministrationButton,
@@ -170,6 +188,24 @@ const ACTION_CARD_PREVIEWS = Object.keys(ACTION_LABELS).map((type) => ({
 
 function normalizePlayerNameInput(value) {
   return String(value || '').trim().slice(0, MAX_PLAYER_NAME_LENGTH);
+}
+
+function playerNameOptions(user) {
+  const playerName = normalizePlayerNameInput(user?.playerName || '');
+  const firstName = normalizePlayerNameInput(user?.firstName || '');
+  const lastName = String(user?.lastName || '').trim();
+  const options = [
+    { value: 'player_name', label: playerName || 'Pseudo' },
+    { value: 'first_name', label: firstName || 'Prénom' },
+    { value: 'first_initial', label: normalizePlayerNameInput(`${firstName || 'Prénom'} ${lastName ? `${lastName[0]}.` : 'N.'}`) },
+    { value: 'full_name', label: normalizePlayerNameInput([firstName, lastName].filter(Boolean).join(' ') || 'Prénom Nom') },
+  ];
+  const uniqueOptions = new Map();
+  options.forEach((option) => {
+    const key = option.label.normalize('NFKC').trim().toLocaleLowerCase('fr-FR');
+    if (!uniqueOptions.has(key)) uniqueOptions.set(key, option);
+  });
+  return [...uniqueOptions.values()];
 }
 
 function readGameValue(key) {
@@ -317,6 +353,9 @@ function SkyjoApp() {
 function GameApp() {
   const { user, logout, getProfileStats } = useAuth();
   const accountPlayerName = normalizePlayerNameInput(user?.playerName || user?.firstName || user?.displayName || '');
+  const gameNameOptions = playerNameOptions(user);
+  const touchNameInfo = typeof window !== 'undefined'
+    && window.matchMedia('(hover: none) and (pointer: coarse)').matches;
   const [initialRoomInvite] = useState(() => readRoomInviteFromFragment());
   const [socket, setSocket] = useState(null);
   const [connected, setConnected] = useState(false);
@@ -332,7 +371,11 @@ function GameApp() {
     return !!savedRoomId;
   });
   const [joinRoomInput, setJoinRoomInput] = useState(initialRoomInvite);
-  const [nameInput, setNameInput] = useState(accountPlayerName || playerName);
+  const [nameInput, setNameInput] = useState(() => (
+    normalizePlayerNameInput(readGameValue('sj-player-name') || accountPlayerName || playerName)
+  ));
+  const [gameNameMenuOpen, setGameNameMenuOpen] = useState(false);
+  const [gameNameInfoOpen, setGameNameInfoOpen] = useState(false);
   const [roomVisibilityInput, setRoomVisibilityInput] = useState('private');
   const [maxPlayersInput, setMaxPlayersInput] = useState(8);
   const [publicRooms, setPublicRooms] = useState([]);
@@ -366,7 +409,21 @@ function GameApp() {
   const inviteJoinAttemptedRef = useRef(false);
   const inviteJoinPendingRef = useRef(inviteJoinPending);
   const initialInvitePlayerNameRef = useRef(normalizePlayerNameInput(accountPlayerName || playerName));
+  const gameNameSelectRef = useRef(null);
   const closeQrScanner = useCallback(() => setQrScannerOpen(false), []);
+
+  useEffect(() => {
+    if (!gameNameMenuOpen) return undefined;
+    const closeMenu = (event) => {
+      if (!event.target.closest('.sj-home-name-option-info')) setGameNameInfoOpen(false);
+      if (!gameNameSelectRef.current?.contains(event.target)) {
+        setGameNameMenuOpen(false);
+        setGameNameInfoOpen(false);
+      }
+    };
+    document.addEventListener('pointerdown', closeMenu);
+    return () => document.removeEventListener('pointerdown', closeMenu);
+  }, [gameNameMenuOpen]);
 
   const clearError = useCallback(() => {
     if (errorTimerRef.current) {
@@ -952,191 +1009,230 @@ function GameApp() {
       <>
       <div className="sj-app-shell sj-lobby-room">
         <GameToast key={errorSerial} message={error} />
-        <div className="sj-home-panel-stack">
+        <div className="sj-home-panel-stack sj-home-portal-stack">
         {homePanel === 'public' && (
           <section
             key="public-rooms"
-            className="sj-lobby-card sj-home-card sj-public-search-card"
+            className="sj-home-portal sj-public-search-card"
           >
-            <div className="sj-account-controls">
-              <ActivityButton onClick={() => setActivityOpen(true)} />
-              <ProfileButton onClick={() => setProfileOpen(true)} />
+            <header className="sj-public-browser-header">
               <button
                 type="button"
-                className="sj-account-logout"
-                onClick={logoutFromHome}
-                aria-label="Se déconnecter du compte"
-                title="Se déconnecter"
+                className="sj-public-browser-back"
+                aria-label="Retour à l’accueil"
+                title="Retour"
+                onClick={() => setHomePanel('home')}
               >
-                <LogOut aria-hidden="true" size={16} />
+                <ChevronLeft aria-hidden="true" size={19} />
               </button>
-            </div>
-            <div className="sj-brand-mark">
-              <SkyjoLogo connectionBadge={<ConnectionBadge connected={connected} />} />
-            </div>
+              <div className="sj-public-browser-title">
+                <h1>Parties publiques</h1>
+              </div>
+              <span className="sj-public-browser-count">{publicRooms.length}</span>
+            </header>
 
             <section className="sj-public-rooms" aria-label="Parties publiques disponibles">
+              <div className="sj-public-rooms-head">
+                <div>
+                  <strong>{publicRooms.length > 0 ? 'Tables disponibles' : 'Aucune table ouverte'}</strong>
+                </div>
+                <small><ConnectionBadge connected={connected} /> Actualisation automatique</small>
+              </div>
               {publicRooms.length > 0 ? (
                 <div className="sj-public-room-list">
                   {publicRooms.map((publicRoom) => (
+                    <React.Fragment key={publicRoom.roomId}>
                     <button
-                      key={publicRoom.roomId}
                       type="button"
-                      className="sj-public-room-card"
+                      className="sj-public-room-card sj-public-room-card-wide"
                       onClick={() => selectPublicRoom(publicRoom)}
                     >
                       <span className="sj-public-room-main">
-                        <span className="sj-public-room-title">
+                        <span className="sj-public-room-title-row">
                           <strong>{publicRoom.gameMode === 'action' ? 'Skyjo Action' : 'Skyjo classique'}</strong>
                           <span>{roomVariantLabel(publicRoom)}</span>
                         </span>
-                        <small>
-                          {publicRoom.phase === 'lobby' ? 'Salle d’attente' : 'Partie en cours'}
-                          {' · '}
-                          administrée par {publicRoom.creatorName || 'un joueur'}
-                          {publicRoom.locked ? ' · verrouillée' : ''}
-                        </small>
+                        <span className="sj-public-room-details">
+                          <span>{publicRoom.phase === 'lobby' ? 'Salle d’attente' : 'Partie en cours'}</span>
+                          <span>Par {publicRoom.creatorName || 'un joueur'}</span>
+                          {publicRoom.locked && <span><LockKeyhole aria-hidden="true" size={11} /> Verrouillée</span>}
+                        </span>
                       </span>
                       <span className="sj-public-room-meta">
-                        <strong>{publicRoom.playerCount}/{publicRoom.maxPlayers}</strong>
+                        <strong><Users aria-hidden="true" size={14} /> {publicRoom.playerCount}/{publicRoom.maxPlayers}</strong>
                       </span>
-                      <ChevronRight className="sj-public-room-chevron" aria-hidden="true" size={18} />
+                      <span className="sj-public-room-open" aria-hidden="true"><ChevronRight size={18} /></span>
                     </button>
+                    <button
+                      type="button"
+                      className="sj-public-room-card sj-public-room-card-compact"
+                      onClick={() => selectPublicRoom(publicRoom)}
+                    >
+                      <span className="sj-public-room-card-head">
+                        <span className="sj-public-room-main">
+                          <strong>{publicRoom.gameMode === 'action' ? 'Skyjo Action' : 'Skyjo classique'}</strong>
+                          <span className="sj-public-room-compact-host">Par {publicRoom.creatorName || 'un joueur'}</span>
+                        </span>
+                        <span className="sj-public-room-meta"><Users aria-hidden="true" size={14} /> <strong>{publicRoom.playerCount}/{publicRoom.maxPlayers}</strong></span>
+                      </span>
+                      <span className="sj-public-room-card-footer">
+                        <span className="sj-public-room-compact-variant">{roomVariantLabel(publicRoom).replace(/^Objectif\s+/i, '').replace(/\bpoints?\b/i, 'pts')}</span>
+                        <span className={`sj-public-room-phase ${publicRoom.phase === 'lobby' ? 'sj-public-room-phase-open' : ''}`}>
+                          {publicRoom.phase === 'lobby' ? 'Salle d’attente' : 'Partie en cours'}
+                        </span>
+                        {publicRoom.locked && <span className="sj-public-room-locked"><LockKeyhole aria-hidden="true" size={11} /> Verrouillée</span>}
+                        <span className="sj-public-room-open" aria-hidden="true"><ChevronRight size={17} /></span>
+                      </span>
+                    </button>
+                    </React.Fragment>
                   ))}
                 </div>
               ) : (
                 <p className="sj-public-room-empty">
-                  {publicRoomsLoading ? 'Chargement des parties publiques...' : 'Aucune partie publique disponible.'}
+                  {publicRoomsLoading
+                    ? <><span className="sj-public-room-empty-spinner" aria-hidden="true" /> Recherche des tables disponibles…</>
+                    : <><Globe2 aria-hidden="true" size={22} /><strong>Aucune partie pour le moment</strong><span>Revenez dans quelques instants ou créez votre propre salle publique.</span></>}
                 </p>
               )}
             </section>
-
-            <button type="button" className="sj-public-search-trigger sj-public-search-trigger-back" onClick={() => setHomePanel('home')}>
-              Retour à l’accueil
-              <span aria-hidden="true">←</span>
-            </button>
           </section>
         )}
           <section
             key="home"
-            className={`sj-lobby-card sj-home-card ${homePanel === 'public' ? 'sj-home-card-measure' : ''}`}
+            className={`sj-home-portal ${homePanel === 'public' ? 'sj-home-card-measure' : ''}`}
             aria-hidden={homePanel === 'public' || undefined}
             inert={homePanel === 'public' ? '' : undefined}
           >
-            <div className="sj-account-controls">
-              <ActivityButton onClick={() => setActivityOpen(true)} />
-              <ProfileButton onClick={() => setProfileOpen(true)} />
-              <button
-                type="button"
-                className="sj-account-logout"
-                onClick={logoutFromHome}
-                aria-label="Se déconnecter du compte"
-                title="Se déconnecter"
-              >
-                <LogOut aria-hidden="true" size={16} />
-              </button>
-            </div>
-            <div className="sj-brand-mark">
-              <SkyjoLogo connectionBadge={<ConnectionBadge connected={connected} />} />
-            </div>
-
-            <div className="sj-home-main">
-              <label htmlFor="player-name">
-                Votre nom <span aria-hidden="true">*</span>
-              </label>
-              <input
-                id="player-name"
-                value={nameInput}
-                onChange={(event) => {
-                  const nextName = event.target.value.slice(0, MAX_PLAYER_NAME_LENGTH);
-                  setNameInput(nextName);
-                  if (error === 'Votre nom est obligatoire.' && normalizePlayerNameInput(nextName)) clearError();
-                }}
-                placeholder="Pseudo"
-                autoComplete="nickname"
-                maxLength={MAX_PLAYER_NAME_LENGTH}
-                required
-                aria-required="true"
-              />
-              <div
-                className={`sj-room-visibility ${roomVisibilityInput === 'public' ? 'sj-room-visibility-public' : 'sj-room-visibility-private'}`}
-                role="group"
-                aria-label="Visibilité de la salle"
-              >
-                <button
-                  type="button"
-                  className={`sj-room-visibility-option ${roomVisibilityInput === 'private' ? 'sj-room-visibility-option-active' : ''}`}
-                  onClick={() => setRoomVisibilityInput('private')}
-                >
-                  <strong>Privée</strong>
-                </button>
-                <button
-                  type="button"
-                  className={`sj-room-visibility-option ${roomVisibilityInput === 'public' ? 'sj-room-visibility-option-active' : ''}`}
-                  onClick={() => setRoomVisibilityInput('public')}
-                >
-                  <strong>Publique</strong>
+            <header className="sj-home-portal-header sj-home-portal-header-main">
+              <div className="sj-home-mini-brand">
+                <SkyjoLogo connectionBadge={<ConnectionBadge connected={connected} />} />
+              </div>
+              <div className="sj-account-controls">
+                <ActivityButton onClick={() => setActivityOpen(true)} />
+                <ProfileButton onClick={() => setProfileOpen(true)} />
+                <button type="button" className="sj-account-logout" onClick={logoutFromHome} aria-label="Se déconnecter du compte" title="Se déconnecter">
+                  <LogOut aria-hidden="true" size={16} />
                 </button>
               </div>
+            </header>
 
-              <label className="sj-create-room-capacity" htmlFor="create-room-max-players">
-                <span>Nombre maximal de joueurs</span>
-                <select
-                  id="create-room-max-players"
-                  value={maxPlayersInput}
-                  onChange={(event) => setMaxPlayersInput(Number(event.target.value))}
-                >
-                  {Array.from({ length: 7 }, (_, index) => index + 2).map((value) => (
-                    <option key={value} value={value}>{value}</option>
-                  ))}
-                </select>
-              </label>
+            <div className="sj-home-portal-body">
+              <main className="sj-home-workspace">
+                <div className="sj-home-identity">
+                  <span className="sj-home-identity-label">Vous jouerez sous le nom</span>
+                  <div className="sj-profile-leaderboard-format sj-home-name-format" ref={gameNameSelectRef}>
+                    <button
+                      id="player-name"
+                      type="button"
+                      className="sj-profile-leaderboard-format-trigger"
+                      aria-haspopup="listbox"
+                      aria-expanded={gameNameMenuOpen}
+                      aria-controls="home-player-name-menu"
+                      onClick={() => {
+                        setGameNameMenuOpen((open) => !open);
+                        setGameNameInfoOpen(false);
+                      }}
+                    >
+                      <span>{nameInput}</span>
+                      <ChevronDown aria-hidden="true" size={15} />
+                    </button>
+                    {gameNameMenuOpen && (
+                      <div id="home-player-name-menu" className="sj-profile-leaderboard-format-menu" role="listbox" aria-label="Nom affiché en partie">
+                        {gameNameOptions.map((option) => {
+                          const selected = option.label === nameInput;
+                          return (
+                            <button
+                              key={option.value}
+                              type="button"
+                              role="option"
+                              aria-selected={selected}
+                              className={selected ? 'sj-profile-leaderboard-format-option-selected' : ''}
+                              onClick={() => {
+                                const selectedName = normalizePlayerNameInput(option.label);
+                                setNameInput(selectedName);
+                                saveGameValue('sj-player-name', selectedName);
+                                setGameNameMenuOpen(false);
+                                if (error === 'Votre nom est obligatoire.') clearError();
+                              }}
+                            >
+                              <span className="sj-profile-leaderboard-format-check" aria-hidden="true">{selected && <Check size={14} />}</span>
+                              <span className="sj-home-name-option-copy">
+                                <span>{option.label}</span>
+                                {option.value === 'player_name' && (
+                                  <span
+                                    className="sj-home-name-option-info"
+                                    role={touchNameInfo ? 'button' : undefined}
+                                    tabIndex={touchNameInfo ? 0 : undefined}
+                                    aria-label="Modifiable dans vos informations personnelles"
+                                    aria-expanded={touchNameInfo ? gameNameInfoOpen : undefined}
+                                    data-open={gameNameInfoOpen || undefined}
+                                    data-placement={option.label.length > 10 ? 'center' : 'start'}
+                                    data-tooltip="Modifiable dans vos informations personnelles"
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      if (!touchNameInfo) return;
+                                      setGameNameInfoOpen((open) => !open);
+                                    }}
+                                    onKeyDown={(event) => {
+                                      if (!touchNameInfo) return;
+                                      if (event.key !== 'Enter' && event.key !== ' ') return;
+                                      event.preventDefault();
+                                      event.stopPropagation();
+                                      setGameNameInfoOpen((open) => !open);
+                                    }}
+                                  ><Info aria-hidden="true" size={11} /></span>
+                                )}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </div>
 
-              <button className="sj-btn sj-btn-primary" disabled={!connected} onClick={createRoom}>
-                Créer une salle {roomVisibilityInput === 'public' ? 'publique' : 'privée'}
-              </button>
+                <div className="sj-home-actions-grid">
+                  <section className="sj-home-action-card sj-home-create-card">
+                    <header><span><Gamepad2 aria-hidden="true" size={18} /></span><div><small>Nouvelle table</small><h2>Créer une salle</h2></div></header>
+                    <p className="sj-home-action-description">Configurez votre table, puis partagez son code avec les joueurs.</p>
+                    <div className={`sj-room-visibility ${roomVisibilityInput === 'public' ? 'sj-room-visibility-public' : 'sj-room-visibility-private'}`} role="group" aria-label="Visibilité de la salle">
+                      <button type="button" className={`sj-room-visibility-option ${roomVisibilityInput === 'private' ? 'sj-room-visibility-option-active' : ''}`} onClick={() => setRoomVisibilityInput('private')}><LockKeyhole aria-hidden="true" size={14} /><strong>Privée</strong></button>
+                      <button type="button" className={`sj-room-visibility-option ${roomVisibilityInput === 'public' ? 'sj-room-visibility-option-active' : ''}`} onClick={() => setRoomVisibilityInput('public')}><Globe2 aria-hidden="true" size={14} /><strong>Publique</strong></button>
+                    </div>
+                    <label className="sj-create-room-capacity" htmlFor="create-room-max-players">
+                      <span><Users aria-hidden="true" size={15} /> Joueurs maximum</span>
+                      <select id="create-room-max-players" value={maxPlayersInput} onChange={(event) => setMaxPlayersInput(Number(event.target.value))}>
+                        {Array.from({ length: 7 }, (_, index) => index + 2).map((value) => <option key={value} value={value}>{value}</option>)}
+                      </select>
+                    </label>
+                    <button className="sj-btn sj-btn-primary sj-home-primary-action" disabled={!connected} onClick={createRoom}>
+                      Créer la salle <ChevronRight aria-hidden="true" size={17} />
+                    </button>
+                  </section>
 
-              <div className="sj-divider"><span>ou</span></div>
+                  <section className="sj-home-action-card sj-home-join-card">
+                    <header><span><QrCode aria-hidden="true" size={18} /></span><div><small>Invitation reçue</small><h2>Accéder à une salle</h2></div></header>
+                    <p className="sj-home-action-description">Utilisez le code reçu pour rejoindre la partie ou la regarder.</p>
+                    <label htmlFor="room-code">Code à 6 chiffres</label>
+                    <div className={`sj-room-code-field ${qrScannerSupported ? 'sj-room-code-field-scannable' : ''}`}>
+                      <input id="room-code" value={joinRoomInput} onChange={(event) => setJoinRoomInput(event.target.value.replace(/[^0-9]/g, '').slice(0, 6))} onPaste={handleRoomCodePaste} placeholder="123456" inputMode="numeric" pattern="[0-9]{6}" maxLength={6} autoComplete="off" />
+                      {qrScannerSupported && <button type="button" className="sj-room-scan-trigger" aria-label="Scanner le QR code d’une salle" title="Scanner une invitation" onClick={() => setQrScannerOpen(true)}><ScanLine aria-hidden="true" size={21} /></button>}
+                    </div>
+                    <div className="sj-room-join-actions">
+                      <button className="sj-btn" disabled={!canJoinRoom} onClick={joinRoom}><Gamepad2 aria-hidden="true" size={16} /> Rejoindre</button>
+                      <button className="sj-btn sj-btn-spectator" disabled={!canJoinRoom} onClick={spectateRoom}><Eye aria-hidden="true" size={17} /> Regarder</button>
+                    </div>
+                  </section>
+                </div>
 
-              <label htmlFor="room-code">Code de la salle à 6 chiffres</label>
-              <div className={`sj-room-code-field ${qrScannerSupported ? 'sj-room-code-field-scannable' : ''}`}>
-                <input
-                  id="room-code"
-                  value={joinRoomInput}
-                  onChange={(event) => setJoinRoomInput(event.target.value.replace(/[^0-9]/g, '').slice(0, 6))}
-                  onPaste={handleRoomCodePaste}
-                  placeholder="123456"
-                  inputMode="numeric"
-                  pattern="[0-9]{6}"
-                  maxLength={6}
-                  autoComplete="off"
-                />
-                {qrScannerSupported && (
-                  <button
-                    type="button"
-                    className="sj-room-scan-trigger"
-                    aria-label="Scanner le QR code d’une salle"
-                    title="Scanner une invitation"
-                    onClick={() => setQrScannerOpen(true)}
-                  >
-                    <ScanLine aria-hidden="true" size={21} />
+                <div className="sj-home-public-slot">
+                  <button type="button" className="sj-public-search-trigger sj-home-public-action" disabled={!connected} onClick={openPublicRoomsPanel}>
+                    <Globe2 className="sj-home-public-action-icon" aria-hidden="true" size={18} />
+                    <strong>Trouver une partie publique</strong>
+                    <ChevronRight className="sj-home-public-action-chevron" aria-hidden="true" size={19} />
                   </button>
-                )}
-              </div>
-              <div className="sj-room-join-actions">
-                <button className="sj-btn" disabled={!canJoinRoom} onClick={joinRoom}>
-                  Rejoindre
-                </button>
-                <button className="sj-btn sj-btn-spectator" disabled={!canJoinRoom} onClick={spectateRoom}>
-                  <Eye aria-hidden="true" size={17} />
-                  Regarder
-                </button>
-              </div>
-
-              <button type="button" className="sj-public-search-trigger" disabled={!connected} onClick={openPublicRoomsPanel}>
-                Chercher une partie publique
-                <span aria-hidden="true">→</span>
-              </button>
+                </div>
+              </main>
             </div>
 
           </section>
@@ -1238,6 +1334,7 @@ function GameScreen({
   const [viewedActionPlayerId, setViewedActionPlayerId] = useState(null);
   const [chatModalOpen, setChatModalOpen] = useState(false);
   const [roomAdministrationOpen, setRoomAdministrationOpen] = useState(false);
+  const [mobileLobbyPanel, setMobileLobbyPanel] = useState('players');
   const [visibleActionPlayId, setVisibleActionPlayId] = useState(null);
   const [roundScoresReady, setRoundScoresReady] = useState(true);
   const [starterTieToast, setStarterTieToast] = useState(null);
@@ -2307,6 +2404,16 @@ function GameScreen({
   );
 
   if (state.phase === 'lobby') {
+    const maxPlayers = state.roomSettings?.maxPlayers || 8;
+    const availableSeats = Math.max(0, maxPlayers - state.players.length);
+    const lobbyReady = state.players.length >= 2 && disconnectedPlayers.length === 0;
+    const lobbyStatus = state.players.length < 2
+      ? 'En attente de joueurs'
+      : disconnectedPlayers.length > 0 ? 'Reconnexion en attente' : 'Prêt à jouer';
+    const modeOptions = [
+      { id: 'classic', label: 'Classique' },
+      { id: 'action', label: 'Action' },
+    ];
     return (
       <>
         <div className="sj-app-shell sj-lobby-room sj-room-controls-layout">
@@ -2315,105 +2422,174 @@ function GameScreen({
           {roomAdministrationButton}
           {spectatorBadge}
           <GameToast key={errorSerial} message={error} />
-          <section className="sj-lobby-card sj-fade-in">
-            <div className="sj-room-head">
-              <span>Salle</span>
-              <span className="sj-room-copy-wrap">
-                <span className="sj-room-code-copy">
-                  <button type="button" className={`sj-room-copy ${copied ? 'sj-room-copy-copied' : ''}`} onClick={copyRoomCode}>{roomId}</button>
-                  {copied && (
-                    <span className="sj-copy-toast" role="status" aria-live="polite" aria-label="Lien d’invitation copié">
-                      ✓
-                    </span>
-                  )}
-                </span>
-                <button
-                  type="button"
-                  className="sj-room-qr-trigger"
-                  aria-label="Afficher le QR code d’invitation"
-                  title="Afficher le QR code d’invitation"
-                  onClick={() => setInviteModalOpen(true)}
-                >
-                  <QrCode aria-hidden="true" size={20} />
-                </button>
+          <section className="sj-room-lobby sj-fade-in" aria-labelledby="room-lobby-title">
+            <header className="sj-room-lobby-header">
+              <div className="sj-room-lobby-title">
+                <span className="sj-room-lobby-eyebrow"><Gamepad2 aria-hidden="true" size={14} /> Lobby de partie</span>
+                <h1 id="room-lobby-title">Préparez votre partie</h1>
+                <p>Invitez vos amis, choisissez le mode et lancez dès que tout le monde est prêt.</p>
+              </div>
+              <div className="sj-room-lobby-invite">
+                <span>Code de la salle</span>
+                <div>
+                  <span className="sj-room-code-copy">
+                    <button
+                      type="button"
+                      className={`sj-room-lobby-code ${copied ? 'sj-room-copy-copied' : ''}`}
+                      aria-label={`Copier le code de salle ${roomId}`}
+                      onClick={copyRoomCode}
+                    >
+                      {roomId}
+                    </button>
+                    {copied && (
+                      <span className="sj-copy-toast" role="status" aria-live="polite" aria-label="Lien d’invitation copié">✓</span>
+                    )}
+                  </span>
+                  <button
+                    type="button"
+                    className="sj-room-lobby-qr"
+                    aria-label="Afficher le QR code d’invitation"
+                    title="Afficher le QR code d’invitation"
+                    onClick={() => setInviteModalOpen(true)}
+                  >
+                    <QrCode aria-hidden="true" size={20} />
+                  </button>
+                </div>
+                <small>Appuyez sur le code pour copier l’invitation</small>
+              </div>
+            </header>
+
+            <div className="sj-room-lobby-summary" aria-label="Informations de la salle">
+              <span className={state.roomVisibility === 'public' ? 'is-public' : ''}>
+                {state.roomVisibility === 'public' ? <Globe2 aria-hidden="true" size={14} /> : <LockKeyhole aria-hidden="true" size={14} />}
+                {state.roomVisibility === 'public' ? 'Publique' : 'Privée'}
               </span>
+              <span><Users aria-hidden="true" size={14} /> {state.players.length}/{maxPlayers} joueurs</span>
+              <span><Sparkles aria-hidden="true" size={14} /> {roomVariantLabel(state.roomSettings)}</span>
+              {state.roomSettings?.locked && <span><LockKeyhole aria-hidden="true" size={14} /> Verrouillée</span>}
+              <span className={`sj-room-lobby-status ${lobbyReady ? 'is-ready' : ''}`}><i aria-hidden="true" /> {lobbyStatus}</span>
             </div>
-            <p className={`sj-room-visibility-badge ${state.roomVisibility === 'public' ? 'sj-room-visibility-badge-public' : ''}`}>
-              {state.roomVisibility === 'public' ? 'Salle publique' : 'Salle privée'}
-              {' · '}
-              {state.players.length}/{state.roomSettings?.maxPlayers || 8} joueurs
-              {' · '}
-              {roomVariantLabel(state.roomSettings)}
-              {state.roomSettings?.locked ? ' · Verrouillée' : ''}
-            </p>
-            <ul className="sj-player-list">
-              {state.players.map((player) => (
-                <li
-                  key={player.id}
-                  className={`sj-pop-in ${player.id === myId ? 'sj-player-list-current' : ''} ${!player.connected ? 'sj-player-list-disconnected' : ''}`}
-                >
-                  <span className={`sj-turn-dot ${player.connected ? 'sj-turn-dot-on' : ''}`} />
-                  <span className="sj-player-list-name">{player.name}</span>
-                  {isCreator && player.id !== myId && (
-                    <button
-                      type="button"
-                      className="sj-player-remove-button"
-                      aria-label={`Retirer ${player.name} de la salle`}
-                      title={`Retirer ${player.name} de la salle`}
-                      onClick={() => removePlayerFromLobby(player.id)}
-                    >
-                      <Trash2 aria-hidden="true" size={18} />
-                    </button>
-                  )}
-                </li>
-              ))}
-            </ul>
-            <section className="sj-mode-picker" aria-label="Mode de jeu">
-              <div className="sj-mode-picker-head">
-                <strong>Mode de jeu</strong>
-              </div>
-              <div className="sj-mode-options">
-                {[
-                  { id: 'classic', label: 'Classique' },
-                  { id: 'action', label: 'Action' },
-                ].map((mode) => (
-                  <div key={mode.id} className={`sj-mode-option ${state.gameMode === mode.id ? 'sj-mode-option-active' : ''}`}>
-                    <button
-                      type="button"
-                      disabled={!isCreator}
-                      aria-pressed={state.gameMode === mode.id}
-                      onClick={() => emitSocket(socket, SOCKET_EVENTS.SET_GAME_MODE, { gameMode: mode.id })}
-                    >
-                      <strong>{mode.label}</strong>
-                    </button>
+
+            <div className={`sj-room-lobby-content is-${mobileLobbyPanel}-active`}>
+              <section
+                className={`sj-room-lobby-players ${mobileLobbyPanel !== 'players' ? 'is-mobile-collapsed' : 'is-mobile-expanded'}`}
+                aria-labelledby="room-player-list-title"
+                aria-expanded={mobileLobbyPanel === 'players'}
+                onClick={() => setMobileLobbyPanel('players')}
+              >
+                <div className="sj-room-lobby-section-head">
+                  <div>
+                    <span className="sj-room-lobby-section-icon"><Users aria-hidden="true" size={18} /></span>
+                    <span><strong id="room-player-list-title">Joueurs</strong></span>
                   </div>
-                ))}
-              </div>
-            </section>
-            <div className="sj-lobby-start-actions">
-              <GameGuideButton onClick={() => setGameGuideOpen(true)} />
-              {isCreator && state.players.length >= 2 && (
-                <button
-                  className="sj-btn sj-btn-primary"
-                  onClick={() => {
-                    if (disconnectedPlayers.length > 0) {
-                      setDisconnectedPlayersModalOpen(true);
-                      return;
-                    }
-                    emitSocket(socket, SOCKET_EVENTS.START_GAME);
-                  }}
-                >
-                  Lancer la partie
-                </button>
-              )}
+                  <strong>{state.players.length}<small>/{maxPlayers}</small></strong>
+                </div>
+                <ul className="sj-lobby-player-list">
+                  {state.players.map((player) => (
+                      <li
+                        key={player.id}
+                        className={`sj-pop-in ${player.id === myId ? 'is-current' : ''} ${!player.connected ? 'is-disconnected' : ''}`}
+                      >
+                        <span className="sj-lobby-player-copy">
+                          <strong>{player.name}</strong>
+                          <i
+                            className="sj-lobby-player-presence"
+                            role="img"
+                            aria-label={player.connected ? 'Connecté' : 'Déconnecté'}
+                            title={player.connected ? 'Connecté' : 'Déconnecté'}
+                          />
+                        </span>
+                        <span className="sj-lobby-player-badges">
+                          {player.id === state.creatorId && <span title="Créateur"><Crown aria-hidden="true" size={14} /> <em>Hôte</em></span>}
+                          {player.id === myId && <span className="is-you">Vous</span>}
+                        </span>
+                        {isCreator && player.id !== myId && (
+                          <button
+                            type="button"
+                            className="sj-lobby-player-remove"
+                            aria-label={`Retirer ${player.name} de la salle`}
+                            title={`Retirer ${player.name} de la salle`}
+                            onClick={() => removePlayerFromLobby(player.id)}
+                          >
+                            <UserMinus aria-hidden="true" size={17} />
+                          </button>
+                        )}
+                      </li>
+                  ))}
+                </ul>
+                <p className="sj-room-lobby-seats">
+                  {availableSeats > 0
+                    ? `${availableSeats} place${availableSeats > 1 ? 's' : ''} encore disponible${availableSeats > 1 ? 's' : ''}`
+                    : 'La salle est complète'}
+                </p>
+              </section>
+
+              <aside
+                className={`sj-room-lobby-settings ${mobileLobbyPanel !== 'settings' ? 'is-mobile-collapsed' : 'is-mobile-expanded'}`}
+                aria-expanded={mobileLobbyPanel === 'settings'}
+                onClick={() => setMobileLobbyPanel('settings')}
+              >
+                <section className="sj-room-lobby-mode" aria-labelledby="room-mode-title">
+                  <div className="sj-room-lobby-section-head">
+                    <div>
+                      <span className="sj-room-lobby-section-icon"><Sparkles aria-hidden="true" size={18} /></span>
+                      <span><strong id="room-mode-title">Mode de jeu</strong></span>
+                    </div>
+                  </div>
+                  <div
+                    className={`sj-room-visibility sj-room-lobby-mode-options ${state.gameMode === 'action' ? 'is-action' : ''}`}
+                    role="group"
+                    aria-label="Mode de jeu"
+                  >
+                    {modeOptions.map((mode) => (
+                      <button
+                        key={mode.id}
+                        type="button"
+                        className={`sj-room-visibility-option ${state.gameMode === mode.id ? 'sj-room-visibility-option-active' : ''}`}
+                        disabled={!isCreator}
+                        aria-pressed={state.gameMode === mode.id}
+                        onClick={() => emitSocket(socket, SOCKET_EVENTS.SET_GAME_MODE, { gameMode: mode.id })}
+                      >
+                        <strong>{mode.label}</strong>
+                      </button>
+                    ))}
+                  </div>
+                  <LobbyGameFormat
+                    roomSettings={state.roomSettings}
+                    disabled={!isCreator}
+                    onUpdate={(settings) => emitSocket(socket, SOCKET_EVENTS.UPDATE_ROOM_SETTINGS, settings)}
+                  />
+                </section>
+                <div className="sj-room-lobby-role-note">
+                  {isSpectator ? <Eye aria-hidden="true" size={17} /> : isCreator ? <Crown aria-hidden="true" size={17} /> : <Users aria-hidden="true" size={17} />}
+                  <span>
+                    <strong>{isSpectator ? 'Mode spectateur' : isCreator ? 'Vous êtes l’hôte' : 'Vous êtes invité'}</strong>
+                    <small>{isSpectator ? 'Vous regardez la salle en lecture seule.' : isCreator ? 'Vous contrôlez le lancement et les paramètres.' : 'La partie sera lancée par l’hôte.'}</small>
+                  </span>
+                </div>
+              </aside>
             </div>
-            {state.players.length < 2 ? (
-              <p className="sj-hint">En attente d'au moins 2 joueurs</p>
-            ) : isSpectator ? (
-              <p className="sj-hint">Vous regardez la salle en lecture seule.</p>
-            ) : !isCreator && (
-              <p className="sj-hint">En attente de lancement par le créateur</p>
-            )}
+
+            <footer className="sj-room-lobby-footer">
+              <div className="sj-room-lobby-actions">
+                <GameGuideButton onClick={() => setGameGuideOpen(true)} />
+                {isCreator && (
+                  <button
+                    className="sj-btn sj-btn-primary sj-room-lobby-start"
+                    disabled={state.players.length < 2}
+                    onClick={() => {
+                      if (disconnectedPlayers.length > 0) {
+                        setDisconnectedPlayersModalOpen(true);
+                        return;
+                      }
+                      emitSocket(socket, SOCKET_EVENTS.START_GAME);
+                    }}
+                  >
+                    Lancer la partie <ChevronRight aria-hidden="true" size={18} />
+                  </button>
+                )}
+              </div>
+            </footer>
           </section>
         </div>
         {leaveModal}
