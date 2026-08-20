@@ -1323,6 +1323,13 @@ function getCardMotionSettleDelay(moveType, motionEndsAt) {
   return Math.max(fallbackDelay, remainingMotion);
 }
 
+function latestRoundRevealId(gameState) {
+  const moves = gameState.cardMoves?.length > 0
+    ? gameState.cardMoves
+    : gameState.lastCardMove ? [gameState.lastCardMove] : [];
+  return [...moves].reverse().find((move) => move.type === 'roundReveal')?.id || null;
+}
+
 function GameScreen({
   socket, state, myId, roomId, isSpectator = false, connected = true,
   error, errorSerial, onLeaveRoom,
@@ -1353,13 +1360,18 @@ function GameScreen({
   const tutorialCheckedRef = useRef(false);
   const [groupChoiceModalReadyId, setGroupChoiceModalReadyId] = useState(null);
   const [cardMotionEndsAt, setCardMotionEndsAt] = useState(0);
-  const [visibleRoundRevealId, setVisibleRoundRevealId] = useState(null);
+  const [visibleRoundRevealId, setVisibleRoundRevealId] = useState(() => (
+    state.phase === 'gameEnd' ? latestRoundRevealId(state) : null
+  ));
   const [roundRevealEndsAt, setRoundRevealEndsAt] = useState(0);
   const [gameEndStats, setGameEndStats] = useState(null);
   const [gameEndStatsLoading, setGameEndStatsLoading] = useState(false);
   const preGameStatsRef = useRef(null);
   const statsGameSerialRef = useRef(null);
   const gameEndSnapshotRef = useRef(null);
+  const hydratedGameEndSerialRef = useRef(
+    state.phase === 'gameEnd' ? state.gameSerial : null,
+  );
   const initializedChatRoomRef = useRef('');
   const starterTieToastTimerRef = useRef(null);
   const closeChatModal = useCallback(() => setChatModalOpen(false), []);
@@ -1462,7 +1474,11 @@ function GameScreen({
   const roundScorePhase = ['roundEnd', 'gameEnd'].includes(state.phase);
   const roundScoreDeadline = Math.max(state.roundScoresAt || 0, motionSequenceEndsAt);
   const roundScoreDeadlineReached = !roundScoreDeadline || Date.now() >= roundScoreDeadline;
-  const roundScoresVisible = !roundScorePhase
+  const roundScoresVisible = (
+    state.phase === 'gameEnd'
+    && hydratedGameEndSerialRef.current === state.gameSerial
+  )
+    || !roundScorePhase
     || !state.roundScoresAt
     || (roundScoresReady && roundScoreDeadlineReached);
   const roundScorePreviewActive = roundScorePhase && !roundScoresVisible;
