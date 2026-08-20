@@ -1,5 +1,5 @@
-import React, { useMemo, useState } from 'react';
-import { ChevronRight, Flame, Medal, Sparkles, Trophy } from 'lucide-react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { ChevronRight, Flame, Sparkles, Trophy } from 'lucide-react';
 import { buildProgression, pluralize } from '../progression.js';
 
 function placementTrophies(rank, playerCount) {
@@ -65,18 +65,19 @@ export default function GameEndCelebration({
   onNewGame,
 }) {
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [rankingScrollable, setRankingScrollable] = useState(false);
+  const rankingRef = useRef(null);
   const ranking = useMemo(() => playerRanking(players), [players]);
   const pieces = useMemo(() => confettiPieces(), []);
   const me = ranking.find((player) => player.id === myId);
   const winners = ranking.filter((player) => winnerIds.includes(player.id));
   const won = !!me && winnerIds.includes(me.id);
   const draw = winnerIds.length > 1;
-  const winnerNames = new Intl.ListFormat('fr-FR', { style: 'long', type: 'conjunction' })
-    .format(winners.map((player) => player.name));
-  const title = isSpectator
-    ? draw ? 'Égalité !' : `${winners[0]?.name || 'Un joueur'} remporte la partie !`
-    : won ? draw ? 'Victoire partagée !' : 'Victoire !'
-      : `${winners[0]?.name || 'Un joueur'} remporte la partie`;
+  const title = draw
+    ? 'Égalité !'
+    : won ? 'Victoire !' : isSpectator ? `${winners[0]?.name || 'Un joueur'} gagne` : 'Partie terminée';
+  const featuredRank = me?.rank || winners[0]?.rank || 1;
+  const featuredRankLabel = featuredRank === 1 ? '1er' : `${featuredRank}e`;
   const nominalTrophyGain = me
     ? placementTrophies(me.rank, ranking.length)
       + (me.rank === 1 ? Math.min(Math.max((afterStats?.currentWinStreak || 1) - 1, 0), 5) : 0)
@@ -105,6 +106,25 @@ export default function GameEndCelebration({
   const rating = afterStats?.competitiveRating;
   const streak = afterStats?.currentWinStreak || 0;
 
+  useEffect(() => {
+    const rankingElement = rankingRef.current;
+    if (!detailsOpen || !rankingElement) {
+      setRankingScrollable(false);
+      return undefined;
+    }
+    const updateScrollable = () => {
+      setRankingScrollable(rankingElement.scrollHeight > rankingElement.clientHeight + 1);
+    };
+    updateScrollable();
+    if (typeof ResizeObserver === 'function') {
+      const resizeObserver = new ResizeObserver(updateScrollable);
+      resizeObserver.observe(rankingElement);
+      return () => resizeObserver.disconnect();
+    }
+    window.addEventListener('resize', updateScrollable);
+    return () => window.removeEventListener('resize', updateScrollable);
+  }, [detailsOpen, ranking.length]);
+
   return (
     <section className={`sj-game-end ${won ? 'sj-game-end-win' : ''}`} aria-labelledby="game-end-title">
       {(won || isSpectator) && (
@@ -122,18 +142,14 @@ export default function GameEndCelebration({
       )}
 
       <header className="sj-game-end-hero">
-        <div className="sj-game-end-emblem" aria-hidden="true">
-          {won ? <Trophy size={42} /> : <Medal size={40} />}
+        <div className="sj-game-end-placement" aria-label={`${featuredRank} sur ${ranking.length}`}>
+          <small>{isSpectator ? 'Gagnant' : 'Votre place'}</small>
+          <strong>{featuredRankLabel}</strong>
+          <span>sur {ranking.length}</span>
         </div>
-        <div>
-          <span className="sj-game-end-kicker">Partie terminée</span>
+        <div className="sj-game-end-hero-copy">
+          <span className="sj-game-end-kicker">Résultat final</span>
           <h1 id="game-end-title">{title}</h1>
-          <p>
-            {draw
-              ? `${winnerNames} terminent avec le meilleur score.`
-              : me ? `Vous terminez ${me.rank === 1 ? '1er' : `${me.rank}e`} sur ${ranking.length}.`
-                : `${winnerNames} termine en tête du classement.`}
-          </p>
         </div>
       </header>
 
@@ -199,7 +215,12 @@ export default function GameEndCelebration({
         <span>Classement de la partie</span>
         <ChevronRight aria-hidden="true" size={19} />
       </button>
-      <ol id="game-end-ranking" className="sj-game-end-ranking" hidden={!detailsOpen}>
+      <ol
+        ref={rankingRef}
+        id="game-end-ranking"
+        className={`sj-game-end-ranking ${rankingScrollable ? 'is-scrollable' : ''}`}
+        hidden={!detailsOpen}
+      >
         {ranking.map((player) => (
           <li key={player.id} className={player.id === myId ? 'is-me' : ''}>
             <span className="sj-game-end-rank">{player.order <= 3 ? ['🥇', '🥈', '🥉'][player.order - 1] : `#${player.order}`}</span>

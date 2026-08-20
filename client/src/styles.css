@@ -5945,28 +5945,27 @@ button.sj-action-count-badge:focus-visible {
   100% { opacity: 0; translate: 38px 600px; rotate: 540deg; }
 }
 
-.sj-game-end-hero { display: flex; align-items: center; justify-content: center; gap: 20px; text-align: left; animation: sj-end-rise .55s cubic-bezier(.2, .85, .3, 1) both; }
-.sj-game-end-emblem {
+.sj-game-end-hero {
   display: grid;
-  flex: 0 0 auto;
-  place-items: center;
-  width: 82px;
-  aspect-ratio: 1;
-  color: #2d2410;
-  background: linear-gradient(145deg, #ffe893, #e9a934 68%, #bf741e);
-  border: 4px solid rgba(255, 247, 196, .75);
-  border-radius: 50%;
-  box-shadow: 0 0 0 8px rgba(242, 184, 67, .12), 0 14px 35px rgba(215, 142, 35, .28);
-  animation: sj-end-emblem .8s cubic-bezier(.18, 1.35, .4, 1) both;
+  grid-template-columns: clamp(66px, 18vw, 96px) minmax(0, 1fr);
+  align-items: stretch;
+  gap: clamp(13px, 2.5vw, 20px);
+  width: 100%;
+  padding: 0;
+  text-align: left;
+  animation: sj-end-rise .55s cubic-bezier(.2, .85, .3, 1) both;
 }
-.sj-game-end-kicker { color: #f0bd57; font-size: 11px; font-weight: 900; letter-spacing: .15em; text-transform: uppercase; }
-.sj-game-end-hero h1 { margin: 3px 0 4px; color: #fff; font-size: clamp(31px, 6vw, 50px); line-height: .98; letter-spacing: -.04em; }
-.sj-game-end-hero p { margin: 0; color: #aeb7c5; font-size: 14px; font-weight: 700; }
+.sj-game-end-placement { display: grid; align-content: center; justify-items: center; min-width: 0; min-height: clamp(70px, 16vw, 88px); padding: clamp(6px, 1.5vw, 9px) 4px; color: #fff1bd; background: linear-gradient(145deg, rgba(241, 188, 68, .19), rgba(180, 116, 28, .09)); border: 1px solid rgba(238, 183, 65, .27); border-radius: clamp(13px, 3vw, 18px); box-shadow: inset 0 1px rgba(255, 255, 255, .07); }
+.sj-game-end-placement small { max-width: 100%; overflow: hidden; color: #bba86f; font-size: clamp(7px, 1.5vw, 8px); font-weight: 900; letter-spacing: .06em; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
+.sj-game-end-placement strong { margin-block: 2px; color: #ffe28b; font-size: clamp(24px, 7vw, 40px); line-height: 1; letter-spacing: -.06em; }
+.sj-game-end-placement span { color: #93896d; font-size: clamp(8px, 1.7vw, 9px); font-weight: 800; white-space: nowrap; }
+.sj-game-end-hero-copy { display: grid; align-content: center; min-width: 0; padding-block: 5px; }
+.sj-game-end-kicker { overflow: hidden; color: #e0b953; font-size: 9px; font-weight: 900; letter-spacing: .15em; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
+.sj-game-end-hero h1 { margin: 3px 0 0; color: #fff; font-size: clamp(25px, 5vw, 39px); line-height: 1; letter-spacing: -.04em; }
 
-@keyframes sj-end-emblem { from { opacity: 0; scale: .35; rotate: -18deg; } to { opacity: 1; scale: 1; rotate: 0deg; } }
 @keyframes sj-end-rise { from { opacity: 0; translate: 0 18px; } to { opacity: 1; translate: 0 0; } }
 
-.sj-game-end-rewards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 28px; }
+.sj-game-end-rewards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 12px; }
 .sj-game-end-reward {
   display: flex;
   align-items: center;
@@ -6003,7 +6002,7 @@ button.sj-action-count-badge:focus-visible {
 .sj-game-end-unlocks strong { font-size: 12px; }
 .sj-game-end-unlocks span { color: #b8b2a1; font-size: 10px; }
 
-.sj-game-end-ranking-toggle { display: flex; align-items: center; justify-content: space-between; width: 100%; margin-top: 16px; padding: 13px 4px 9px; color: #dce2eb; background: none; border: 0; font: inherit; font-size: 12px; font-weight: 900; cursor: pointer; }
+.sj-game-end-ranking-toggle { display: flex; align-items: center; justify-content: space-between; width: 100%; margin: 0; padding: 13px 4px 9px; color: #dce2eb; background: none; border: 0; font: inherit; font-size: 12px; font-weight: 900; cursor: pointer; }
 .sj-game-end-ranking-toggle svg { transition: transform .2s ease; }
 .sj-game-end-ranking-toggle[aria-expanded='true'] svg { transform: rotate(90deg); }
 .sj-game-end-ranking {
@@ -6014,12 +6013,12 @@ button.sj-action-count-badge:focus-visible {
   margin: 0;
   padding: 0 4px 0 0;
   overflow-x: hidden;
-  overflow-y: auto;
-  overscroll-behavior: contain;
+  overflow-y: hidden;
   scrollbar-color: rgba(132, 151, 178, .55) transparent;
   scrollbar-width: thin;
   list-style: none;
 }
+.sj-game-end-ranking.is-scrollable { overflow-y: auto; overscroll-behavior: contain; }
 .sj-game-end-ranking::-webkit-scrollbar { width: 5px; }
 .sj-game-end-ranking::-webkit-scrollbar-track { background: transparent; }
 .sj-game-end-ranking::-webkit-scrollbar-thumb { background: rgba(132, 151, 178, .5); border-radius: 99px; }
@@ -6036,13 +6035,8 @@ button.sj-action-count-badge:focus-visible {
 
 @media (max-width: 620px) {
   .sj-room-controls-layout:has(.sj-game-end) { padding: 72px 10px max(10px, env(safe-area-inset-bottom)); }
-  .sj-game-end { max-height: calc(100dvh - 82px); padding: 21px 16px 18px; border-radius: 24px; }
-  .sj-game-end-hero { gap: 13px; justify-content: flex-start; }
-  .sj-game-end-emblem { width: 61px; border-width: 3px; }
-  .sj-game-end-emblem svg { width: 31px; height: 31px; }
-  .sj-game-end-hero h1 { font-size: clamp(26px, 9vw, 37px); }
-  .sj-game-end-hero p { font-size: 11px; }
-  .sj-game-end-rewards { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-top: 21px; }
+  .sj-game-end { max-height: calc(100dvh - 82px); padding: 16px; border-radius: 24px; }
+  .sj-game-end-rewards { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-top: 12px; }
   .sj-game-end-reward { display: grid; justify-items: center; gap: 5px; padding: 11px 4px; text-align: center; }
   .sj-game-end-reward-icon { width: 35px; height: 35px; flex-basis: 35px; border-radius: 11px; }
   .sj-game-end-reward-icon svg { width: 20px; height: 20px; }
@@ -6314,18 +6308,14 @@ button.sj-action-count-badge:focus-visible {
 
 @media (max-height: 520px) {
   .sj-room-controls-layout:has(.sj-game-end) { padding-block: 8px; }
-  .sj-game-end { max-height: calc(100dvh - 16px); padding: 12px 16px; border-radius: 20px; }
-  .sj-game-end-emblem { width: 48px; border-width: 2px; }
-  .sj-game-end-emblem svg { width: 25px; height: 25px; }
-  .sj-game-end-hero h1 { font-size: 26px; }
-  .sj-game-end-hero p { font-size: 10px; }
-  .sj-game-end-rewards { margin-top: 10px; }
+  .sj-game-end { max-height: calc(100dvh - 16px); padding: 12px; border-radius: 20px; }
+  .sj-game-end-rewards { margin-top: 6px; }
   .sj-game-end-reward { padding-block: 8px; }
   .sj-game-end-reward-icon { width: 34px; height: 34px; flex-basis: 34px; }
   .sj-game-end-progress { margin-top: 6px; padding: 8px 12px; }
   .sj-game-end-progress-track { margin-block: 5px 3px; }
   .sj-game-end-unlocks { margin-top: 6px; padding-block: 7px; }
-  .sj-game-end-ranking-toggle { margin-top: 5px; padding-block: 8px 5px; }
+  .sj-game-end-ranking-toggle { padding-block: 8px 5px; }
   .sj-game-end-ranking { max-height: 90px; }
   .sj-game-end-actions { margin-top: 7px; }
   .sj-game-end-actions .sj-btn { min-height: 38px; padding-block: 8px; }
