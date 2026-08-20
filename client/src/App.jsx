@@ -1391,7 +1391,9 @@ function GameScreen({
   );
   const concealRoundReveal = !!roundRevealId && visibleRoundRevealId !== roundRevealId;
   const motionSequenceEndsAt = Math.max(cardMotionEndsAt, roundRevealEndsAt);
-  if (
+  if (state.phase !== 'gameEnd' && gameEndSnapshotRef.current) {
+    gameEndSnapshotRef.current = null;
+  } else if (
     state.phase === 'gameEnd'
     && (!gameEndSnapshotRef.current || gameEndSnapshotRef.current.gameSerial !== state.gameSerial)
   ) {
@@ -1408,6 +1410,7 @@ function GameScreen({
     if (isSpectator || !getProfileStats || !state.gameSerial) return undefined;
     if (!['lobby', 'gameEnd'].includes(state.phase) && statsGameSerialRef.current !== state.gameSerial) {
       statsGameSerialRef.current = state.gameSerial;
+      preGameStatsRef.current = null;
       let cancelled = false;
       getProfileStats({ force: true }).then((stats) => {
         if (!cancelled) preGameStatsRef.current = stats;
@@ -2631,6 +2634,7 @@ function GameScreen({
           {spectatorBadge}
           <GameToast key={errorSerial} message={error} />
           <GameEndCelebration
+            key={state.gameSerial}
             players={finalSnapshot.players}
             myId={myId}
             winnerIds={winnerIds}

@@ -820,6 +820,7 @@ export function publicState(state, forPlayerId) {
     roomVisibility: state.roomVisibility === 'public' ? 'public' : 'private',
     roomSettings: roomSettings(state),
     gameMode: state.gameMode || 'classic',
+    gameSerial: Number.isSafeInteger(state.gameSerial) ? state.gameSerial : 0,
     creatorId,
     phase: state.phase,
     order: state.order,
