@@ -651,9 +651,12 @@ function GameApp() {
       setChatBefore(null);
       setPendingReconnectState(null);
       setAutoReconnectPending(false);
+      setState(null);
+      setJoinRoomInput('');
+      setHomePanel('home');
     };
 
-    const resetRevokedRoomAccess = (message) => {
+    const resetRoomAccess = (message) => {
       saveGameValue('sj-room-id', '');
       saveGameValue(ROOM_ROLE_KEY, '');
       nextSocket.auth = {
@@ -743,6 +746,10 @@ function GameApp() {
       if (inviteJoinPendingRef.current && inviteJoinAttemptedRef.current) {
         inviteJoinPendingRef.current = false;
         setInviteJoinPending(false);
+        if (code === 'room_unavailable') {
+          setJoinRoomInput('');
+          setHomePanel('home');
+        }
       }
       if (code === 'invalid_session') {
         void logout();
@@ -815,24 +822,16 @@ function GameApp() {
       setChatMessages((current) => current.some((item) => item.id === message.id) ? current : [...current, message]);
     });
     nextSocket.on(SOCKET_EVENTS.ROOM_EXPIRED, () => {
-      saveGameValue('sj-room-id', '');
-      saveGameValue(ROOM_ROLE_KEY, '');
-      setRoomId('');
-      setPlayerId('');
-      setRoomRole(ROOM_ROLES.PLAYER);
-      roomRoleRef.current = ROOM_ROLES.PLAYER;
-      setState(null);
-      setChatMessages([]);
-      showError('Cette salle a expiré après 24 heures d\'inactivité.');
+      resetRoomAccess('Cette salle n’existe plus. Retour à l’accueil.');
     });
     nextSocket.on(SOCKET_EVENTS.REMOVED_FROM_ROOM, () => {
-      resetRevokedRoomAccess('Le propriétaire vous a retiré de la salle.');
+      resetRoomAccess('Le propriétaire vous a retiré de la salle.');
     });
     nextSocket.on(SOCKET_EVENTS.ROOM_ACCESS_REVOKED, (payload) => {
       const message = typeof payload?.message === 'string'
         ? [...payload.message].slice(0, 200).join('')
         : 'Votre accès à cette salle a été retiré.';
-      resetRevokedRoomAccess(message);
+      resetRoomAccess(message);
     });
     return () => {
       if (reconnectTimeout) window.clearTimeout(reconnectTimeout);
