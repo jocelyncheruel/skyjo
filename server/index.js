@@ -951,6 +951,82 @@ async function handleAction(socket, fn, mutationOptions = {}) {
   scheduleDefensePrompt(info.roomId, state);
 }
 
+async function handleTrackedHumanAction(socket, fn, decisionEvent) {
+  const info = socketToPlayer.get(socket.id);
+  const previousState = info?.role === 'player' ? rooms.get(info.roomId) : null;
+  const context = previousState && info?.playerId
+    ? buildHumanDecisionContext(previousState, info.playerId)
+    : null;
+  await handleAction(socket, fn);
+  const state = info ? rooms.get(info.roomId) : null;
+  if (info && state && context) {
+    void persistHumanDecision({
+      socket,
+      info,
+      state,
+      context,
+      type: decisionEvent.type,
+      decision: decisionEvent.decision,
+    });
+  }
+}
+
+function buildHumanDecisionContext(state, playerId) {
+  const view = publicState(state, playerId);
+  return {
+    gameSerial: view.gameSerial,
+    roundNumber: view.roundNumber,
+    turnSerial: view.turnSerial,
+    gameMode: view.gameMode,
+    phase: view.phase,
+    turnStage: view.turnStage,
+    roundEnderId: view.roundEnderId || null,
+    discardTop: view.discardTop || null,
+    deckCount: view.deckCount,
+    drawnCard: view.drawnCard || null,
+    players: view.players.map((player) => ({
+      id: player.id,
+      isActor: player.id === playerId,
+      totalScore: player.totalScore,
+      hasTotalScore: player.hasTotalScore,
+      board: player.board.map(({ faceUp, removed, value, kind }) => ({
+        faceUp,
+        removed,
+        value,
+        kind,
+      })),
+    })),
+    actionMarket: view.actionMarket || null,
+    actionDiscardTop: view.actionDiscardTop || null,
+    playersAction: view.playersAction || null,
+    pendingAction: view.pendingAction || null,
+    pendingStarClaim: view.pendingStarClaim || null,
+    pendingGroupChoice: view.pendingGroupChoice || null,
+    pendingGroupChoices: view.pendingGroupChoices || null,
+  };
+}
+
+async function persistHumanDecision({ socket, info, state, context, type, decision }) {
+  try {
+    const userId = socket.data.auth.user.id;
+    const { error } = await supabase.from('game_decision_events').insert({
+      room_id: info.roomId,
+      game_serial: context.gameSerial,
+      round_number: context.roundNumber,
+      turn_serial: context.turnSerial || 0,
+      user_id: userId,
+      player_id: info.playerId,
+      game_mode: context.gameMode || state.gameMode || 'classic',
+      decision_type: type,
+      decision_context: context,
+      decision,
+    });
+    if (error) throw error;
+  } catch (error) {
+    logInternal('game_decision_event', error);
+  }
+}
+
 function clearDisconnectTimersForRoom(roomId) {
   for (const [key, timer] of disconnectTimers) {
     if (!key.startsWith(`${roomId}:`)) continue;
@@ -1711,20 +1787,101 @@ io.on('connection', (socket) => {
   ));
   socket.on(SOCKET_EVENTS.RETURN_TO_LOBBY, withSocketGuard(socket, SOCKET_EVENTS.RETURN_TO_LOBBY, () => handleAction(socket, returnToLobby)));
   socket.on(SOCKET_EVENTS.SET_GAME_MODE, withSocketGuard(socket, SOCKET_EVENTS.SET_GAME_MODE, (payload) => handleAction(socket, (s, p) => setGameMode(s, p, objectPayload(payload, socketPayloadKeys(SOCKET_EVENTS.SET_GAME_MODE)).gameMode))));
-  socket.on(SOCKET_EVENTS.FLIP_INITIAL, withSocketGuard(socket, SOCKET_EVENTS.FLIP_INITIAL, (payload) => handleAction(socket, (s, p) => flipInitialCard(s, p, objectPayload(payload, socketPayloadKeys(SOCKET_EVENTS.FLIP_INITIAL)).slotIndex))));
-  socket.on(SOCKET_EVENTS.DRAW_CARD, withSocketGuard(socket, SOCKET_EVENTS.DRAW_CARD, (payload) => handleAction(socket, (s, p) => drawCard(s, p, objectPayload(payload, socketPayloadKeys(SOCKET_EVENTS.DRAW_CARD)).source))));
-  socket.on(SOCKET_EVENTS.DECIDE_DRAWN, withSocketGuard(socket, SOCKET_EVENTS.DECIDE_DRAWN, (payload) => handleAction(socket, (s, p) => decideDrawnCard(s, p, objectPayload(payload, socketPayloadKeys(SOCKET_EVENTS.DECIDE_DRAWN)).keep))));
-  socket.on(SOCKET_EVENTS.KEEP_DRAWN_AND_PLACE, withSocketGuard(socket, SOCKET_EVENTS.KEEP_DRAWN_AND_PLACE, (payload) => handleAction(socket, (s, p) => keepDrawnAndPlace(s, p, objectPayload(payload, socketPayloadKeys(SOCKET_EVENTS.KEEP_DRAWN_AND_PLACE)).slotIndex))));
-  socket.on(SOCKET_EVENTS.PLACE_CARD, withSocketGuard(socket, SOCKET_EVENTS.PLACE_CARD, (payload) => handleAction(socket, (s, p) => placeDrawnCard(s, p, objectPayload(payload, socketPayloadKeys(SOCKET_EVENTS.PLACE_CARD)).slotIndex))));
-  socket.on(SOCKET_EVENTS.REVEAL_CARD, withSocketGuard(socket, SOCKET_EVENTS.REVEAL_CARD, (payload) => handleAction(socket, (s, p) => revealHiddenCard(s, p, objectPayload(payload, socketPayloadKeys(SOCKET_EVENTS.REVEAL_CARD)).slotIndex))));
-  socket.on(SOCKET_EVENTS.PLAY_ACTION_CARD, withSocketGuard(socket, SOCKET_EVENTS.PLAY_ACTION_CARD, (payload) => handleAction(socket, (s, p) => playOwnedAction(s, p, objectPayload(payload, socketPayloadKeys(SOCKET_EVENTS.PLAY_ACTION_CARD)).cardId))));
-  socket.on(SOCKET_EVENTS.DISCARD_ACTION_CARD, withSocketGuard(socket, SOCKET_EVENTS.DISCARD_ACTION_CARD, (payload) => handleAction(socket, (s, p) => discardOwnedAction(s, p, objectPayload(payload, socketPayloadKeys(SOCKET_EVENTS.DISCARD_ACTION_CARD)).cardId))));
-  socket.on(SOCKET_EVENTS.RESOLVE_ACTION, withSocketGuard(socket, SOCKET_EVENTS.RESOLVE_ACTION, (payload) => handleAction(socket, (s, p) => resolveActionInput(s, p, actionPayload(payload)))));
-  socket.on(SOCKET_EVENTS.RESOLVE_DEFENSE, withSocketGuard(socket, SOCKET_EVENTS.RESOLVE_DEFENSE, (payload) => handleAction(socket, (s, p) => resolveDefensePrompt(s, p, objectPayload(payload, socketPayloadKeys(SOCKET_EVENTS.RESOLVE_DEFENSE)).useDefense))));
-  socket.on(SOCKET_EVENTS.RESOLVE_GROUP_CHOICE, withSocketGuard(socket, SOCKET_EVENTS.RESOLVE_GROUP_CHOICE, (payload) => handleAction(socket, (s, p) => resolveGroupChoice(s, p, objectPayload(payload, socketPayloadKeys(SOCKET_EVENTS.RESOLVE_GROUP_CHOICE)).remove))));
+  socket.on(SOCKET_EVENTS.FLIP_INITIAL, withSocketGuard(socket, SOCKET_EVENTS.FLIP_INITIAL, (payload) => {
+    const { slotIndex } = objectPayload(payload, socketPayloadKeys(SOCKET_EVENTS.FLIP_INITIAL));
+    return handleTrackedHumanAction(
+      socket,
+      (s, p) => flipInitialCard(s, p, slotIndex),
+      { type: 'initial_flip', decision: { slotIndex } },
+    );
+  }));
+  socket.on(SOCKET_EVENTS.DRAW_CARD, withSocketGuard(socket, SOCKET_EVENTS.DRAW_CARD, (payload) => {
+    const { source } = objectPayload(payload, socketPayloadKeys(SOCKET_EVENTS.DRAW_CARD));
+    return handleTrackedHumanAction(
+      socket,
+      (s, p) => drawCard(s, p, source),
+      { type: 'draw_source', decision: { source } },
+    );
+  }));
+  socket.on(SOCKET_EVENTS.DECIDE_DRAWN, withSocketGuard(socket, SOCKET_EVENTS.DECIDE_DRAWN, (payload) => {
+    const { keep } = objectPayload(payload, socketPayloadKeys(SOCKET_EVENTS.DECIDE_DRAWN));
+    return handleTrackedHumanAction(
+      socket,
+      (s, p) => decideDrawnCard(s, p, keep),
+      { type: 'drawn_card', decision: { keep } },
+    );
+  }));
+  socket.on(SOCKET_EVENTS.KEEP_DRAWN_AND_PLACE, withSocketGuard(socket, SOCKET_EVENTS.KEEP_DRAWN_AND_PLACE, (payload) => {
+    const { slotIndex } = objectPayload(payload, socketPayloadKeys(SOCKET_EVENTS.KEEP_DRAWN_AND_PLACE));
+    return handleTrackedHumanAction(
+      socket,
+      (s, p) => keepDrawnAndPlace(s, p, slotIndex),
+      { type: 'place_card', decision: { slotIndex, keepDrawn: true } },
+    );
+  }));
+  socket.on(SOCKET_EVENTS.PLACE_CARD, withSocketGuard(socket, SOCKET_EVENTS.PLACE_CARD, (payload) => {
+    const { slotIndex } = objectPayload(payload, socketPayloadKeys(SOCKET_EVENTS.PLACE_CARD));
+    return handleTrackedHumanAction(
+      socket,
+      (s, p) => placeDrawnCard(s, p, slotIndex),
+      { type: 'place_card', decision: { slotIndex } },
+    );
+  }));
+  socket.on(SOCKET_EVENTS.REVEAL_CARD, withSocketGuard(socket, SOCKET_EVENTS.REVEAL_CARD, (payload) => {
+    const { slotIndex } = objectPayload(payload, socketPayloadKeys(SOCKET_EVENTS.REVEAL_CARD));
+    return handleTrackedHumanAction(
+      socket,
+      (s, p) => revealHiddenCard(s, p, slotIndex),
+      { type: 'reveal_card', decision: { slotIndex } },
+    );
+  }));
+  socket.on(SOCKET_EVENTS.PLAY_ACTION_CARD, withSocketGuard(socket, SOCKET_EVENTS.PLAY_ACTION_CARD, (payload) => {
+    const { cardId } = objectPayload(payload, socketPayloadKeys(SOCKET_EVENTS.PLAY_ACTION_CARD));
+    return handleTrackedHumanAction(
+      socket,
+      (s, p) => playOwnedAction(s, p, cardId),
+      { type: 'play_action', decision: { cardId } },
+    );
+  }));
+  socket.on(SOCKET_EVENTS.DISCARD_ACTION_CARD, withSocketGuard(socket, SOCKET_EVENTS.DISCARD_ACTION_CARD, (payload) => {
+    const { cardId } = objectPayload(payload, socketPayloadKeys(SOCKET_EVENTS.DISCARD_ACTION_CARD));
+    return handleTrackedHumanAction(
+      socket,
+      (s, p) => discardOwnedAction(s, p, cardId),
+      { type: 'discard_action', decision: { cardId } },
+    );
+  }));
+  socket.on(SOCKET_EVENTS.RESOLVE_ACTION, withSocketGuard(socket, SOCKET_EVENTS.RESOLVE_ACTION, (payload) => {
+    const decision = actionPayload(payload);
+    return handleTrackedHumanAction(
+      socket,
+      (s, p) => resolveActionInput(s, p, decision),
+      { type: 'resolve_action', decision },
+    );
+  }));
+  socket.on(SOCKET_EVENTS.RESOLVE_DEFENSE, withSocketGuard(socket, SOCKET_EVENTS.RESOLVE_DEFENSE, (payload) => {
+    const { useDefense } = objectPayload(payload, socketPayloadKeys(SOCKET_EVENTS.RESOLVE_DEFENSE));
+    return handleTrackedHumanAction(
+      socket,
+      (s, p) => resolveDefensePrompt(s, p, useDefense),
+      { type: 'resolve_defense', decision: { useDefense } },
+    );
+  }));
+  socket.on(SOCKET_EVENTS.RESOLVE_GROUP_CHOICE, withSocketGuard(socket, SOCKET_EVENTS.RESOLVE_GROUP_CHOICE, (payload) => {
+    const { remove } = objectPayload(payload, socketPayloadKeys(SOCKET_EVENTS.RESOLVE_GROUP_CHOICE));
+    return handleTrackedHumanAction(
+      socket,
+      (s, p) => resolveGroupChoice(s, p, remove),
+      { type: 'resolve_group', decision: { remove } },
+    );
+  }));
   socket.on(SOCKET_EVENTS.CLAIM_STAR_ACTION, withSocketGuard(socket, SOCKET_EVENTS.CLAIM_STAR_ACTION, (payload) => {
     const data = objectPayload(payload, socketPayloadKeys(SOCKET_EVENTS.CLAIM_STAR_ACTION));
-    return handleAction(socket, (s, p) => claimStarAction(s, p, data.source, data.marketIndex));
+    return handleTrackedHumanAction(
+      socket,
+      (s, p) => claimStarAction(s, p, data.source, data.marketIndex),
+      { type: 'claim_star_action', decision: { source: data.source, marketIndex: data.marketIndex } },
+    );
   }));
   socket.on(SOCKET_EVENTS.SEND_CHAT_MESSAGE, withSocketGuard(socket, SOCKET_EVENTS.SEND_CHAT_MESSAGE, (payload) => appendChatMessage(socket, objectPayload(payload, socketPayloadKeys(SOCKET_EVENTS.SEND_CHAT_MESSAGE)).text)));
   socket.on(SOCKET_EVENTS.LOAD_CHAT_HISTORY, withSocketGuard(socket, SOCKET_EVENTS.LOAD_CHAT_HISTORY, (payload) => sendChatHistory(socket, objectPayload(payload, socketPayloadKeys(SOCKET_EVENTS.LOAD_CHAT_HISTORY)).before)));

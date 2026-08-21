@@ -125,6 +125,43 @@ CREATE TABLE IF NOT EXISTS public.user_game_participations (
   CONSTRAINT user_game_participations_rounds_check CHECK (rounds_played >= 0)
 );
 
+CREATE TABLE IF NOT EXISTS public.game_decision_events (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  room_id TEXT NOT NULL,
+  game_serial BIGINT NOT NULL,
+  round_number INTEGER NOT NULL,
+  turn_serial BIGINT NOT NULL,
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  player_id TEXT NOT NULL,
+  game_mode TEXT NOT NULL,
+  decision_type TEXT NOT NULL,
+  decision_context JSONB NOT NULL,
+  decision JSONB NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT game_decision_events_serial_check CHECK (game_serial > 0 AND turn_serial >= 0),
+  CONSTRAINT game_decision_events_round_check CHECK (round_number > 0),
+  CONSTRAINT game_decision_events_player_id_check CHECK (player_id ~ '^[A-Za-z0-9_-]{10,40}$'),
+  CONSTRAINT game_decision_events_mode_check CHECK (game_mode IN ('classic', 'action')),
+  CONSTRAINT game_decision_events_type_check CHECK (
+    decision_type IN (
+      'initial_flip', 'draw_source', 'drawn_card', 'place_card', 'reveal_card',
+      'play_action', 'discard_action', 'resolve_action', 'resolve_defense',
+      'resolve_group', 'claim_star_action'
+    )
+  ),
+  CONSTRAINT game_decision_events_context_size_check CHECK (octet_length(decision_context::text) <= 32768),
+  CONSTRAINT game_decision_events_decision_size_check CHECK (octet_length(decision::text) <= 4096)
+);
+
+CREATE INDEX IF NOT EXISTS game_decision_events_user_idx
+  ON public.game_decision_events (user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS game_decision_events_game_idx
+  ON public.game_decision_events (room_id, game_serial, turn_serial);
+
+INSERT INTO public.skyjo_schema_migrations (version)
+VALUES ('v6')
+ON CONFLICT (version) DO NOTHING;
+
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM public.skyjo_schema_migrations WHERE version = 'v5') THEN
@@ -174,6 +211,8 @@ ALTER TABLE public.app_sessions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.app_sessions FORCE ROW LEVEL SECURITY;
 ALTER TABLE public.user_game_participations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.user_game_participations FORCE ROW LEVEL SECURITY;
+ALTER TABLE public.game_decision_events ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.game_decision_events FORCE ROW LEVEL SECURITY;
 
 REVOKE ALL ON TABLE public.rooms FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON TABLE public.skyjo_schema_migrations FROM PUBLIC, anon, authenticated;
@@ -182,6 +221,8 @@ REVOKE ALL ON TABLE public.room_messages FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON TABLE public.account_consents FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON TABLE public.app_sessions FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON TABLE public.user_game_participations FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON TABLE public.game_decision_events FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON SEQUENCE public.game_decision_events_id_seq FROM PUBLIC, anon, authenticated;
 
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.rooms TO service_role;
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.room_members TO service_role;
@@ -189,6 +230,8 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.room_messages TO service_ro
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.account_consents TO service_role;
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.app_sessions TO service_role;
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.user_game_participations TO service_role;
+GRANT SELECT, INSERT, DELETE ON TABLE public.game_decision_events TO service_role;
+GRANT USAGE, SELECT ON SEQUENCE public.game_decision_events_id_seq TO service_role;
 
 CREATE OR REPLACE FUNCTION public.commit_skyjo_room(
   p_room_id TEXT,
