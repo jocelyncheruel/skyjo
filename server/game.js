@@ -164,6 +164,22 @@ export function addPlayer(state, id, name) {
   }
 }
 
+export function addBot(state, playerId, botId, name) {
+  assertCreator(state, playerId);
+  if (state.phase !== 'lobby') throw new Error('Un bot ne peut être ajouté que dans la salle d’attente.');
+  if (!/^[A-Za-z0-9_-]{12}$/.test(botId)) throw new Error('Identifiant du bot invalide.');
+  addPlayer(state, botId, name);
+  state.playersById[botId].isBot = true;
+  state.playersById[botId].connected = true;
+}
+
+export function removeBot(state, playerId, botId) {
+  assertCreator(state, playerId);
+  if (state.phase !== 'lobby') throw new Error('Un bot ne peut être retiré que dans la salle d’attente.');
+  if (!state.playersById[botId]?.isBot) throw new Error('Ce joueur n’est pas un bot.');
+  leavePlayer(state, botId);
+}
+
 export function removePlayer(state, id) {
   if (state.playersById[id]) {
     state.playersById[id].connected = false;
@@ -243,6 +259,11 @@ export function leavePlayer(state, id) {
   state.order.splice(leavingIndex, 1);
   delete state.playersById[id];
   log(state, `${player.name} a quitté la salle.`);
+
+  if (!player.isBot && state.order.length > 0
+    && state.order.every((playerId) => state.playersById[playerId]?.isBot)) {
+    for (const botId of [...state.order]) leavePlayer(state, botId);
+  }
 
   if (state.creatorId === id) {
     state.creatorId = state.order[0] || null;
@@ -855,6 +876,7 @@ export function publicState(state, forPlayerId) {
         id: p.id,
         name: p.name,
         connected: p.connected,
+        isBot: !!p.isBot,
         totalScore: p.totalScore,
         hasTotalScore: completedRounds > 0,
         lastRoundScore: p.lastRoundScore,

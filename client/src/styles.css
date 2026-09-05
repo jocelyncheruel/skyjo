@@ -526,7 +526,6 @@ button {
   }
 }
 
-/* Le sélecteur coulissant historique, avec un contenu correctement centré. */
 .sj-home-create-card .sj-room-visibility::before {
   background: rgba(57, 48, 31, 0.98);
 }
@@ -597,7 +596,6 @@ button {
   scrollbar-gutter: stable;
 }
 
-/* Portail d'accueil et recherche de partie */
 .sj-home-portal-stack {
   width: min(780px, 100%);
   height: min(720px, calc(100dvh - 36px));
@@ -669,7 +667,6 @@ button {
 .sj-home-mini-brand .sj-brand-logo-mark { width: 48px; }
 .sj-home-mini-brand .sj-brand-logo-copy strong { max-width: none; font-size: 30px; }
 
-/* Les anneaux fixes du grand logo sont affinés dans sa version compacte. */
 .sj-home-mini-brand .sj-brand-logo-mark {
   box-shadow:
     inset 0 0 0 1px rgba(255, 255, 255, 0.1),
@@ -861,7 +858,20 @@ button {
 
 .sj-home-action-card .sj-create-room-capacity { min-height: 42px; }
 .sj-home-action-card .sj-create-room-capacity > span { display: inline-flex; align-items: center; gap: 7px; }
-.sj-home-primary-action { margin-top: auto; display: flex; align-items: center; justify-content: center; gap: 8px; }
+.sj-home-create-actions { margin-top: auto; display: grid; grid-template-columns: minmax(0, 2fr) minmax(88px, 1fr); gap: 8px; }
+.sj-home-primary-action { display: flex; align-items: center; justify-content: center; gap: 8px; }
+.sj-home-solo-action {
+  min-height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border-color: rgba(111, 210, 157, .3);
+  background: rgba(34, 112, 74, .12);
+  color: #a9e9c5;
+}
+.sj-home-solo-action:hover,
+.sj-home-solo-action:focus-visible { border-color: rgba(111, 210, 157, .55); background: rgba(34, 112, 74, .22); }
 
 .sj-home-action-card .sj-room-join-actions { margin-top: auto; }
 .sj-home-action-card .sj-room-join-actions .sj-btn { display: flex; align-items: center; justify-content: center; gap: 6px; }
@@ -922,7 +932,6 @@ button {
   .sj-home-public-action { min-height: 52px; }
 }
 
-/* L'accueil conserve la même composition compacte à toutes les largeurs. */
 @media (min-width: 0px) {
   .sj-home-action-description {
     display: none;
@@ -5210,7 +5219,6 @@ button.sj-action-count-badge:focus-visible {
   padding: 12px;
 }
 
-/* Centre le contenu des cartes de la colonne gauche face aux cartes plus hautes de droite. */
 .sj-stat-modes,
 .sj-stat-efficiency,
 .sj-stat-weekly-usage {
@@ -5897,7 +5905,6 @@ button.sj-action-count-badge:focus-visible {
 }
 .sj-competitive-streak { color: #ffb15c !important; font-size: 8px !important; font-weight: 900; }
 
-/* Expérience de fin de partie */
 .sj-game-end {
   position: relative;
   isolation: isolate;
@@ -6051,7 +6058,6 @@ button.sj-action-count-badge:focus-visible {
   .sj-game-end-reward > div { text-align: left; }
 }
 
-/* Action d'accès aux salles publiques, isolée des anciens styles du bouton. */
 .sj-public-search-trigger.sj-home-public-action {
   width: 100%;
   min-height: 54px;
@@ -6110,7 +6116,6 @@ button.sj-action-count-badge:focus-visible {
   transform: scale(0.99);
 }
 
-/* Un élément réel garantit l'espace final dans les conteneurs scrollables, notamment sur Safari. */
 .sj-home-workspace {
   padding-bottom: 0;
 }
@@ -6125,7 +6130,6 @@ button.sj-action-count-badge:focus-visible {
 }
 .sj-home-public-slot { display: contents; }
 
-/* Sur grand écran, l'accueil adopte une composition paysage sans espace résiduel. */
 @media (min-width: 900px) {
   .sj-home-portal-stack {
     width: min(920px, calc(100vw - 48px));
@@ -6206,7 +6210,6 @@ button.sj-action-count-badge:focus-visible {
   }
 }
 
-/* La composition en colonne se compacte suivant la hauteur réellement disponible. */
 @media (max-width: 899px) {
   .sj-home-portal-stack {
     height: auto;
@@ -10874,7 +10877,6 @@ select:focus {
   line-height: 1.2;
 }
 
-/* Lobby de partie */
 .sj-app-shell.sj-lobby-room.sj-room-controls-layout:has(.sj-room-lobby) {
   --sj-lobby-control-clearance: max(
     calc(max(clamp(8px, 1.5vh, 16px), env(safe-area-inset-top)) + 54px),
@@ -11047,7 +11049,7 @@ select:focus {
   border-radius: 19px;
   background: rgba(255, 255, 255, .032);
 }
-.sj-room-lobby-players { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; overflow: hidden; }
+.sj-room-lobby-players { display: grid; grid-template-rows: auto minmax(0, 1fr) auto auto; overflow: hidden; }
 .sj-room-lobby-section-head {
   min-width: 0;
   display: flex;
@@ -11128,6 +11130,7 @@ select:focus {
 }
 .sj-lobby-player-badges em { font-style: normal; }
 .sj-lobby-player-badges > span.is-you { background: rgba(91, 150, 231, .12); color: #a9cdff; }
+.sj-lobby-player-badges > span.is-bot { background: rgba(129, 103, 230, .13); color: #c4b8ff; }
 .sj-lobby-player-remove {
   opacity: .35;
   transition: opacity .16s ease, background .16s ease, border-color .16s ease, color .16s ease;
@@ -11143,6 +11146,24 @@ select:focus {
   }
 }
 .sj-room-lobby-seats { margin: 0; padding: 10px 15px 12px; color: #647080; font-size: 8px; font-weight: 800; text-align: center; }
+.sj-room-lobby-add-bot {
+  min-height: 34px;
+  margin: 0 12px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px dashed rgba(142, 121, 231, .38);
+  border-radius: 11px;
+  background: rgba(103, 78, 203, .08);
+  color: #c5baff;
+  font: inherit;
+  font-size: 9px;
+  font-weight: 900;
+  cursor: pointer;
+}
+.sj-room-lobby-add-bot:hover,
+.sj-room-lobby-add-bot:focus-visible { border-color: rgba(164, 145, 244, .7); background: rgba(103, 78, 203, .16); }
 
 .sj-room-lobby-settings { min-width: 0; min-height: 0; display: grid; grid-template-rows: auto auto; align-content: start; gap: 10px; }
 .sj-room-lobby-mode { align-self: start; display: grid; grid-template-rows: auto auto auto; align-content: start; overflow: hidden; }
@@ -11313,6 +11334,7 @@ select:focus {
   .sj-room-lobby-content > .is-mobile-collapsed { cursor: pointer; }
   .sj-room-lobby-players.is-mobile-collapsed .sj-lobby-player-list,
   .sj-room-lobby-players.is-mobile-collapsed .sj-room-lobby-seats,
+  .sj-room-lobby-players.is-mobile-collapsed .sj-room-lobby-add-bot,
   .sj-room-lobby-settings.is-mobile-collapsed .sj-room-lobby-mode-options,
   .sj-room-lobby-settings.is-mobile-collapsed .sj-lobby-format,
   .sj-room-lobby-settings.is-mobile-collapsed .sj-room-lobby-role-note { display: none; }
@@ -11321,6 +11343,7 @@ select:focus {
   .sj-room-lobby-content > .is-mobile-collapsed .sj-room-lobby-section-head { padding-block: 9px; }
   .sj-room-lobby-players.is-mobile-expanded .sj-lobby-player-list,
   .sj-room-lobby-players.is-mobile-expanded .sj-room-lobby-seats,
+  .sj-room-lobby-players.is-mobile-expanded .sj-room-lobby-add-bot,
   .sj-room-lobby-settings.is-mobile-expanded .sj-room-lobby-mode-options,
   .sj-room-lobby-settings.is-mobile-expanded .sj-lobby-format {
     animation: sjLobbyPanelReveal .28s .1s both;
@@ -11338,7 +11361,6 @@ select:focus {
   .sj-room-lobby-summary > span:nth-child(3) { max-width: 100%; }
 }
 
-/* Exploration des parties publiques */
 .sj-public-search-card .sj-public-rooms {
   grid-template-rows: auto minmax(0, 1fr);
   gap: 8px;
@@ -11806,7 +11828,6 @@ select:focus {
   .sj-public-room-locked { font-size: 0; }
 }
 
-/* En colonne, les quatre blocs partagent directement et équitablement la hauteur disponible. */
 @media (max-width: 899px) {
   .sj-home-workspace {
     display: grid;
@@ -11838,7 +11859,6 @@ select:focus {
   }
 }
 
-/* Les trois contrôles du compte conservent exactement le même carré à chaque breakpoint. */
 .sj-home-portal-header .sj-account-controls {
   --sj-account-control-size: 40px;
   --sj-account-control-icon-size: 17px;
@@ -11912,7 +11932,6 @@ select:focus {
   .sj-room-lobby-footer { padding-block: 10px; }
 }
 
-/* Keep the settings card and the player list aligned on shallow landscape screens. */
 @media (min-width: 781px) and (max-height: 720px) {
   .sj-room-lobby-mode .sj-room-lobby-section-head { padding-block: 10px 7px; }
   .sj-room-lobby-mode-options { margin-bottom: 9px; }

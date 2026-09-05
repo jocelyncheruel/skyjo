@@ -1,4 +1,4 @@
-export const SOCKET_PROTOCOL_VERSION = 15;
+export const SOCKET_PROTOCOL_VERSION = 17;
 
 export const SOCKET_EVENTS = Object.freeze({
   CONNECT: 'connect',
@@ -20,6 +20,9 @@ export const SOCKET_EVENTS = Object.freeze({
   UNSUBSCRIBE_PUBLIC_PREVIEW: 'unsubscribePublicPreview',
   START_GAME: 'startGame',
   REMOVE_PLAYER_FROM_LOBBY: 'removePlayerFromLobby',
+  ADD_BOT: 'addBot',
+  REMOVE_BOT: 'removeBot',
+  BOT_ANIMATION_READY: 'botAnimationReady',
   UPDATE_ROOM_SETTINGS: 'updateRoomSettings',
   TRANSFER_ROOM_OWNERSHIP: 'transferRoomOwnership',
   KICK_ROOM_PLAYER: 'kickRoomPlayer',
@@ -57,6 +60,9 @@ export const SOCKET_CLIENT_PAYLOAD_KEYS = Object.freeze({
   [SOCKET_EVENTS.UNSUBSCRIBE_PUBLIC_PREVIEW]: Object.freeze(['roomId']),
   [SOCKET_EVENTS.START_GAME]: Object.freeze([]),
   [SOCKET_EVENTS.REMOVE_PLAYER_FROM_LOBBY]: Object.freeze(['playerId']),
+  [SOCKET_EVENTS.ADD_BOT]: Object.freeze([]),
+  [SOCKET_EVENTS.REMOVE_BOT]: Object.freeze(['playerId']),
+  [SOCKET_EVENTS.BOT_ANIMATION_READY]: Object.freeze(['turnSerial']),
   [SOCKET_EVENTS.UPDATE_ROOM_SETTINGS]: Object.freeze([
     'maxPlayers',
     'roomVisibility',

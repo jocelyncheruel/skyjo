@@ -164,6 +164,8 @@ export function isValidRoomState(state, roomId) {
     const player = state.playersById[id];
     if (!normalizePlayerId(id) || player?.id !== id) return false;
     if (!normalizePlayerName(player.name)) return false;
+    if (player.isBot !== undefined && typeof player.isBot !== 'boolean') return false;
+    if (player.isBot && player.connected !== true) return false;
     if (!Array.isArray(player.board) || player.board.length !== 12) return false;
     return player.board.every((slot) => slot && typeof slot === 'object' && !Array.isArray(slot));
   });

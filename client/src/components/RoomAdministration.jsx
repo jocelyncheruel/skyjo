@@ -332,14 +332,14 @@ export function RoomAdministrationModal({
                         />
                       </span>
                       <div className="sj-room-admin-player-actions">
-                        <button
+                        {!player.isBot && <button
                           type="button"
                           aria-label={`Transférer la propriété à ${player.name}`}
                           title="Transférer la propriété"
                           onClick={() => setPendingAction({ type: 'transfer', playerId: player.id })}
                         >
                           <Crown aria-hidden="true" size={17} />
-                        </button>
+                        </button>}
                         <button
                           type="button"
                           className="sj-room-admin-player-kick"
@@ -349,7 +349,7 @@ export function RoomAdministrationModal({
                         >
                           <UserMinus aria-hidden="true" size={17} />
                         </button>
-                        <button
+                        {!player.isBot && <button
                           type="button"
                           className="sj-room-admin-player-ban"
                           aria-label={`Bannir ${player.name}`}
@@ -357,7 +357,7 @@ export function RoomAdministrationModal({
                           onClick={() => setPendingAction({ type: 'ban', playerId: player.id })}
                         >
                           <Ban aria-hidden="true" size={17} />
-                        </button>
+                        </button>}
                       </div>
                     </li>
                   ))}

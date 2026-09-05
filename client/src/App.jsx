@@ -108,6 +108,8 @@ const ROOM_ROLES = Object.freeze({
 });
 const SERIALIZED_GAME_EVENTS = new Set([
   SOCKET_EVENTS.START_GAME,
+  SOCKET_EVENTS.ADD_BOT,
+  SOCKET_EVENTS.REMOVE_BOT,
   SOCKET_EVENTS.RETURN_TO_LOBBY,
   SOCKET_EVENTS.SET_GAME_MODE,
   SOCKET_EVENTS.FLIP_INITIAL,
@@ -845,7 +847,7 @@ function GameApp() {
     };
   }, [initialRoomInvite, logout, showError]);
 
-  async function createRoom() {
+  async function createRoom(botCount = 0) {
     if (!socket || !connected) return;
     const name = normalizePlayerNameInput(nameInput);
     if (!name) {
@@ -860,9 +862,10 @@ function GameApp() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          roomVisibility: roomVisibilityInput,
+          roomVisibility: botCount > 0 ? 'private' : roomVisibilityInput,
           playerName: name,
-          maxPlayers: maxPlayersInput,
+          maxPlayers: botCount > 0 ? 2 : maxPlayersInput,
+          botCount,
         }),
       });
       if (!res.ok) throw new Error(await serverErrorMessage(res, 'Impossible de créer la salle.'));
@@ -1210,9 +1213,14 @@ function GameApp() {
                         {Array.from({ length: 7 }, (_, index) => index + 2).map((value) => <option key={value} value={value}>{value}</option>)}
                       </select>
                     </label>
-                    <button className="sj-btn sj-btn-primary sj-home-primary-action" disabled={!connected} onClick={createRoom}>
-                      Créer la salle <ChevronRight aria-hidden="true" size={17} />
-                    </button>
+                    <div className="sj-home-create-actions">
+                      <button className="sj-btn sj-btn-primary sj-home-primary-action" disabled={!connected} onClick={() => createRoom(0)}>
+                        Créer la salle <ChevronRight aria-hidden="true" size={17} />
+                      </button>
+                      <button className="sj-btn sj-home-solo-action" disabled={!connected} onClick={() => createRoom(1)}>
+                        <Sparkles aria-hidden="true" size={16} /> Solo
+                      </button>
+                    </div>
                   </section>
 
                   <section className="sj-home-action-card sj-home-join-card">
@@ -1360,6 +1368,8 @@ function GameScreen({
   const tutorialCheckedRef = useRef(false);
   const [groupChoiceModalReadyId, setGroupChoiceModalReadyId] = useState(null);
   const [cardMotionEndsAt, setCardMotionEndsAt] = useState(0);
+  const cardMotionEndsAtRef = useRef(0);
+  const botAnimationReadyKeyRef = useRef('');
   const [visibleRoundRevealId, setVisibleRoundRevealId] = useState(() => (
     state.phase === 'gameEnd' ? latestRoundRevealId(state) : null
   ));
@@ -1381,6 +1391,7 @@ function GameScreen({
   const closeInviteModal = useCallback(() => setInviteModalOpen(false), []);
   const handleCardMotionBatch = useCallback((endsAt) => {
     if (!Number.isFinite(endsAt)) return;
+    cardMotionEndsAtRef.current = Math.max(cardMotionEndsAtRef.current, endsAt);
     setCardMotionEndsAt((current) => Math.max(current, endsAt));
   }, []);
   const inviteUrl = typeof window === 'undefined'
@@ -1403,6 +1414,13 @@ function GameScreen({
   );
   const concealRoundReveal = !!roundRevealId && visibleRoundRevealId !== roundRevealId;
   const motionSequenceEndsAt = Math.max(cardMotionEndsAt, roundRevealEndsAt);
+  const botPlayerIds = new Set(state.players.filter((player) => player.isBot).map((player) => player.id));
+  const botNeedsAnimationReady = state.phase === 'playing' && [
+    state.currentPlayerId,
+    state.pendingStarClaim?.playerId,
+    state.pendingGroupChoice?.playerId,
+    state.pendingAction?.defensePrompt?.targetId,
+  ].some((candidateId) => botPlayerIds.has(candidateId));
   if (state.phase !== 'gameEnd' && gameEndSnapshotRef.current) {
     gameEndSnapshotRef.current = null;
   } else if (
@@ -1715,6 +1733,32 @@ function GameScreen({
     tutorialCheckedRef.current = true;
     if (!hasCompletedGameTutorial()) setTutorialStep(0);
   }, [isSpectator, state.phase]);
+
+  useEffect(() => {
+    if (isSpectator || !botNeedsAnimationReady) return undefined;
+    const readyKey = `${state.gameSerial}:${state.turnSerial}:${state.lastCardMove?.id || 'none'}`;
+    if (botAnimationReadyKeyRef.current === readyKey) return undefined;
+    let timeout = null;
+    const frame = window.requestAnimationFrame(() => {
+      const remainingMotion = Math.max(0, cardMotionEndsAtRef.current - Date.now());
+      timeout = window.setTimeout(() => {
+        botAnimationReadyKeyRef.current = readyKey;
+        emitSocket(socket, SOCKET_EVENTS.BOT_ANIMATION_READY, { turnSerial: state.turnSerial });
+      }, remainingMotion + CARD_MOTION_SETTLE_BUFFER_MS);
+    });
+    return () => {
+      window.cancelAnimationFrame(frame);
+      if (timeout) window.clearTimeout(timeout);
+    };
+  }, [
+    botNeedsAnimationReady,
+    cardMotionEndsAt,
+    isSpectator,
+    socket,
+    state.gameSerial,
+    state.lastCardMove?.id,
+    state.turnSerial,
+  ]);
 
   useEffect(() => {
     if (!starterTieNoticeId || !starterTieNoticeMessage) {
@@ -2240,6 +2284,9 @@ function GameScreen({
   const removePlayerFromLobby = (targetPlayerId) => {
     emitSocket(socket, SOCKET_EVENTS.REMOVE_PLAYER_FROM_LOBBY, { playerId: targetPlayerId });
   };
+  const removeBotFromLobby = (targetPlayerId) => {
+    emitSocket(socket, SOCKET_EVENTS.REMOVE_BOT, { playerId: targetPlayerId });
+  };
   const disconnectedPlayersModal = (
     <DisconnectedPlayersModal
       open={disconnectedPlayersModalOpen}
@@ -2525,6 +2572,7 @@ function GameScreen({
                         </span>
                         <span className="sj-lobby-player-badges">
                           {player.id === state.creatorId && <span title="Créateur"><Crown aria-hidden="true" size={14} /> <em>Hôte</em></span>}
+                          {player.isBot && <span className="is-bot"><Sparkles aria-hidden="true" size={12} /> <em>Bot</em></span>}
                           {player.id === myId && <span className="is-you">Vous</span>}
                         </span>
                         {isCreator && player.id !== myId && (
@@ -2533,7 +2581,7 @@ function GameScreen({
                             className="sj-lobby-player-remove"
                             aria-label={`Retirer ${player.name} de la salle`}
                             title={`Retirer ${player.name} de la salle`}
-                            onClick={() => removePlayerFromLobby(player.id)}
+                            onClick={() => player.isBot ? removeBotFromLobby(player.id) : removePlayerFromLobby(player.id)}
                           >
                             <UserMinus aria-hidden="true" size={17} />
                           </button>
@@ -2546,6 +2594,18 @@ function GameScreen({
                     ? `${availableSeats} place${availableSeats > 1 ? 's' : ''} encore disponible${availableSeats > 1 ? 's' : ''}`
                     : 'La salle est complète'}
                 </p>
+                {isCreator && availableSeats > 0 && (
+                  <button
+                    type="button"
+                    className="sj-room-lobby-add-bot"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      emitSocket(socket, SOCKET_EVENTS.ADD_BOT);
+                    }}
+                  >
+                    <Sparkles aria-hidden="true" size={14} /> Ajouter un bot
+                  </button>
+                )}
               </section>
 
               <aside

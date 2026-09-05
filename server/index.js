@@ -16,13 +16,14 @@ import {
   socketPayloadKeys,
 } from '../shared/socketProtocol.js';
 import {
-  newRoomState, addPlayer, leavePlayer, removePlayer, removeLobbyPlayer, startGame, flipInitialCard,
+  newRoomState, addPlayer, addBot, removeBot, leavePlayer, removePlayer, removeLobbyPlayer, startGame, flipInitialCard,
   drawCard, decideDrawnCard, keepDrawnAndPlace, placeDrawnCard, revealHiddenCard, nextRound,
   publicPreviewState, publicState, setGameMode, returnToLobby, playOwnedAction, resolveActionInput, claimStarAction,
   discardOwnedAction, resolveDefensePrompt, expireDefensePrompt,
   resolveGroupChoice, assertActionCardIntegrity, MAX_PLAYERS_PER_ROOM,
   banRoomPlayer, isUserBanned, kickRoomPlayer, setRoomSettings, transferRoomOwnership,
 } from './game.js';
+import { performBotStep } from './botPlayer.js';
 import {
   PRIVACY_CONSENT_VERSION, ROOM_SCHEMA_VERSION, ROOM_TTL_MS,
   TERMS_CONSENT_VERSION,
@@ -36,10 +37,11 @@ const DEFAULT_PORT = 4000;
 const MAX_RATE_BUCKETS = 20_000;
 const MAX_SOCKETS_PER_USER = 3;
 const MAX_SPECTATORS_PER_ROOM = 50;
-const CHAT_PAGE_SIZE = 80;
-// Public rooms release abandoned seats quickly; private rooms preserve them
-// until players explicitly leave so a game can be resumed much later.
+const CHAT_PAGE_SIZE = 80
 const PUBLIC_ROOM_DISCONNECT_GRACE_MS = 30 * 1000;
+const BOT_STEP_DELAY_MS = 900;
+const BOT_READY_FALLBACK_MS = 5_000;
+const BOT_NAMES = Object.freeze(['Nova', 'Moka', 'Pixel', 'Luna', 'Nox', 'Kiwi', 'Ziggy']);
 const SYSTEM_CHAT_PLAYER_ID = '__system__';
 const SYSTEM_CHAT_PLAYER_NAME = 'Système';
 const SESSION_CHECK_CACHE_MS = 30_000;
@@ -170,6 +172,9 @@ const socketToPlayer = new Map();
 const disconnectTimers = new Map();
 const nextRoundTimers = new Map();
 const defensePromptTimers = new Map();
+const botTurnTimers = new Map();
+const botAnimationWaits = new Map();
+const botTurnFailureCounts = new Map();
 const rateBuckets = new Map();
 
 function redactInternalLogValue(value, maxLength = 500) {
@@ -486,7 +491,23 @@ async function findOwnedRoomMembership(userId) {
   return null;
 }
 
-async function createRoom({ ownerUserId, playerName, roomVisibility, maxPlayers }) {
+function nextBotName(state) {
+  const used = new Set(state.order.map((id) => state.playersById[id]?.name));
+  for (const name of BOT_NAMES) {
+    if (!used.has(name)) return name;
+  }
+  let number = 1;
+  while (used.has(`Bot ${number}`)) number += 1;
+  return `Bot ${number}`;
+}
+
+function addRoomBot(state, ownerPlayerId) {
+  const botId = nanoid(12);
+  addBot(state, ownerPlayerId, botId, nextBotName(state));
+  return botId;
+}
+
+async function createRoom({ ownerUserId, playerName, roomVisibility, maxPlayers, botCount = 0 }) {
   for (let attempt = 0; attempt < 20; attempt += 1) {
     const roomId = generateRoomId();
     const playerId = nanoid(12);
@@ -497,6 +518,7 @@ async function createRoom({ ownerUserId, playerName, roomVisibility, maxPlayers 
       state.roomSettings.maxPlayers = maxPlayers;
     }
     addPlayer(state, playerId, playerName);
+    for (let index = 0; index < botCount; index += 1) addRoomBot(state, playerId);
     state.playersById[playerId].connected = false;
     roomMeta.set(roomId, { revision: -1, ownerUserId });
     try {
@@ -739,6 +761,7 @@ async function attachSocket(
   await safelySendInitialChatHistory(socket, state);
   scheduleNextRound(roomId, state);
   scheduleDefensePrompt(roomId, state);
+  scheduleBotTurn(roomId, state);
 }
 
 async function attachSpectator(socket, roomId) {
@@ -924,12 +947,75 @@ function broadcastRoom(roomId) {
   }
 }
 
+function stateHasPendingBot(state) {
+  if (state.phase === 'initialFlip') {
+    return state.order.some((id) => state.playersById[id]?.isBot && state.playersById[id].flippedCount < 2)
+      || (state.pendingInitialStarClaims || [])
+        .some((claim) => state.playersById[claim?.playerId]?.isBot)
+      || (state.pendingGroupChoices || [])
+        .some((choice) => state.playersById[choice?.playerId]?.isBot)
+      || state.playersById[state.pendingGroupChoice?.playerId]?.isBot;
+  }
+  if (state.phase !== 'playing') return false;
+  return state.playersById[state.order[state.turnIndex]]?.isBot
+    || state.playersById[state.pendingAction?.defensePrompt?.targetId]?.isBot
+    || state.playersById[state.pendingStarClaim?.playerId]?.isBot
+    || (state.pendingInitialStarClaims || []).some((claim) => state.playersById[claim.playerId]?.isBot)
+    || state.playersById[state.pendingGroupChoice?.playerId]?.isBot
+    || (state.pendingGroupChoices || []).some((choice) => state.playersById[choice.playerId]?.isBot);
+}
+
+function scheduleBotTurn(roomId, state, delayMs) {
+  const existing = botTurnTimers.get(roomId);
+  if (existing) clearTimeout(existing);
+  botTurnTimers.delete(roomId);
+  if (!stateHasPendingBot(state)) {
+    botTurnFailureCounts.delete(roomId);
+    return;
+  }
+  let wait = botAnimationWaits.get(roomId);
+  if (wait && wait.turnSerial !== state.turnSerial) {
+    botAnimationWaits.delete(roomId);
+    wait = null;
+  }
+  const waitDelay = wait ? Math.max(0, wait.expiresAt - Date.now()) : null;
+  const timer = setTimeout(async () => {
+    botTurnTimers.delete(roomId);
+    if (botAnimationWaits.get(roomId)?.turnSerial === state.turnSerial) {
+      botAnimationWaits.delete(roomId);
+    }
+    try {
+      const { state: latest, result: changed } = await mutateRoom(roomId, performBotStep);
+      const noProgressCount = changed ? 0 : (botTurnFailureCounts.get(roomId) || 0) + 1;
+      if (changed) botTurnFailureCounts.delete(roomId);
+      else botTurnFailureCounts.set(roomId, noProgressCount);
+      if (changed) broadcastRoom(roomId);
+      scheduleNextRound(roomId, latest);
+      scheduleDefensePrompt(roomId, latest);
+      if (changed || noProgressCount < 3) {
+        scheduleBotTurn(roomId, latest, changed ? BOT_STEP_DELAY_MS : 1_000);
+      }
+    } catch (error) {
+      logInternal('bot_turn', error);
+      const failureCount = (botTurnFailureCounts.get(roomId) || 0) + 1;
+      botTurnFailureCounts.set(roomId, failureCount);
+      const latest = rooms.get(roomId);
+      if (latest && failureCount < 3) {
+        scheduleBotTurn(roomId, latest, 1_000 * (2 ** (failureCount - 1)));
+      }
+    }
+  }, waitDelay ?? (Number.isFinite(delayMs) ? delayMs : BOT_STEP_DELAY_MS));
+  timer.unref?.();
+  botTurnTimers.set(roomId, timer);
+}
+
 async function handleAction(socket, fn, mutationOptions = {}) {
   const info = socketToPlayer.get(socket.id);
   if (!info) throw new PublicError('not_in_room', "Vous ne faites partie d'aucune salle.", 403);
   if (info.role !== 'player' || !info.playerId) {
     throw new PublicError('spectator_read_only', 'Le mode spectateur est en lecture seule.', 403);
   }
+  const previousState = rooms.get(info.roomId);
   const { state } = await mutateRoom(info.roomId, (draft) => {
     try {
       return fn(draft, info.playerId);
@@ -945,10 +1031,21 @@ async function handleAction(socket, fn, mutationOptions = {}) {
       );
     }
   }, mutationOptions);
+  botTurnFailureCounts.delete(info.roomId);
+  if (stateHasPendingBot(state)
+    && state.lastCardMove?.id
+    && state.lastCardMove.id !== (previousState?.lastCardMove?.id || null)) {
+    botAnimationWaits.set(info.roomId, {
+      playerId: info.playerId,
+      turnSerial: state.turnSerial,
+      expiresAt: Date.now() + BOT_READY_FALLBACK_MS,
+    });
+  }
   if (state.phase === 'lobby') clearDisconnectTimersForRoom(info.roomId);
   broadcastRoom(info.roomId);
   scheduleNextRound(info.roomId, state);
   scheduleDefensePrompt(info.roomId, state);
+  scheduleBotTurn(info.roomId, state);
 }
 
 async function handleTrackedHumanAction(socket, fn, decisionEvent) {
@@ -1036,11 +1133,13 @@ function clearDisconnectTimersForRoom(roomId) {
 }
 
 function clearRoomTimers(roomId) {
-  for (const timers of [nextRoundTimers, defensePromptTimers]) {
+  for (const timers of [nextRoundTimers, defensePromptTimers, botTurnTimers]) {
     const timer = timers.get(roomId);
     if (timer) clearTimeout(timer);
     timers.delete(roomId);
   }
+  botAnimationWaits.delete(roomId);
+  botTurnFailureCounts.delete(roomId);
   clearDisconnectTimersForRoom(roomId);
 }
 
@@ -1059,6 +1158,7 @@ function scheduleNextRound(roomId, state, retryDelayMs = 0) {
       broadcastRoom(roomId);
       scheduleNextRound(roomId, latest);
       scheduleDefensePrompt(roomId, latest);
+      scheduleBotTurn(roomId, latest);
     } catch (error) {
       logInternal('next_round', error);
       const latest = rooms.get(roomId);
@@ -1084,6 +1184,7 @@ function scheduleDefensePrompt(roomId, state) {
       broadcastRoom(roomId);
       scheduleNextRound(roomId, latest);
       scheduleDefensePrompt(roomId, latest);
+      scheduleBotTurn(roomId, latest);
     } catch (error) { logInternal('defense_timeout', error); }
   }, Math.max(0, prompt.expiresAt - Date.now()));
   timer.unref?.();
@@ -1331,7 +1432,7 @@ app.post('/api/rooms', requireHttpAuth, authBff.requireStandardSession, authBff.
   httpRateLimit({ keyPrefix: 'create-room', limit: 5, windowMs: 60_000, user: true }),
   async (req, res, next) => {
     try {
-      const payload = objectPayload(req.body, ['playerName', 'roomVisibility', 'maxPlayers']);
+      const payload = objectPayload(req.body, ['playerName', 'roomVisibility', 'maxPlayers', 'botCount']);
       const playerName = normalizePlayerName(payload.playerName);
       if (!playerName) throw new PublicError('invalid_player_name', 'Choisissez un nom de joueur.', 400);
       const maxPlayers = payload.maxPlayers === undefined
@@ -1343,6 +1444,10 @@ app.post('/api/rooms', requireHttpAuth, authBff.requireStandardSession, authBff.
           `Le nombre maximal de joueurs doit être compris entre 2 et ${MAX_PLAYERS_PER_ROOM}.`,
           400,
         );
+      }
+      const botCount = payload.botCount === undefined ? 0 : Number(payload.botCount);
+      if (!Number.isInteger(botCount) || botCount < 0 || botCount >= maxPlayers) {
+        throw new PublicError('invalid_room_settings', 'Nombre de bots invalide.', 400);
       }
       const existingRoom = await findOwnedRoomMembership(req.auth.user.id);
       if (existingRoom) {
@@ -1359,6 +1464,7 @@ app.post('/api/rooms', requireHttpAuth, authBff.requireStandardSession, authBff.
           ownerUserId: req.auth.user.id, playerName,
           roomVisibility: payload.roomVisibility === 'public' ? 'public' : 'private',
           maxPlayers,
+          botCount,
         });
       } catch (createError) {
         if (!String(createError?.message || '').includes('active_room_exists')) throw createError;
@@ -1592,6 +1698,7 @@ io.on('connection', (socket) => {
     broadcastRoom(info.roomId);
     scheduleNextRound(info.roomId, state);
     scheduleDefensePrompt(info.roomId, state);
+    scheduleBotTurn(info.roomId, state);
     if (leavingPlayerName) {
       await safelyAppendSystemChatMessage(info.roomId, `${leavingPlayerName} a quitté la salle.`);
     }
@@ -1642,6 +1749,41 @@ io.on('connection', (socket) => {
   ));
 
   socket.on(SOCKET_EVENTS.START_GAME, withSocketGuard(socket, SOCKET_EVENTS.START_GAME, () => handleAction(socket, startGame)));
+  socket.on(SOCKET_EVENTS.ADD_BOT, withSocketGuard(
+    socket,
+    SOCKET_EVENTS.ADD_BOT,
+    () => handleAction(socket, (state, playerId) => addRoomBot(state, playerId)),
+  ));
+  socket.on(SOCKET_EVENTS.REMOVE_BOT, withSocketGuard(
+    socket,
+    SOCKET_EVENTS.REMOVE_BOT,
+    (payload) => {
+      const targetPlayerId = objectPayload(
+        payload,
+        socketPayloadKeys(SOCKET_EVENTS.REMOVE_BOT),
+      ).playerId;
+      return handleAction(socket, (state, playerId) => removeBot(state, playerId, targetPlayerId));
+    },
+  ));
+  socket.on(SOCKET_EVENTS.BOT_ANIMATION_READY, withSocketGuard(
+    socket,
+    SOCKET_EVENTS.BOT_ANIMATION_READY,
+    (payload) => {
+      const { turnSerial } = objectPayload(
+        payload,
+        socketPayloadKeys(SOCKET_EVENTS.BOT_ANIMATION_READY),
+      );
+      if (!Number.isSafeInteger(turnSerial) || turnSerial < 0) return;
+      const info = socketToPlayer.get(socket.id);
+      if (!info || info.role !== 'player') return;
+      const wait = botAnimationWaits.get(info.roomId);
+      if (!wait || wait.playerId !== info.playerId || wait.turnSerial !== turnSerial) return;
+      const state = rooms.get(info.roomId);
+      if (!state || state.turnSerial !== turnSerial || !stateHasPendingBot(state)) return;
+      botAnimationWaits.delete(info.roomId);
+      scheduleBotTurn(info.roomId, state, 80);
+    },
+  ));
   socket.on(SOCKET_EVENTS.REMOVE_PLAYER_FROM_LOBBY, withSocketGuard(socket, SOCKET_EVENTS.REMOVE_PLAYER_FROM_LOBBY, async (payload) => {
     const targetPlayerId = objectPayload(
       payload,
@@ -1900,6 +2042,7 @@ io.on('connection', (socket) => {
     void mutateRoom(info.roomId, (draft) => removePlayer(draft, info.playerId))
       .then(({ state }) => {
         broadcastRoom(info.roomId);
+        scheduleBotTurn(info.roomId, state);
         if (state.roomVisibility !== 'public'
           || socketIdsForPlayer(info.roomId, info.playerId).length) {
           return;
@@ -1920,6 +2063,7 @@ io.on('connection', (socket) => {
             broadcastRoom(info.roomId);
             scheduleNextRound(info.roomId, nextState);
             scheduleDefensePrompt(info.roomId, nextState);
+            scheduleBotTurn(info.roomId, nextState);
             if (leavingPlayerName) {
               await safelyAppendSystemChatMessage(info.roomId, `${leavingPlayerName} a quitté la salle.`);
             }

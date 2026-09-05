@@ -51,7 +51,28 @@ function emptyBoard() {
   return Array.from({ length: 12 }, () => ({ card: null, faceUp: false, removed: false }));
 }
 
+function repairDuplicatedGameDiscard(state) {
+  if (state.gameMode !== 'action' || !Array.isArray(state.discard)) return;
+  const protectedIds = new Set([
+    ...(state.deck || []).map((card) => card?.id),
+    ...Object.values(state.playersById || {}).flatMap((player) => (
+      (player.board || []).map((slot) => slot?.card?.id)
+    )),
+    state.drawnCard?.card?.id,
+  ].filter(Boolean));
+  const seen = new Set();
+  const repaired = [];
+  for (let index = state.discard.length - 1; index >= 0; index -= 1) {
+    const card = state.discard[index];
+    if (!card?.id || protectedIds.has(card.id) || seen.has(card.id)) continue;
+    seen.add(card.id);
+    repaired.unshift(card);
+  }
+  if (repaired.length !== state.discard.length) state.discard = repaired;
+}
+
 function ensureActionFields(state) {
+  repairDuplicatedGameDiscard(state);
   state.actionDeck ||= [];
   state.actionDiscard ||= [];
   state.actionMarket ||= [];
