@@ -2093,6 +2093,7 @@ function GameScreen({
 
   function handleBoardSlotClick(playerId, slotIndex) {
     if (isSpectator) return;
+    if (state.pendingStarClaim) return;
     if (pendingAction?.mustRespond && pendingAction.type === 'removeEach') {
       if (playerId !== myId && remainingRemoveEachTargetIds.has(playerId)) {
         emitSocket(socket, SOCKET_EVENTS.RESOLVE_ACTION, { targetPlayerId: playerId, slotIndex });
