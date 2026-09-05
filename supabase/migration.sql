@@ -673,6 +673,10 @@ AS $$
     SELECT
       ROW_NUMBER() OVER (
         ORDER BY COALESCE(results.rating, 0) DESC,
+          CASE WHEN COALESCE(results.rating, 0) = 0
+            THEN COALESCE(results.games_played, 0) END DESC,
+          CASE WHEN COALESCE(results.rating, 0) = 0
+            THEN COALESCE(results.games_won, 0) END DESC,
           COALESCE(results.games_won, 0) DESC,
           COALESCE(results.games_played, 0) ASC,
           user_account.created_at ASC,
