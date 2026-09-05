@@ -5,7 +5,6 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  Crown,
   Eye,
   Gamepad2,
   Globe2,
@@ -15,7 +14,6 @@ import {
   QrCode,
   ScanLine,
   Sparkles,
-  UserMinus,
   Users,
 } from 'lucide-react';
 import Card from './components/Card.jsx';
@@ -40,7 +38,7 @@ import {
   RoomConnectionView,
   SkyjoLogo,
 } from './components/AppChrome.jsx';
-import { GameGuideButton, GameGuideModal, GameTutorial } from './components/GameGuide.jsx';
+import { GameGuideModal, GameTutorial } from './components/GameGuide.jsx';
 import {
   ActionDrawModal,
   ActionHandDock,
@@ -48,8 +46,8 @@ import {
 } from './components/GameTablePieces.jsx';
 import PlayerBoard from './components/PlayerBoard.jsx';
 import GameEndCelebration from './components/GameEndCelebration.jsx';
-import LobbyGameFormat from './components/LobbyGameFormat.jsx';
 import PublicRoomPreviewModal from './components/PublicRoomPreviewModal.jsx';
+import RoomLobby from './components/RoomLobby.jsx';
 import {
   RoomAdministrationButton,
   RoomAdministrationModal,
@@ -1354,7 +1352,6 @@ function GameScreen({
   const [viewedActionPlayerId, setViewedActionPlayerId] = useState(null);
   const [chatModalOpen, setChatModalOpen] = useState(false);
   const [roomAdministrationOpen, setRoomAdministrationOpen] = useState(false);
-  const [mobileLobbyPanel, setMobileLobbyPanel] = useState('players');
   const [visibleActionPlayId, setVisibleActionPlayId] = useState(null);
   const [roundScoresReady, setRoundScoresReady] = useState(true);
   const [starterTieToast, setStarterTieToast] = useState(null);
@@ -2475,16 +2472,6 @@ function GameScreen({
   );
 
   if (state.phase === 'lobby') {
-    const maxPlayers = state.roomSettings?.maxPlayers || 8;
-    const availableSeats = Math.max(0, maxPlayers - state.players.length);
-    const lobbyReady = state.players.length >= 2 && disconnectedPlayers.length === 0;
-    const lobbyStatus = state.players.length < 2
-      ? 'En attente de joueurs'
-      : disconnectedPlayers.length > 0 ? 'Reconnexion en attente' : 'Prêt à jouer';
-    const modeOptions = [
-      { id: 'classic', label: 'Classique' },
-      { id: 'action', label: 'Action' },
-    ];
     return (
       <>
         <div className="sj-app-shell sj-lobby-room sj-room-controls-layout">
@@ -2493,188 +2480,30 @@ function GameScreen({
           {roomAdministrationButton}
           {spectatorBadge}
           <GameToast key={errorSerial} message={error} />
-          <section className="sj-room-lobby sj-fade-in" aria-labelledby="room-lobby-title">
-            <header className="sj-room-lobby-header">
-              <div className="sj-room-lobby-title">
-                <span className="sj-room-lobby-eyebrow"><Gamepad2 aria-hidden="true" size={14} /> Lobby de partie</span>
-                <h1 id="room-lobby-title">Préparez votre partie</h1>
-                <p>Invitez vos amis, choisissez le mode et lancez dès que tout le monde est prêt.</p>
-              </div>
-              <div className="sj-room-lobby-invite">
-                <span>Code de la salle</span>
-                <div>
-                  <span className="sj-room-code-copy">
-                    <button
-                      type="button"
-                      className={`sj-room-lobby-code ${copied ? 'sj-room-copy-copied' : ''}`}
-                      aria-label={`Copier le code de salle ${roomId}`}
-                      onClick={copyRoomCode}
-                    >
-                      {roomId}
-                    </button>
-                    {copied && (
-                      <span className="sj-copy-toast" role="status" aria-live="polite" aria-label="Lien d’invitation copié">✓</span>
-                    )}
-                  </span>
-                  <button
-                    type="button"
-                    className="sj-room-lobby-qr"
-                    aria-label="Afficher le QR code d’invitation"
-                    title="Afficher le QR code d’invitation"
-                    onClick={() => setInviteModalOpen(true)}
-                  >
-                    <QrCode aria-hidden="true" size={20} />
-                  </button>
-                </div>
-                <small>Appuyez sur le code pour copier l’invitation</small>
-              </div>
-            </header>
-
-            <div className="sj-room-lobby-summary" aria-label="Informations de la salle">
-              <span className={state.roomVisibility === 'public' ? 'is-public' : ''}>
-                {state.roomVisibility === 'public' ? <Globe2 aria-hidden="true" size={14} /> : <LockKeyhole aria-hidden="true" size={14} />}
-                {state.roomVisibility === 'public' ? 'Publique' : 'Privée'}
-              </span>
-              <span><Users aria-hidden="true" size={14} /> {state.players.length}/{maxPlayers} joueurs</span>
-              <span><Sparkles aria-hidden="true" size={14} /> {roomVariantLabel(state.roomSettings)}</span>
-              {state.roomSettings?.locked && <span><LockKeyhole aria-hidden="true" size={14} /> Verrouillée</span>}
-              <span className={`sj-room-lobby-status ${lobbyReady ? 'is-ready' : ''}`}><i aria-hidden="true" /> {lobbyStatus}</span>
-            </div>
-
-            <div className={`sj-room-lobby-content is-${mobileLobbyPanel}-active`}>
-              <section
-                className={`sj-room-lobby-players ${mobileLobbyPanel !== 'players' ? 'is-mobile-collapsed' : 'is-mobile-expanded'}`}
-                aria-labelledby="room-player-list-title"
-                aria-expanded={mobileLobbyPanel === 'players'}
-                onClick={() => setMobileLobbyPanel('players')}
-              >
-                <div className="sj-room-lobby-section-head">
-                  <div>
-                    <span className="sj-room-lobby-section-icon"><Users aria-hidden="true" size={18} /></span>
-                    <span><strong id="room-player-list-title">Joueurs</strong></span>
-                  </div>
-                  <strong>{state.players.length}<small>/{maxPlayers}</small></strong>
-                </div>
-                <ul className="sj-lobby-player-list">
-                  {state.players.map((player) => (
-                      <li
-                        key={player.id}
-                        className={`sj-pop-in ${player.id === myId ? 'is-current' : ''} ${!player.connected ? 'is-disconnected' : ''}`}
-                      >
-                        <span className="sj-lobby-player-copy">
-                          <strong>{player.name}</strong>
-                          <i
-                            className="sj-lobby-player-presence"
-                            role="img"
-                            aria-label={player.connected ? 'Connecté' : 'Déconnecté'}
-                            title={player.connected ? 'Connecté' : 'Déconnecté'}
-                          />
-                        </span>
-                        <span className="sj-lobby-player-badges">
-                          {player.id === state.creatorId && <span title="Créateur"><Crown aria-hidden="true" size={14} /> <em>Hôte</em></span>}
-                          {player.isBot && <span className="is-bot"><Sparkles aria-hidden="true" size={12} /> <em>Bot</em></span>}
-                          {player.id === myId && <span className="is-you">Vous</span>}
-                        </span>
-                        {isCreator && player.id !== myId && (
-                          <button
-                            type="button"
-                            className="sj-lobby-player-remove"
-                            aria-label={`Retirer ${player.name} de la salle`}
-                            title={`Retirer ${player.name} de la salle`}
-                            onClick={() => player.isBot ? removeBotFromLobby(player.id) : removePlayerFromLobby(player.id)}
-                          >
-                            <UserMinus aria-hidden="true" size={17} />
-                          </button>
-                        )}
-                      </li>
-                  ))}
-                </ul>
-                <p className="sj-room-lobby-seats">
-                  {availableSeats > 0
-                    ? `${availableSeats} place${availableSeats > 1 ? 's' : ''} encore disponible${availableSeats > 1 ? 's' : ''}`
-                    : 'La salle est complète'}
-                </p>
-                {isCreator && availableSeats > 0 && (
-                  <button
-                    type="button"
-                    className="sj-room-lobby-add-bot"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      emitSocket(socket, SOCKET_EVENTS.ADD_BOT);
-                    }}
-                  >
-                    <Sparkles aria-hidden="true" size={14} /> Ajouter un bot
-                  </button>
-                )}
-              </section>
-
-              <aside
-                className={`sj-room-lobby-settings ${mobileLobbyPanel !== 'settings' ? 'is-mobile-collapsed' : 'is-mobile-expanded'}`}
-                aria-expanded={mobileLobbyPanel === 'settings'}
-                onClick={() => setMobileLobbyPanel('settings')}
-              >
-                <section className="sj-room-lobby-mode" aria-labelledby="room-mode-title">
-                  <div className="sj-room-lobby-section-head">
-                    <div>
-                      <span className="sj-room-lobby-section-icon"><Sparkles aria-hidden="true" size={18} /></span>
-                      <span><strong id="room-mode-title">Mode de jeu</strong></span>
-                    </div>
-                  </div>
-                  <div
-                    className={`sj-room-visibility sj-room-lobby-mode-options ${state.gameMode === 'action' ? 'is-action' : ''}`}
-                    role="group"
-                    aria-label="Mode de jeu"
-                  >
-                    {modeOptions.map((mode) => (
-                      <button
-                        key={mode.id}
-                        type="button"
-                        className={`sj-room-visibility-option ${state.gameMode === mode.id ? 'sj-room-visibility-option-active' : ''}`}
-                        disabled={!isCreator}
-                        aria-pressed={state.gameMode === mode.id}
-                        onClick={() => emitSocket(socket, SOCKET_EVENTS.SET_GAME_MODE, { gameMode: mode.id })}
-                      >
-                        <strong>{mode.label}</strong>
-                      </button>
-                    ))}
-                  </div>
-                  <LobbyGameFormat
-                    roomSettings={state.roomSettings}
-                    disabled={!isCreator}
-                    onUpdate={(settings) => emitSocket(socket, SOCKET_EVENTS.UPDATE_ROOM_SETTINGS, settings)}
-                  />
-                </section>
-                <div className="sj-room-lobby-role-note">
-                  {isSpectator ? <Eye aria-hidden="true" size={17} /> : isCreator ? <Crown aria-hidden="true" size={17} /> : <Users aria-hidden="true" size={17} />}
-                  <span>
-                    <strong>{isSpectator ? 'Mode spectateur' : isCreator ? 'Vous êtes l’hôte' : 'Vous êtes invité'}</strong>
-                    <small>{isSpectator ? 'Vous regardez la salle en lecture seule.' : isCreator ? 'Vous contrôlez le lancement et les paramètres.' : 'La partie sera lancée par l’hôte.'}</small>
-                  </span>
-                </div>
-              </aside>
-            </div>
-
-            <footer className="sj-room-lobby-footer">
-              <div className="sj-room-lobby-actions">
-                <GameGuideButton onClick={() => setGameGuideOpen(true)} />
-                {isCreator && (
-                  <button
-                    className="sj-btn sj-btn-primary sj-room-lobby-start"
-                    disabled={state.players.length < 2}
-                    onClick={() => {
-                      if (disconnectedPlayers.length > 0) {
-                        setDisconnectedPlayersModalOpen(true);
-                        return;
-                      }
-                      emitSocket(socket, SOCKET_EVENTS.START_GAME);
-                    }}
-                  >
-                    Lancer la partie <ChevronRight aria-hidden="true" size={18} />
-                  </button>
-                )}
-              </div>
-            </footer>
-          </section>
+          <RoomLobby
+            state={state}
+            roomId={roomId}
+            myId={myId}
+            isCreator={isCreator}
+            isSpectator={isSpectator}
+            copied={copied}
+            disconnectedPlayers={disconnectedPlayers}
+            onCopyCode={copyRoomCode}
+            onShowQr={() => setInviteModalOpen(true)}
+            onRemovePlayer={removePlayerFromLobby}
+            onRemoveBot={removeBotFromLobby}
+            onAddBot={() => emitSocket(socket, SOCKET_EVENTS.ADD_BOT)}
+            onSetGameMode={(gameMode) => emitSocket(socket, SOCKET_EVENTS.SET_GAME_MODE, { gameMode })}
+            onUpdateSettings={(settings) => emitSocket(socket, SOCKET_EVENTS.UPDATE_ROOM_SETTINGS, settings)}
+            onOpenGuide={() => setGameGuideOpen(true)}
+            onStart={() => {
+              if (disconnectedPlayers.length > 0) {
+                setDisconnectedPlayersModalOpen(true);
+                return;
+              }
+              emitSocket(socket, SOCKET_EVENTS.START_GAME);
+            }}
+          />
         </div>
         {leaveModal}
         {chatModal}

@@ -431,6 +431,7 @@ async function mutateRoom(roomId, mutation, options = {}) {
       throw error;
     }
     rooms.set(roomId, draft);
+    if (draft.order.length === 0) revokeEmptyRoomAudience(roomId);
     return { state: draft, result };
   });
 }
@@ -713,6 +714,20 @@ function revokePublicPreviewAccess(roomId, predicate, { code, message }) {
   }
 }
 
+function revokeEmptyRoomAudience(roomId) {
+  const message = 'Cette salle a été fermée car il ne reste aucun joueur.';
+  revokeRoomAccess(
+    roomId,
+    (candidate) => candidate.role === 'spectator',
+    { reason: 'room_empty', message },
+  );
+  revokePublicPreviewAccess(
+    roomId,
+    () => true,
+    { code: 'room_unavailable', message },
+  );
+}
+
 async function attachSocket(
   socket,
   roomId,
@@ -768,7 +783,7 @@ async function attachSpectator(socket, roomId) {
   if (!roomId) return null;
   const state = await enqueueRoom(roomId, async () => {
     const latest = await getOrLoadRoom(roomId);
-    if (!latest) return null;
+    if (!latest || latest.order.length === 0) return null;
     assertUserRoomAccess(latest, socket.data.auth.user.id);
     if (!effectiveRoomSettings(latest).allowSpectators) {
       throw new PublicError('spectators_disabled', 'Cette salle n’autorise pas les spectateurs.', 403);

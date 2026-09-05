@@ -1,10 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Eye, LogIn, QrCode, X } from 'lucide-react';
+import { Eye, LogIn, X } from 'lucide-react';
 import Card from './Card.jsx';
 import CardMotionLayer from './CardMotionLayer.jsx';
-import { GameGuideButton } from './GameGuide.jsx';
 import { PileButton } from './GameTablePieces.jsx';
 import PlayerBoard from './PlayerBoard.jsx';
+import RoomLobby from './RoomLobby.jsx';
 import { ACTION_ART_URLS, ACTION_LABELS } from '../gameGuide.js';
 import { calculateAdaptiveBoardLayout, layoutClassNames } from '../responsiveLayout.js';
 import { roomVariantLabel } from '../../../shared/roomVariants.js';
@@ -33,8 +33,6 @@ function PreviewBoard({
 }
 
 function LobbyPreview({ room, viewport, scale }) {
-  const players = room?.players || [];
-
   return (
     <div className="sj-public-preview-stage-clip">
       <div
@@ -47,63 +45,7 @@ function LobbyPreview({ room, viewport, scale }) {
           transform: `scale(${scale})`,
         }}
       >
-        <section className="sj-lobby-card sj-fade-in">
-          <div className="sj-room-head">
-            <span>Salle</span>
-            <span className="sj-room-copy-wrap">
-              <span className="sj-room-code-copy">
-                <button type="button" className="sj-room-copy">{room?.roomId}</button>
-              </span>
-              <button
-                type="button"
-                className="sj-room-qr-trigger"
-                aria-label="Afficher le QR code d’invitation"
-                title="Afficher le QR code d’invitation"
-              >
-                <QrCode aria-hidden="true" size={20} />
-              </button>
-            </span>
-          </div>
-          <p className={`sj-room-visibility-badge ${room?.roomVisibility === 'public' ? 'sj-room-visibility-badge-public' : ''}`}>
-            {room?.roomVisibility === 'public' ? 'Salle publique' : 'Salle privée'}
-          </p>
-          <ul className="sj-player-list">
-            {players.map((player) => (
-              <li
-                key={player.id}
-                className={`sj-pop-in ${!player.connected ? 'sj-player-list-disconnected' : ''}`}
-              >
-                <span className={`sj-turn-dot ${player.connected ? 'sj-turn-dot-on' : ''}`} />
-                <span className="sj-player-list-name">{player.name}</span>
-              </li>
-            ))}
-          </ul>
-          <section className="sj-mode-picker" aria-label="Mode de jeu">
-            <div className="sj-mode-picker-head">
-              <strong>Mode de jeu</strong>
-            </div>
-            <div className="sj-mode-options">
-              {[
-                { id: 'classic', label: 'Classique' },
-                { id: 'action', label: 'Action' },
-              ].map((mode) => (
-                <div key={mode.id} className={`sj-mode-option ${room?.gameMode === mode.id ? 'sj-mode-option-active' : ''}`}>
-                  <button
-                    type="button"
-                    disabled
-                    aria-pressed={room?.gameMode === mode.id}
-                  >
-                    <strong>{mode.label}</strong>
-                  </button>
-                </div>
-              ))}
-            </div>
-          </section>
-          <div className="sj-lobby-start-actions">
-            <GameGuideButton onClick={() => {}} />
-          </div>
-          <p className="sj-hint">Vous regardez la salle en lecture seule.</p>
-        </section>
+        <RoomLobby state={room} roomId={room?.roomId} isSpectator readOnly />
       </div>
     </div>
   );
@@ -260,6 +202,7 @@ export default function PublicRoomPreviewModal({
 }) {
   const modalRef = useRef(null);
   const previewViewportRef = useRef(null);
+  const initialDevicePixelRatioRef = useRef(window.devicePixelRatio || 1);
   const [viewport, setViewport] = useState(() => ({
     width: window.innerWidth || 1,
     height: window.innerHeight || 1,
@@ -271,17 +214,18 @@ export default function PublicRoomPreviewModal({
     const handleKeyDown = (event) => {
       if (event.key === 'Escape') onClose();
     };
-    const handleResize = () => setViewport({
-      width: window.visualViewport?.width || window.innerWidth || 1,
-      height: window.visualViewport?.height || window.innerHeight || 1,
-    });
+    const handleResize = () => {
+      const zoomRatio = (window.devicePixelRatio || 1) / initialDevicePixelRatioRef.current;
+      setViewport({
+        width: Math.max(1, (window.innerWidth || 1) * zoomRatio),
+        height: Math.max(1, (window.innerHeight || 1) * zoomRatio),
+      });
+    };
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('resize', handleResize);
-    window.visualViewport?.addEventListener('resize', handleResize);
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('resize', handleResize);
-      window.visualViewport?.removeEventListener('resize', handleResize);
     };
   }, [onClose]);
 
