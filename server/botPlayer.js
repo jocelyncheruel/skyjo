@@ -188,15 +188,32 @@ function visibleSlots(player) {
     .filter(({ slot }) => !slot.removed && slot.faceUp);
 }
 
+function equivalentCards(first, second) {
+  return isStarCard(first) === isStarCard(second)
+    && slotValue({ card: first }) === slotValue({ card: second });
+}
+
 function bestPlayerSwap(state, playerId) {
-  const own = visibleSlots(state.playersById[playerId]).sort((a, b) => slotValue(b.slot) - slotValue(a.slot));
+  const own = visibleSlots(state.playersById[playerId]);
   const opponents = state.order.filter((id) => id !== playerId)
-    .flatMap((id) => visibleSlots(state.playersById[id]).map((entry) => ({ ...entry, playerId: id })))
-    .sort((a, b) => slotValue(a.slot) - slotValue(b.slot));
-  if (!own[0] || !opponents[0]) return null;
+    .flatMap((id) => visibleSlots(state.playersById[id]).map((entry) => ({ ...entry, playerId: id })));
+  let best = null;
+  for (const ownEntry of own) {
+    for (const opponentEntry of opponents) {
+      if (equivalentCards(ownEntry.slot.card, opponentEntry.slot.card)) continue;
+      const ownGain = slotValue(ownEntry.slot) - slotValue(opponentEntry.slot);
+      // L'échange améliore le bot et détériore simultanément l'adversaire : le gain
+      // de duel vaut donc deux fois l'écart des cartes.
+      const score = ownGain * 2;
+      if (score <= 0) continue;
+      const candidate = { ownEntry, opponentEntry, score };
+      if (!best || candidate.score > best.score) best = candidate;
+    }
+  }
+  if (!best) return null;
   return {
-    first: { playerId, slotIndex: own[0].index },
-    second: { playerId: opponents[0].playerId, slotIndex: opponents[0].index },
+    first: { playerId, slotIndex: best.ownEntry.index },
+    second: { playerId: best.opponentEntry.playerId, slotIndex: best.opponentEntry.index },
   };
 }
 
@@ -494,8 +511,10 @@ function candidateScore(player, slotIndex, card, strategy) {
     const matchProbability = Math.min(1, remainingMatches / availableCards);
     const potentialRemoval = Math.max(0, cardValue) * 3;
     const learnedPotential = matchProbability * potentialRemoval;
-    score += cardValue <= 4
-      ? 2.25
+    score += cardValue <= 1
+      ? 0.35
+      : cardValue <= 4
+        ? 2.25
       : cardValue <= 7
         ? Math.min(3, 0.75 + learnedPotential)
         : Math.min(4, learnedPotential);
