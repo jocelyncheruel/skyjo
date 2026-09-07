@@ -113,6 +113,7 @@ CREATE TABLE IF NOT EXISTS public.user_game_participations (
   final_score INTEGER,
   final_rank INTEGER,
   participant_count INTEGER,
+  bot_count INTEGER NOT NULL DEFAULT 0,
   started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   finished_at TIMESTAMPTZ,
   PRIMARY KEY (room_id, game_serial, user_id),
@@ -122,7 +123,10 @@ CREATE TABLE IF NOT EXISTS public.user_game_participations (
   CONSTRAINT user_game_participations_mode_check CHECK (game_mode IN ('classic', 'action')),
   CONSTRAINT user_game_participations_visibility_check CHECK (room_visibility IN ('private', 'public')),
   CONSTRAINT user_game_participations_outcome_check CHECK (outcome IN ('active', 'won', 'lost', 'draw', 'abandoned')),
-  CONSTRAINT user_game_participations_rounds_check CHECK (rounds_played >= 0)
+  CONSTRAINT user_game_participations_rounds_check CHECK (rounds_played >= 0),
+  CONSTRAINT user_game_participations_bot_count_check CHECK (
+    bot_count >= 0 AND (participant_count IS NULL OR bot_count <= participant_count)
+  )
 );
 
 CREATE TABLE IF NOT EXISTS public.game_decision_events (
@@ -187,6 +191,28 @@ BEGIN
     );
 
     INSERT INTO public.skyjo_schema_migrations (version) VALUES ('v5');
+  END IF;
+END;
+$$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM public.skyjo_schema_migrations WHERE version = 'v7') THEN
+    ALTER TABLE public.user_game_participations
+      ADD COLUMN IF NOT EXISTS bot_count INTEGER NOT NULL DEFAULT 0;
+
+    IF NOT EXISTS (
+      SELECT 1
+      FROM pg_constraint
+      WHERE conrelid = 'public.user_game_participations'::regclass
+        AND conname = 'user_game_participations_bot_count_check'
+    ) THEN
+      ALTER TABLE public.user_game_participations
+        ADD CONSTRAINT user_game_participations_bot_count_check
+        CHECK (bot_count >= 0 AND (participant_count IS NULL OR bot_count <= participant_count));
+    END IF;
+
+    INSERT INTO public.skyjo_schema_migrations (version) VALUES ('v7');
   END IF;
 END;
 $$;
@@ -406,19 +432,23 @@ BEGIN
     WHERE participation.room_id = p_room_id
       AND participation.game_serial = v_game_serial;
 
-    WITH final_placements AS (
+    WITH final_players AS (
+      SELECT player.key AS player_id,
+        (player.value ->> 'totalScore')::INTEGER AS final_score,
+        COALESCE((player.value ->> 'isBot')::BOOLEAN, FALSE) AS is_bot
+      FROM jsonb_each(COALESCE(p_state_json -> 'playersById', '{}'::JSONB)) AS player
+      WHERE COALESCE(player.value ->> 'totalScore', '') ~ '^-?[0-9]+$'
+    ), final_placements AS (
       SELECT ranked.player_id,
         RANK() OVER (ORDER BY ranked.final_score ASC) AS final_rank,
-        COUNT(*) OVER () AS participant_count
-      FROM public.user_game_participations AS ranked
-      WHERE ranked.room_id = p_room_id
-        AND ranked.game_serial = v_game_serial
-        AND ranked.outcome <> 'abandoned'
-        AND ranked.final_score IS NOT NULL
+        COUNT(*) OVER () AS participant_count,
+        COUNT(*) FILTER (WHERE ranked.is_bot) OVER () AS bot_count
+      FROM final_players AS ranked
     )
     UPDATE public.user_game_participations AS participation
     SET final_rank = placements.final_rank,
-        participant_count = placements.participant_count
+        participant_count = placements.participant_count,
+        bot_count = placements.bot_count
     FROM final_placements AS placements
     WHERE participation.room_id = p_room_id
       AND participation.game_serial = v_game_serial
@@ -546,6 +576,14 @@ AS $$
         PARTITION BY user_id, streak_group ORDER BY COALESCE(finished_at, started_at), room_id, game_serial
       ) ELSE 0 END AS win_streak
     FROM ordered_results
+  ), rated_results AS (
+    SELECT scored_results.*,
+      CASE WHEN outcome = 'abandoned' THEN -8
+        WHEN final_rank IS NULL OR participant_count IS NULL OR participant_count < 2 THEN 0
+        ELSE public.skyjo_placement_trophies(final_rank, participant_count)
+          + CASE WHEN final_rank = 1 THEN LEAST(GREATEST(win_streak - 1, 0), 5) ELSE 0 END
+      END AS base_rating
+    FROM scored_results
   )
   SELECT
     COUNT(*) FILTER (WHERE outcome IN ('won', 'lost', 'draw', 'abandoned')) AS games_played,
@@ -567,13 +605,15 @@ AS $$
     MAX(COALESCE(finished_at, started_at)) FILTER (
       WHERE outcome IN ('won', 'lost', 'draw', 'abandoned')
     ) AS last_game_at,
-    GREATEST(0, COALESCE(SUM(
-      CASE WHEN outcome = 'abandoned' THEN -8
-        WHEN final_rank IS NULL OR participant_count IS NULL OR participant_count < 2 THEN 0
-        ELSE public.skyjo_placement_trophies(final_rank, participant_count)
-          + CASE WHEN final_rank = 1 THEN LEAST(GREATEST(win_streak - 1, 0), 5) ELSE 0 END
-      END
-    ), 0)) AS competitive_rating,
+    GREATEST(0, COALESCE(SUM(CASE
+      WHEN base_rating > 0 AND bot_count > 0 THEN GREATEST(1, ROUND(
+        base_rating * GREATEST(
+          0.5,
+          (participant_count - bot_count)::NUMERIC / NULLIF(participant_count, 0)
+        )
+      )::INTEGER)
+      ELSE base_rating
+    END), 0)) AS competitive_rating,
     COALESCE((ARRAY_AGG(win_streak ORDER BY COALESCE(finished_at, started_at) DESC, room_id DESC, game_serial DESC)
       FILTER (WHERE outcome IN ('won', 'lost', 'draw', 'abandoned')))[1], 0) AS current_win_streak,
     COALESCE((
@@ -620,7 +660,7 @@ AS $$
         COUNT(*) FILTER (WHERE outcome IN ('won', 'lost', 'draw', 'abandoned') AND (EXTRACT(HOUR FROM COALESCE(finished_at, started_at) AT TIME ZONE 'Europe/Paris') >= 23 OR EXTRACT(HOUR FROM COALESCE(finished_at, started_at) AT TIME ZONE 'Europe/Paris') < 5))
       )
     ) AS usage_metrics
-  FROM scored_results;
+  FROM rated_results;
 $$;
 
 CREATE FUNCTION public.get_skyjo_leaderboard(
@@ -653,21 +693,31 @@ AS $$
         PARTITION BY user_id, streak_group ORDER BY COALESCE(finished_at, started_at), room_id, game_serial
       ) ELSE 0 END AS win_streak
     FROM ordered_results
+  ), rated_results AS (
+    SELECT scored_results.*,
+      CASE WHEN outcome = 'abandoned' THEN -8
+        WHEN final_rank IS NULL OR participant_count IS NULL OR participant_count < 2 THEN 0
+        ELSE public.skyjo_placement_trophies(final_rank, participant_count)
+          + CASE WHEN final_rank = 1 THEN LEAST(GREATEST(win_streak - 1, 0), 5) ELSE 0 END
+      END AS base_rating
+    FROM scored_results
   ), player_results AS (
     SELECT
       user_id,
       COUNT(*) FILTER (WHERE outcome IN ('won', 'lost', 'draw', 'abandoned')) AS games_played,
       COUNT(*) FILTER (WHERE outcome = 'won') AS games_won,
-      GREATEST(0, COALESCE(SUM(
-        CASE WHEN outcome = 'abandoned' THEN -8
-          WHEN final_rank IS NULL OR participant_count IS NULL OR participant_count < 2 THEN 0
-          ELSE public.skyjo_placement_trophies(final_rank, participant_count)
-            + CASE WHEN final_rank = 1 THEN LEAST(GREATEST(win_streak - 1, 0), 5) ELSE 0 END
-        END
-      ), 0)) AS rating,
+      GREATEST(0, COALESCE(SUM(CASE
+        WHEN base_rating > 0 AND bot_count > 0 THEN GREATEST(1, ROUND(
+          base_rating * GREATEST(
+            0.5,
+            (participant_count - bot_count)::NUMERIC / NULLIF(participant_count, 0)
+          )
+        )::INTEGER)
+        ELSE base_rating
+      END), 0)) AS rating,
       COALESCE((ARRAY_AGG(win_streak ORDER BY COALESCE(finished_at, started_at) DESC, room_id DESC, game_serial DESC)
         FILTER (WHERE outcome IN ('won', 'lost', 'draw', 'abandoned')))[1], 0) AS current_win_streak
-    FROM scored_results
+    FROM rated_results
     GROUP BY user_id
   ), ranked AS (
     SELECT
