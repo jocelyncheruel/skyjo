@@ -47,6 +47,7 @@ import {
 import PlayerBoard from './components/PlayerBoard.jsx';
 import GameEndCelebration from './components/GameEndCelebration.jsx';
 import PublicRoomPreviewModal from './components/PublicRoomPreviewModal.jsx';
+import InstallAppPrompt from './components/InstallAppPrompt.jsx';
 import RoomLobby from './components/RoomLobby.jsx';
 import {
   RoomAdministrationButton,
@@ -241,7 +242,12 @@ export default function App() {
     : window.location.pathname.replace(/\/$/, '') || '/';
   const legalDocumentId = PUBLIC_LEGAL_ROUTES[pathname];
   if (legalDocumentId) return <LegalPage documentId={legalDocumentId} />;
-  return <SkyjoApp />;
+  return (
+    <>
+      <SkyjoApp />
+      <InstallAppPrompt />
+    </>
+  );
 }
 
 function SkyjoApp() {
