@@ -5,10 +5,15 @@ const CARD_H = 122;
 const CARD_RADIUS = 11;
 const CARD_FRAME_INSET = 1.2;
 const CARD_PILE_FRAME_INSET = 1.2;
-const CORNER_VALUE_INSET = 7;
-const CORNER_VALUE_CENTER_Y = 13.5;
-const CORNER_VALUE_SIZE = 13;
+const REPEATED_VALUE_SIZE = 11.5;
+const REPEATED_VALUE_ANGLE = -18;
 const FACET_OPACITY = 0.32;
+const REPEATED_VALUE_POSITIONS = Array.from({ length: 8 }, (_, row) => (
+  Array.from({ length: 6 }, (_, column) => ({
+    x: 4 + column * 18 + (row % 2) * 9,
+    y: 5 + row * 17,
+  }))
+)).flat();
 const STAR_PATH = [
   'M 44 32',
   'L 51.94 51.08',
@@ -199,6 +204,61 @@ function centerValueSize(value) {
   return 50;
 }
 
+function RepeatedCardValue({ value, palette, rid, inset }) {
+  const clipId = `sj-card-value-clip-${rid}`;
+  const maskId = `sj-card-value-mask-${rid}`;
+  const numericValue = Number(value);
+
+  return (
+    <g clipPath={`url(#${clipId})`} mask={`url(#${maskId})`} aria-hidden="true">
+      <defs>
+        <clipPath id={clipId}>
+          <rect {...cardRect(inset)} />
+        </clipPath>
+        <mask id={maskId} x="0" y="0" width={CARD_W} height={CARD_H} maskUnits="userSpaceOnUse">
+          <rect x="0" y="0" width={CARD_W} height={CARD_H} fill="#fff" />
+          <text
+            x={CARD_W / 2}
+            y={CARD_H / 2 + 1}
+            textAnchor="middle"
+            dominantBaseline="central"
+            fontFamily="Arial, sans-serif"
+            fontWeight="900"
+            fontSize={centerValueSize(numericValue)}
+            fill="#000"
+            stroke="#000"
+            strokeWidth="16"
+            strokeLinejoin="round"
+            paintOrder="stroke"
+          >
+            {value}
+          </text>
+        </mask>
+      </defs>
+      {REPEATED_VALUE_POSITIONS.map(({ x, y }) => (
+        <text
+          key={`${x}-${y}`}
+          x={x}
+          y={y}
+          textAnchor="middle"
+          dominantBaseline="central"
+          fontFamily="Arial, sans-serif"
+          fontWeight="900"
+          fontSize={REPEATED_VALUE_SIZE}
+          fill={palette.ink}
+          stroke={haloFor(palette.ink)}
+          strokeWidth="1.65"
+          paintOrder="stroke"
+          opacity="0.62"
+          transform={`rotate(${REPEATED_VALUE_ANGLE} ${x} ${y})`}
+        >
+          {value}
+        </text>
+      ))}
+    </g>
+  );
+}
+
 function CardBack({ rid, inset }) {
   const surface = cardRect(inset);
 
@@ -354,21 +414,14 @@ export default function Card({
       ) : (
         <FacetedBackground value={hasNumberValue ? numericValue : 0} rid={uid} inset={frameInset} />
       )}
-      {hasNumberValue && <text
-        x={CORNER_VALUE_INSET}
-        y={CORNER_VALUE_CENTER_Y}
-        textAnchor="start"
-        dominantBaseline="central"
-        fontFamily="Arial, sans-serif"
-        fontWeight="900"
-        fontSize={CORNER_VALUE_SIZE}
-        fill={palette.ink}
-        stroke={haloFor(palette.ink)}
-        strokeWidth="2"
-        paintOrder="stroke"
-      >
-        {displayValue}
-      </text>}
+      {hasNumberValue && (
+        <RepeatedCardValue
+          value={displayValue}
+          palette={palette}
+          rid={uid}
+          inset={frameInset}
+        />
+      )}
       {kind === 'star' ? (
         <path
           className="sj-card-star"
@@ -397,21 +450,6 @@ export default function Card({
           {displayValue}
         </text>
       )}
-      {hasNumberValue && <text
-        x={CARD_W - CORNER_VALUE_INSET}
-        y={CARD_H - CORNER_VALUE_CENTER_Y}
-        textAnchor="end"
-        dominantBaseline="central"
-        fontFamily="Arial, sans-serif"
-        fontWeight="900"
-        fontSize={CORNER_VALUE_SIZE}
-        fill={palette.ink}
-        stroke={haloFor(palette.ink)}
-        strokeWidth="2"
-        paintOrder="stroke"
-      >
-        {displayValue}
-      </text>}
       <CardFrame inset={frameInset} />
     </svg>
   );
