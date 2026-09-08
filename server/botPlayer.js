@@ -202,8 +202,6 @@ function bestPlayerSwap(state, playerId) {
     for (const opponentEntry of opponents) {
       if (equivalentCards(ownEntry.slot.card, opponentEntry.slot.card)) continue;
       const ownGain = slotValue(ownEntry.slot) - slotValue(opponentEntry.slot);
-      // L'échange améliore le bot et détériore simultanément l'adversaire : le gain
-      // de duel vaut donc deux fois l'écart des cartes.
       const score = ownGain * 2;
       if (score <= 0) continue;
       const candidate = { ownEntry, opponentEntry, score };
@@ -562,10 +560,13 @@ function candidateScore(player, slotIndex, card, strategy) {
   const isLastHiddenCard = isHiddenTarget && hiddenCount === 1;
   if (isLastHiddenCard) {
     const baseRoundDelta = cardValue - replacedValue;
-    score += finishOutcomeUtility(
+    const outcomeUtility = finishOutcomeUtility(
       strategy,
       completesColumn ? completedColumnRoundDelta : baseRoundDelta,
     );
+    score += strategy.alreadyInLastTurns
+      ? outcomeUtility - finishOutcomeUtility(strategy, 0)
+      : outcomeUtility;
   } else if (target.faceUp && hiddenCount === 1 && !strategy.closeBoard) {
     score += strategy.delayBonus;
   }
