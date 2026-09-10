@@ -5669,7 +5669,7 @@ button.sj-action-count-badge:focus-visible {
 
 .sj-level-timeline-line {
   position: absolute;
-  top: calc(100% + 5px);
+  top: 17px;
   right: 10%;
   left: 10%;
   height: 5px;
