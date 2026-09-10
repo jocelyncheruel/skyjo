@@ -1532,7 +1532,8 @@ async function friendshipPayload(user) {
       ...(livePresence ? {
         online: otherProfile.show_presence === false ? null : livePresence.online,
         status: otherProfile.show_presence === false ? 'hidden'
-          : livePresence.online && visibleGame ? 'playing'
+          : livePresence.online && visibleGame
+            ? visibleGame.phase === 'lobby' ? 'lobby' : 'playing'
             : livePresence.online ? otherProfile.presence_status || 'available' : 'offline',
         game: visibleGame,
         profile: otherProfile.show_quick_profile === false ? null : quickStats,
