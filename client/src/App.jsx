@@ -5,15 +5,19 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  EllipsisVertical,
   Eye,
   Gamepad2,
   Globe2,
+  Handshake,
   Info,
   LockKeyhole,
   LogOut,
   QrCode,
   ScanLine,
   Sparkles,
+  Trophy,
+  UserRound,
   Users,
 } from 'lucide-react';
 import Card from './components/Card.jsx';
@@ -48,7 +52,7 @@ import PlayerBoard from './components/PlayerBoard.jsx';
 import GameEndCelebration from './components/GameEndCelebration.jsx';
 import PublicRoomPreviewModal from './components/PublicRoomPreviewModal.jsx';
 import InstallAppPrompt from './components/InstallAppPrompt.jsx';
-import FriendsModal, { FriendInvitationPrompt, FriendsButton, friendsApi } from './components/FriendsModal.jsx';
+import FriendsModal, { FriendInvitationPrompt, friendsApi } from './components/FriendsModal.jsx';
 import RoomLobby from './components/RoomLobby.jsx';
 import {
   RoomAdministrationButton,
@@ -65,7 +69,7 @@ import {
   LeaveRoomModal,
   SpectatorBadge,
 } from './components/RoomUi.jsx';
-import ProfileModal, { ActivityButton, ProfileButton } from './ProfileModal.jsx';
+import ProfileModal from './ProfileModal.jsx';
 import { AuthView, ConsentGate, LegalPage, ResetPasswordView } from './Auth.jsx';
 import { useAuth } from './authContext.js';
 import { apiFetch, AUTH_REMEMBER_KEY, SERVER_URL } from './apiClient.js';
@@ -400,6 +404,8 @@ function GameApp() {
   const [activityOpen, setActivityOpen] = useState(false);
   const [friendsOpen, setFriendsOpen] = useState(false);
   const [friendsRevision, setFriendsRevision] = useState(0);
+  const [friendsUnread, setFriendsUnread] = useState(0);
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [queuedFriendInvitation, setQueuedFriendInvitation] = useState(null);
   const [friendInvitationPrompt, setFriendInvitationPrompt] = useState(null);
   const [friendInvitationBusy, setFriendInvitationBusy] = useState(false);
@@ -429,6 +435,7 @@ function GameApp() {
   const seenFriendInvitationIdsRef = useRef(new Set());
   const friendInvitationJoinPendingRef = useRef(false);
   const gameNameSelectRef = useRef(null);
+  const accountMenuRef = useRef(null);
   const closeQrScanner = useCallback(() => setQrScannerOpen(false), []);
 
   useEffect(() => {
@@ -484,6 +491,30 @@ function GameApp() {
     document.addEventListener('pointerdown', closeMenu);
     return () => document.removeEventListener('pointerdown', closeMenu);
   }, [gameNameMenuOpen]);
+
+  useEffect(() => {
+    let active = true;
+    friendsApi().then((data) => {
+      if (active) setFriendsUnread(data?.unreadCount || 0);
+    }).catch(() => {});
+    return () => { active = false; };
+  }, [friendsRevision]);
+
+  useEffect(() => {
+    if (!accountMenuOpen) return undefined;
+    const closeMenu = (event) => {
+      if (!accountMenuRef.current?.contains(event.target)) setAccountMenuOpen(false);
+    };
+    const closeOnEscape = (event) => {
+      if (event.key === 'Escape') setAccountMenuOpen(false);
+    };
+    document.addEventListener('pointerdown', closeMenu);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('pointerdown', closeMenu);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [accountMenuOpen]);
 
   const clearError = useCallback(() => {
     if (errorTimerRef.current) {
@@ -1240,13 +1271,44 @@ function GameApp() {
               <div className="sj-home-mini-brand">
                 <SkyjoLogo connectionBadge={<ConnectionBadge connected={connected} />} />
               </div>
-              <div className="sj-account-controls">
-                <ActivityButton onClick={() => setActivityOpen(true)} />
-                <FriendsButton refreshToken={friendsRevision} onClick={() => setFriendsOpen(true)} />
-                <ProfileButton onClick={() => setProfileOpen(true)} />
-                <button type="button" className="sj-account-logout" onClick={logoutFromHome} aria-label="Se déconnecter du compte" title="Se déconnecter">
-                  <LogOut aria-hidden="true" size={16} />
+              <div className="sj-account-controls" ref={accountMenuRef}>
+                <button
+                  type="button"
+                  className="sj-account-menu-trigger"
+                  onClick={() => setAccountMenuOpen((open) => !open)}
+                  aria-label="Ouvrir le menu du compte"
+                  aria-haspopup="menu"
+                  aria-expanded={accountMenuOpen}
+                  title="Menu du compte"
+                >
+                  <EllipsisVertical aria-hidden="true" size={19} />
+                  {friendsUnread > 0 && (
+                    <span className="sj-friends-unread" aria-label={`${friendsUnread} nouveauté${friendsUnread > 1 ? 's' : ''}`}>
+                      {Math.min(friendsUnread, 9)}{friendsUnread > 9 ? '+' : ''}
+                    </span>
+                  )}
                 </button>
+                {accountMenuOpen && (
+                  <div className="sj-account-menu sj-pop-in" role="menu">
+                    <button type="button" role="menuitem" onClick={() => { setAccountMenuOpen(false); setActivityOpen(true); }}>
+                      <Trophy aria-hidden="true" size={17} />
+                      <span>Statistiques et progression</span>
+                    </button>
+                    <button type="button" role="menuitem" onClick={() => { setAccountMenuOpen(false); setFriendsUnread(0); setFriendsOpen(true); }}>
+                      <Handshake aria-hidden="true" size={17} />
+                      <span>Amis</span>
+                      {friendsUnread > 0 && <b>{Math.min(friendsUnread, 9)}{friendsUnread > 9 ? '+' : ''}</b>}
+                    </button>
+                    <button type="button" role="menuitem" onClick={() => { setAccountMenuOpen(false); setProfileOpen(true); }}>
+                      <UserRound aria-hidden="true" size={17} />
+                      <span>Profil</span>
+                    </button>
+                    <button type="button" role="menuitem" className="sj-account-menu-logout" onClick={logoutFromHome}>
+                      <LogOut aria-hidden="true" size={17} />
+                      <span>Se déconnecter</span>
+                    </button>
+                  </div>
+                )}
               </div>
             </header>
 

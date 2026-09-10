@@ -286,19 +286,27 @@ body {
 @keyframes auth-shake { 30% { transform: translateX(-4px); } 60% { transform: translateX(4px); } }
 .auth-reveal { animation: auth-reveal .36s ease both; }
 
-.sj-account-logout { position: absolute; top: 12px; right: 12px; z-index: 6; display: grid; width: 36px; height: 36px; place-items: center; padding: 0; border: 1px solid rgba(239,106,97,.58); border-radius: 50%; color: #ff8178; background: rgba(116,30,30,.42); box-shadow: 0 8px 20px rgba(0,0,0,.2), 0 0 0 3px rgba(239,106,97,.08); cursor: pointer; backdrop-filter: blur(8px); transition: color .2s, border-color .2s, background .2s, transform .2s; }
-.sj-account-logout:hover { border-color: #ff8178; color: #fff; background: rgba(166,43,38,.82); transform: translateY(-1px); }
-.sj-account-logout:focus-visible { outline: 2px solid rgba(239,106,97,.8); outline-offset: 2px; }
-.sj-account-controls { --sj-account-control-size: 36px; position: absolute; top: 12px; right: 12px; z-index: 6; display: flex; align-items: center; gap: 8px; }
-.sj-account-controls .sj-account-logout { position: static; top: auto; right: auto; }
-.sj-account-controls > .sj-account-profile-trigger,
-.sj-account-controls > .sj-account-logout {
+.sj-account-controls { --sj-account-control-size: 36px; position: absolute; top: 12px; right: 12px; z-index: 20; display: flex; align-items: center; }
+.sj-account-menu-trigger {
   width: var(--sj-account-control-size);
   height: var(--sj-account-control-size);
   min-width: var(--sj-account-control-size);
   min-height: var(--sj-account-control-size);
   flex: 0 0 var(--sj-account-control-size);
 }
+.sj-account-menu-trigger { position: relative; display: grid; place-items: center; padding: 0; border: 1px solid rgba(113,168,255,.52); border-radius: 50%; color: #cfe2ff; background: rgba(35,65,105,.52); box-shadow: 0 8px 20px rgba(0,0,0,.2), 0 0 0 3px rgba(113,168,255,.07); cursor: pointer; backdrop-filter: blur(8px); transition: color .2s, border-color .2s, background .2s; }
+.sj-account-menu-trigger:hover,
+.sj-account-menu-trigger[aria-expanded="true"] { border-color: #8ebcff; color: #fff; background: rgba(45,87,145,.82); }
+.sj-account-menu-trigger:focus-visible { outline: 2px solid rgba(113,168,255,.8); outline-offset: 2px; }
+.sj-account-menu { position: absolute; top: calc(100% + 9px); right: 0; z-index: 50; width: min(270px, calc(100vw - 24px)); padding: 7px; border: 1px solid rgba(255,255,255,.13); border-radius: 14px; background: rgba(20,25,34,.98); box-shadow: 0 18px 45px rgba(0,0,0,.42); backdrop-filter: blur(18px); }
+.sj-account-menu > button { width: 100%; min-height: 40px; display: grid; grid-template-columns: 22px minmax(0,1fr) auto; align-items: center; gap: 9px; padding: 8px 10px; border: 0; border-radius: 9px; color: var(--text); background: transparent; text-align: left; cursor: pointer; }
+.sj-account-menu > button:hover,
+.sj-account-menu > button:focus-visible { color: #fff; background: rgba(113,168,255,.12); }
+.sj-account-menu > button:focus-visible { outline: 2px solid rgba(113,168,255,.55); outline-offset: -2px; }
+.sj-account-menu > button b { min-width: 18px; height: 18px; display: grid; place-items: center; padding-inline: 4px; border-radius: 999px; color: #fff; background: #ef6a61; font-size: 9px; line-height: 1; }
+.sj-account-menu > .sj-account-menu-logout { margin-top: 7px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,.1); border-radius: 0 0 9px 9px; color: #ff9c95; }
+.sj-account-menu > .sj-account-menu-logout:hover,
+.sj-account-menu > .sj-account-menu-logout:focus-visible { color: #ffd0cc; background: rgba(239,106,97,.12); }
 .sj-account-profile-trigger { display: grid; width: 36px; height: 36px; place-items: center; padding: 0; border: 1px solid rgba(113,168,255,.52); border-radius: 50%; color: #cfe2ff; background: rgba(35,65,105,.52); box-shadow: 0 8px 20px rgba(0,0,0,.2), 0 0 0 3px rgba(113,168,255,.07); cursor: pointer; backdrop-filter: blur(8px); transition: color .2s, border-color .2s, background .2s, transform .2s; }
 .sj-account-profile-trigger:hover { border-color: #8ebcff; color: #fff; background: rgba(45,87,145,.82); transform: translateY(-1px); }
 .sj-account-profile-trigger:focus-visible { outline: 2px solid rgba(113,168,255,.8); outline-offset: 2px; }
@@ -638,11 +646,12 @@ button {
 
 .sj-home-portal-header .sj-account-controls {
   --sj-account-control-size: 40px;
-  position: static;
+  position: relative;
+  top: auto;
+  right: auto;
   justify-self: end;
 }
 
-.sj-home-portal-header .sj-account-logout,
 .sj-home-portal-header .sj-account-profile-trigger {
   width: 40px;
   height: 40px;
@@ -1296,9 +1305,7 @@ button {
   .auth-mobile-brand { margin-bottom: 1.75rem; }
   .auth-name-grid { grid-template-columns: 1fr; }
   .sj-home-portal-header .sj-account-controls { --sj-account-control-size: 34px; }
-  .sj-account-logout { top: 9px; right: 9px; width: 34px; height: 34px; }
   .sj-account-controls { top: 9px; right: 9px; gap: 7px; }
-  .sj-account-controls .sj-account-logout,
   .sj-account-profile-trigger { width: 34px; height: 34px; }
 }
 
@@ -12143,8 +12150,7 @@ select:focus {
 }
 
 .sj-home-portal-header .sj-account-controls > .sj-account-activity-trigger,
-.sj-home-portal-header .sj-account-controls > .sj-account-profile-trigger,
-.sj-home-portal-header .sj-account-controls > .sj-account-logout {
+.sj-home-portal-header .sj-account-controls > .sj-account-profile-trigger {
   inline-size: var(--sj-account-control-size);
   block-size: var(--sj-account-control-size);
   min-inline-size: var(--sj-account-control-size);
