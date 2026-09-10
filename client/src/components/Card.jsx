@@ -8,12 +8,6 @@ const CARD_PILE_FRAME_INSET = 1.2;
 const REPEATED_VALUE_SIZE = 11.5;
 const REPEATED_VALUE_ANGLE = -18;
 const FACET_OPACITY = 0.32;
-const REPEATED_VALUE_POSITIONS = Array.from({ length: 8 }, (_, row) => (
-  Array.from({ length: 6 }, (_, column) => ({
-    x: 4 + column * 18 + (row % 2) * 9,
-    y: 5 + row * 17,
-  }))
-)).flat();
 const STAR_PATH = [
   'M 44 32',
   'L 51.94 51.08',
@@ -149,6 +143,19 @@ function facetBalanceFor(value) {
   return { light: 1.3, dark: 1.15 };
 }
 
+function compositeFacetOverlay(shade, balance) {
+  const lightOpacity = (0.012 + shade * 0.168) * balance.light * FACET_OPACITY;
+  const darkOpacity = (0.012 + (1 - shade) * 0.118) * balance.dark * FACET_OPACITY;
+  const opacity = 1 - (1 - lightOpacity) * (1 - darkOpacity);
+  const channel = opacity > 0
+    ? Math.round((255 * lightOpacity * (1 - darkOpacity)) / opacity)
+    : 0;
+  return {
+    fill: `rgb(${channel}, ${channel}, ${channel})`,
+    opacity: opacity.toFixed(3),
+  };
+}
+
 function FacetedBackground({ value, rid, inset }) {
   const palette = paletteFor(value);
   const balance = facetBalanceFor(value);
@@ -171,24 +178,18 @@ function FacetedBackground({ value, rid, inset }) {
       </defs>
       <g className="sj-card-facets" clipPath={`url(#${clipId})`}>
         <rect {...surface} fill={`url(#${gradId})`} />
-        {facets.map((facet, index) => (
-          <polygon
-            className="sj-card-facet sj-card-facet-light"
-            key={index}
-            points={facet.points}
-            fill="#ffffff"
-            opacity={((0.012 + facet.shade * 0.168) * balance.light * FACET_OPACITY).toFixed(3)}
-          />
-        ))}
-        {facets.map((facet, index) => (
-          <polygon
-            className="sj-card-facet sj-card-facet-dark"
-            key={`d-${index}`}
-            points={facet.points}
-            fill="#000000"
-            opacity={((0.012 + (1 - facet.shade) * 0.118) * balance.dark * FACET_OPACITY).toFixed(3)}
-          />
-        ))}
+        {facets.map((facet, index) => {
+          const overlay = compositeFacetOverlay(facet.shade, balance);
+          return (
+            <polygon
+              className="sj-card-facet"
+              key={index}
+              points={facet.points}
+              fill={overlay.fill}
+              opacity={overlay.opacity}
+            />
+          );
+        })}
       </g>
     </g>
   );
@@ -207,10 +208,31 @@ function centerValueSize(value) {
 function RepeatedCardValue({ value, palette, rid, inset }) {
   const clipId = `sj-card-value-clip-${rid}`;
   const maskId = `sj-card-value-mask-${rid}`;
+  const evenPatternId = `sj-card-value-pattern-even-${rid}`;
+  const oddPatternId = `sj-card-value-pattern-odd-${rid}`;
   const numericValue = Number(value);
+  const patternText = (y) => (
+    <text
+      x="10"
+      y={y}
+      textAnchor="middle"
+      dominantBaseline="central"
+      fontFamily="Arial, sans-serif"
+      fontWeight="900"
+      fontSize={REPEATED_VALUE_SIZE}
+      fill={palette.ink}
+      stroke={haloFor(palette.ink)}
+      strokeWidth="1.65"
+      paintOrder="stroke"
+      opacity="0.62"
+      transform={`rotate(${REPEATED_VALUE_ANGLE} 10 ${y})`}
+    >
+      {value}
+    </text>
+  );
 
   return (
-    <g clipPath={`url(#${clipId})`} mask={`url(#${maskId})`} aria-hidden="true">
+    <>
       <defs>
         <clipPath id={clipId}>
           <rect {...cardRect(inset)} />
@@ -234,28 +256,29 @@ function RepeatedCardValue({ value, palette, rid, inset }) {
             {value}
           </text>
         </mask>
-      </defs>
-      {REPEATED_VALUE_POSITIONS.map(({ x, y }) => (
-        <text
-          key={`${x}-${y}`}
-          x={x}
-          y={y}
-          textAnchor="middle"
-          dominantBaseline="central"
-          fontFamily="Arial, sans-serif"
-          fontWeight="900"
-          fontSize={REPEATED_VALUE_SIZE}
-          fill={palette.ink}
-          stroke={haloFor(palette.ink)}
-          strokeWidth="1.65"
-          paintOrder="stroke"
-          opacity="0.62"
-          transform={`rotate(${REPEATED_VALUE_ANGLE} ${x} ${y})`}
+        <pattern
+          id={evenPatternId}
+          width="20"
+          height="34"
+          patternUnits="userSpaceOnUse"
         >
-          {value}
-        </text>
-      ))}
-    </g>
+          {patternText(7)}
+        </pattern>
+        <pattern
+          id={oddPatternId}
+          width="20"
+          height="34"
+          patternUnits="userSpaceOnUse"
+          patternTransform="translate(10 0)"
+        >
+          {patternText(24)}
+        </pattern>
+      </defs>
+      <g clipPath={`url(#${clipId})`} mask={`url(#${maskId})`} aria-hidden="true">
+        <rect {...cardRect(inset)} fill={`url(#${evenPatternId})`} />
+        <rect {...cardRect(inset)} fill={`url(#${oddPatternId})`} />
+      </g>
+    </>
   );
 }
 
