@@ -838,7 +838,6 @@ button {
 }
 
 .sj-home-action-card header div { min-width: 0; display: grid; gap: 1px; }
-.sj-home-action-card header small { color: var(--soft); font-size: 10px; font-weight: 850; text-transform: uppercase; letter-spacing: 0.07em; }
 .sj-home-action-card h2 { margin: 0; font-size: 17px; letter-spacing: -0.02em; }
 .sj-home-action-card > label:not(.sj-create-room-capacity) { color: var(--muted); font-size: 11px; }
 
@@ -6538,7 +6537,6 @@ button.sj-action-count-badge:focus-visible {
     font-size: clamp(14px, 2.25dvh, 17px);
   }
 
-  .sj-home-action-card header small,
   .sj-home-action-card > label:not(.sj-create-room-capacity) {
     font-size: clamp(9px, 1.35dvh, 11px);
   }
@@ -6568,7 +6566,6 @@ button.sj-action-count-badge:focus-visible {
   .sj-home-mini-brand .sj-brand-logo-copy strong { font-size: 22px; }
   .sj-home-portal-header .sj-account-controls { --sj-account-control-size: 32px; }
 
-  .sj-home-action-card header small { display: none; }
   .sj-home-action-card > header > span { width: 30px; height: 30px; border-radius: 9px; }
   .sj-home-action-card h2 { font-size: 14px; }
   .sj-home-create-card .sj-room-visibility-option { min-height: 32px; }

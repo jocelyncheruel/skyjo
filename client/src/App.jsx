@@ -1327,7 +1327,7 @@ function GameApp() {
 
                 <div className="sj-home-actions-grid">
                   <section className="sj-home-action-card sj-home-create-card">
-                    <header><span><Gamepad2 aria-hidden="true" size={18} /></span><div><small>Nouvelle table</small><h2>Créer une salle</h2></div></header>
+                    <header><span><Gamepad2 aria-hidden="true" size={18} /></span><div><h2>Créer une salle</h2></div></header>
                     <p className="sj-home-action-description">Configurez votre table, puis partagez son code avec les joueurs.</p>
                     <div className={`sj-room-visibility ${roomVisibilityInput === 'public' ? 'sj-room-visibility-public' : 'sj-room-visibility-private'}`} role="group" aria-label="Visibilité de la salle">
                       <button type="button" className={`sj-room-visibility-option ${roomVisibilityInput === 'private' ? 'sj-room-visibility-option-active' : ''}`} onClick={() => setRoomVisibilityInput('private')}><LockKeyhole aria-hidden="true" size={14} /><strong>Privée</strong></button>
@@ -1350,7 +1350,7 @@ function GameApp() {
                   </section>
 
                   <section className="sj-home-action-card sj-home-join-card">
-                    <header><span><QrCode aria-hidden="true" size={18} /></span><div><small>Invitation reçue</small><h2>Accéder à une salle</h2></div></header>
+                    <header><span><QrCode aria-hidden="true" size={18} /></span><div><h2>Accéder à une salle</h2></div></header>
                     <p className="sj-home-action-description">Utilisez le code reçu pour rejoindre la partie ou la regarder.</p>
                     <label htmlFor="room-code">Code à 6 chiffres</label>
                     <div className={`sj-room-code-field ${qrScannerSupported ? 'sj-room-code-field-scannable' : ''}`}>
