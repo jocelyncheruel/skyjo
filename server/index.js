@@ -1694,15 +1694,6 @@ app.post('/api/rooms', requireHttpAuth, authBff.requireStandardSession, authBff.
       if (!Number.isInteger(botCount) || botCount < 0 || botCount >= maxPlayers) {
         throw new PublicError('invalid_room_settings', 'Nombre de bots invalide.', 400);
       }
-      const existingRoom = await findOwnedRoomMembership(req.auth.user.id);
-      if (existingRoom) {
-        res.json({
-          roomId: existingRoom.state.roomId,
-          playerId: existingRoom.member.player_id,
-          existing: true,
-        });
-        return;
-      }
       let createdRoom;
       try {
         createdRoom = await createRoom({
@@ -1926,7 +1917,7 @@ app.post('/api/friends', requireHttpAuth, authBff.requireStandardSession, authBf
         }
       }
       notifyFriendshipUsers(affectedUserIds);
-      res.json({ ...(await friendshipPayload(req.auth.user)), ...(joinRoomId ? { joinRoomId } : {}) });
+      res.json({ ok: true, ...(joinRoomId ? { joinRoomId } : {}) });
     } catch (error) { next(error); }
   });
 

@@ -26,7 +26,7 @@ export async function friendsApi(options) {
     const response = await apiFetch('/api/friends', options);
     const data = await response.json().catch(() => null);
     if (!response.ok) throw new Error(data?.error?.message || 'Impossible de charger vos amis.');
-    friendsCache = data;
+    if (Array.isArray(data?.friends)) friendsCache = data;
     return data;
   };
   if (options) return request();
@@ -105,7 +105,16 @@ export default function FriendsModal({ open, onClose, onWatch, onJoin, onError, 
     const timer = window.setInterval(load, 15_000);
     if (!markedOpenRef.current) {
       markedOpenRef.current = true;
-      friendsApi({ method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'mark_read' }) }).then(setData).catch(() => {});
+      friendsApi({ method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'mark_read' }) }).then(() => {
+        setData((current) => current ? {
+          ...current,
+          notifications: (current.notifications || []).map((notification) => ({
+            ...notification,
+            read_at: notification.read_at || new Date().toISOString(),
+          })),
+          unreadCount: 0,
+        } : current);
+      }).catch(() => {});
     }
     return () => window.clearInterval(timer);
   }, [load, open, refreshToken]);
@@ -146,9 +155,42 @@ export default function FriendsModal({ open, onClose, onWatch, onJoin, onError, 
     }
     try {
       const next = await friendsApi({ method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action, ...values }) });
-      setData(next); setCode('');
+      setData((current) => {
+        if (!current) return current;
+        if (['accept', 'decline', 'cancel'].includes(action)) {
+          return {
+            ...current,
+            requests: (current.requests || []).filter(({ relationId }) => relationId !== values.relationId),
+          };
+        }
+        if (action === 'remove') {
+          return {
+            ...current,
+            friends: (current.friends || []).filter(({ relationId }) => relationId !== values.relationId),
+            sentInvitations: (current.sentInvitations || []).filter(({ relationId }) => relationId !== values.relationId),
+          };
+        }
+        if (action === 'invite') {
+          return {
+            ...current,
+            sentInvitations: [
+              ...(current.sentInvitations || []),
+              { relationId: values.relationId, roomId: values.roomId },
+            ],
+          };
+        }
+        if (action === 'accept_invite' || action === 'decline_invite') {
+          return {
+            ...current,
+            invitations: (current.invitations || []).filter(({ invitationId }) => invitationId !== values.invitationId),
+          };
+        }
+        return current;
+      });
+      setCode('');
       if (action === 'remove') setFriendToRemove(null);
       if (next.joinRoomId) { onClose(); onJoin(next.joinRoomId); }
+      else load(false);
     } catch (error) {
       if (action === 'preferences' && previousPreferences) {
         setData((current) => current ? { ...current, preferences: previousPreferences } : current);
