@@ -1,4 +1,4 @@
-export const SOCKET_PROTOCOL_VERSION = 18;
+export const SOCKET_PROTOCOL_VERSION = 19;
 
 export const SOCKET_EVENTS = Object.freeze({
   CONNECT: 'connect',
@@ -44,6 +44,7 @@ export const SOCKET_EVENTS = Object.freeze({
   CLAIM_STAR_ACTION: 'claimStarAction',
   SEND_CHAT_MESSAGE: 'sendChatMessage',
   LOAD_CHAT_HISTORY: 'loadChatHistory',
+  APP_VISIBILITY: 'appVisibility',
 });
 
 export const SOCKET_HANDSHAKE_KEYS = Object.freeze([
@@ -97,6 +98,7 @@ export const SOCKET_CLIENT_PAYLOAD_KEYS = Object.freeze({
   [SOCKET_EVENTS.CLAIM_STAR_ACTION]: Object.freeze(['source', 'marketIndex']),
   [SOCKET_EVENTS.SEND_CHAT_MESSAGE]: Object.freeze(['text']),
   [SOCKET_EVENTS.LOAD_CHAT_HISTORY]: Object.freeze(['before']),
+  [SOCKET_EVENTS.APP_VISIBILITY]: Object.freeze(['visible']),
 });
 
 export const SOCKET_ACTION_DRAFT_KEYS = Object.freeze([

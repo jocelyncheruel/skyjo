@@ -763,7 +763,25 @@ function GameApp() {
       },
     });
     setSocket(nextSocket);
-    nextSocket.on(SOCKET_EVENTS.CONNECT, () => setConnected(true));
+    const reportAppVisibility = () => {
+      if (nextSocket.connected) {
+        emitSocket(nextSocket, SOCKET_EVENTS.APP_VISIBILITY, {
+          visible: document.visibilityState === 'visible',
+        });
+      }
+    };
+    const reportAppHidden = () => {
+      if (nextSocket.connected) {
+        emitSocket(nextSocket, SOCKET_EVENTS.APP_VISIBILITY, { visible: false });
+      }
+    };
+    nextSocket.on(SOCKET_EVENTS.CONNECT, () => {
+      setConnected(true);
+      reportAppVisibility();
+    });
+    document.addEventListener('visibilitychange', reportAppVisibility);
+    window.addEventListener('pagehide', reportAppHidden);
+    window.addEventListener('pageshow', reportAppVisibility);
     nextSocket.on(SOCKET_EVENTS.DISCONNECT, () => {
       releasePendingGameAction(nextSocket);
       setConnected(false);
@@ -906,6 +924,9 @@ function GameApp() {
     });
     return () => {
       if (reconnectTimeout) window.clearTimeout(reconnectTimeout);
+      document.removeEventListener('visibilitychange', reportAppVisibility);
+      window.removeEventListener('pagehide', reportAppHidden);
+      window.removeEventListener('pageshow', reportAppVisibility);
       nextSocket?.disconnect();
     };
   }, [initialRoomInvite, logout, showError]);

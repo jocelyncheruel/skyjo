@@ -34,7 +34,7 @@ const csp = [
   "font-src 'self'",
   `connect-src ${[...new Set([...connectOrigins, "https://challenges.cloudflare.com"])].join(" ")}`,
   "frame-src https://challenges.cloudflare.com",
-  "worker-src 'none'",
+  "worker-src 'self'",
   "object-src 'none'",
   "base-uri 'none'",
   "form-action 'self'",
@@ -67,6 +67,9 @@ const headers = `/*
 /site.webmanifest
   Content-Type: application/manifest+json; charset=utf-8
   Cache-Control: public, max-age=3600
+
+/service-worker.js
+  Cache-Control: no-cache, no-store, must-revalidate
 
 /app-icon-512.png
   Cache-Control: public, max-age=86400

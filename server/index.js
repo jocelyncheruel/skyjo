@@ -3,6 +3,7 @@ import http from 'node:http';
 import { fileURLToPath } from 'node:url';
 import { Server } from 'socket.io';
 import cors from 'cors';
+import webpush from 'web-push';
 import { customAlphabet, nanoid } from 'nanoid';
 import { buildSupabaseClient } from './bootstrap.js';
 import { createAuthBff } from './authBff.js';
@@ -42,6 +43,11 @@ const PUBLIC_ROOM_DISCONNECT_GRACE_MS = 30 * 1000;
 const BOT_STEP_DELAY_MS = 900;
 const BOT_READY_FALLBACK_MS = 5_000;
 const BOT_NAMES = Object.freeze(['Nova', 'Moka', 'Pixel', 'Luna', 'Nox', 'Kiwi', 'Ziggy']);
+const TRUSTED_PUSH_SERVICE_HOSTS = new Set([
+  'fcm.googleapis.com',
+  'updates.push.services.mozilla.com',
+  'web.push.apple.com',
+]);
 const SYSTEM_CHAT_PLAYER_ID = '__system__';
 const SYSTEM_CHAT_PLAYER_NAME = 'Système';
 const SESSION_CHECK_CACHE_MS = 30_000;
@@ -58,6 +64,21 @@ function parseInteger(value, fallback, { min, max }) {
   return Number.isSafeInteger(parsed) && parsed >= min && parsed <= max ? parsed : fallback;
 }
 
+function normalizePushEndpoint(value) {
+  const endpoint = String(value || '').trim();
+  if (endpoint.length < 16 || endpoint.length > 2048) return '';
+  try {
+    const url = new URL(endpoint);
+    const hostname = url.hostname.toLowerCase();
+    const trustedHost = TRUSTED_PUSH_SERVICE_HOSTS.has(hostname)
+      || hostname.endsWith('.notify.windows.com');
+    if (url.protocol !== 'https:' || url.username || url.password || url.port || !trustedHost) return '';
+    return endpoint;
+  } catch {
+    return '';
+  }
+}
+
 const PORT = parseInteger(process.env.PORT, DEFAULT_PORT, { min: 1, max: 65535 });
 const HOST = process.env.HOST || '0.0.0.0';
 const JSON_BODY_LIMIT = '20kb';
@@ -67,6 +88,30 @@ const SUPABASE_PUBLISHABLE_KEY = String(process.env.SUPABASE_PUBLISHABLE_KEY || 
 const AUTH_SESSION_ENCRYPTION_KEY = String(process.env.AUTH_SESSION_ENCRYPTION_KEY || '').trim();
 const PUBLIC_SERVER_URL = String(process.env.PUBLIC_SERVER_URL || `http://localhost:${PORT}`).trim();
 const TURNSTILE_SECRET_KEY = String(process.env.TURNSTILE_SECRET_KEY || '').trim();
+const WEB_PUSH_VAPID_PUBLIC_KEY = String(process.env.WEB_PUSH_VAPID_PUBLIC_KEY || '').trim();
+const WEB_PUSH_VAPID_PRIVATE_KEY = String(process.env.WEB_PUSH_VAPID_PRIVATE_KEY || '').trim();
+const WEB_PUSH_CONTACT = String(process.env.WEB_PUSH_CONTACT || '').trim();
+const WEB_PUSH_ENABLED = Boolean(
+  WEB_PUSH_VAPID_PUBLIC_KEY && WEB_PUSH_VAPID_PRIVATE_KEY && WEB_PUSH_CONTACT,
+);
+
+if ([WEB_PUSH_VAPID_PUBLIC_KEY, WEB_PUSH_VAPID_PRIVATE_KEY, WEB_PUSH_CONTACT].some(Boolean)
+  && !WEB_PUSH_ENABLED) {
+  console.error('❌  WEB_PUSH_VAPID_PUBLIC_KEY, WEB_PUSH_VAPID_PRIVATE_KEY et WEB_PUSH_CONTACT doivent être configurés ensemble.');
+  process.exit(1);
+}
+if (WEB_PUSH_ENABLED) {
+  try {
+    webpush.setVapidDetails(
+      WEB_PUSH_CONTACT,
+      WEB_PUSH_VAPID_PUBLIC_KEY,
+      WEB_PUSH_VAPID_PRIVATE_KEY,
+    );
+  } catch {
+    console.error('❌  La configuration Web Push est invalide.');
+    process.exit(1);
+  }
+}
 
 if (!SUPABASE_URL || !SUPABASE_SECRET_KEY || !SUPABASE_PUBLISHABLE_KEY) {
   console.error('❌  SUPABASE_URL, SUPABASE_SECRET_KEY et SUPABASE_PUBLISHABLE_KEY sont obligatoires.');
@@ -1391,7 +1436,7 @@ async function ensureSocialProfile(user) {
     user_id: user.id,
     display_name: displayName,
     updated_at: new Date().toISOString(),
-  }, { onConflict: 'user_id' }).select('user_id, friend_code, display_name, presence_status, show_presence, show_game, allow_friend_join, allow_friend_watch, show_quick_profile, friends_seen_at').single();
+  }, { onConflict: 'user_id' }).select('user_id, friend_code, display_name, presence_status, show_presence, show_game, allow_friend_join, allow_friend_watch, show_quick_profile, friends_seen_at, notify_game_invites').single();
   if (error) throw error;
   return data;
 }
@@ -1471,6 +1516,14 @@ async function friendshipPayload(user) {
   const acceptedUserIds = (relations || []).filter(({ status }) => status === 'accepted')
     .map((relation) => relation.requester_user_id === user.id
       ? relation.addressee_user_id : relation.requester_user_id);
+  const onlineNotificationResult = acceptedUserIds.length
+    ? await supabase.from('friend_online_notifications').select('friend_user_id')
+      .eq('user_id', user.id).in('friend_user_id', acceptedUserIds)
+    : { data: [], error: null };
+  if (onlineNotificationResult.error) throw onlineNotificationResult.error;
+  const onlineNotificationIds = new Set(
+    (onlineNotificationResult.data || []).map(({ friend_user_id: friendUserId }) => friendUserId),
+  );
   const storedGames = await persistedFriendGames(acceptedUserIds);
   const quickProfilesResult = acceptedUserIds.length
     ? await supabase.rpc('get_skyjo_friend_quick_profiles', { p_user_id: user.id })
@@ -1537,6 +1590,7 @@ async function friendshipPayload(user) {
             : livePresence.online ? otherProfile.presence_status || 'available' : 'offline',
         game: visibleGame,
         profile: otherProfile.show_quick_profile === false ? null : quickStats,
+        notifyOnline: onlineNotificationIds.has(otherUserId),
       } : {}),
     };
   };
@@ -1590,6 +1644,7 @@ async function friendshipPayload(user) {
       showGame: profile.show_game,
       allowGameAccess: profile.allow_friend_join && profile.allow_friend_watch,
       showQuickProfile: profile.show_quick_profile,
+      notifyGameInvites: profile.notify_game_invites,
     },
     friends: (relations || []).filter(({ status }) => status === 'accepted')
       .map((relation) => format(relation, true)),
@@ -1619,6 +1674,71 @@ function notifyFriendshipUsers(userIds) {
       );
     }
   }
+}
+
+function userHasActiveSocket(userId) {
+  return [...io.sockets.sockets.values()]
+    .some((socket) => socket.data.auth?.user?.id === userId && socket.data.appVisible !== false);
+}
+
+async function sendOfflinePush(userId, notification) {
+  if (!WEB_PUSH_ENABLED || userHasActiveSocket(userId)) return;
+  const { data: subscriptions, error } = await supabase.from('web_push_subscriptions')
+    .select('id, endpoint, p256dh, auth').eq('user_id', userId);
+  if (error) throw error;
+  await Promise.all((subscriptions || []).map(async (subscription) => {
+    try {
+      await webpush.sendNotification({
+        endpoint: subscription.endpoint,
+        keys: { p256dh: subscription.p256dh, auth: subscription.auth },
+      }, JSON.stringify(notification), { TTL: 300, urgency: 'high' });
+    } catch (pushError) {
+      if ([404, 410].includes(pushError?.statusCode)) {
+        await supabase.from('web_push_subscriptions').delete().eq('id', subscription.id);
+        return;
+      }
+      logInternal('web_push', pushError);
+    }
+  }));
+}
+
+async function deleteUnusedPushSubscriptions(userId) {
+  const [profileResult, watchersResult] = await Promise.all([
+    supabase.from('social_profiles').select('notify_game_invites').eq('user_id', userId).maybeSingle(),
+    supabase.from('friend_online_notifications').select('friend_user_id', { count: 'exact', head: true })
+      .eq('user_id', userId),
+  ]);
+  if (profileResult.error) throw profileResult.error;
+  if (watchersResult.error) throw watchersResult.error;
+  if (profileResult.data?.notify_game_invites === true || (watchersResult.count || 0) > 0) return;
+  const { error } = await supabase.from('web_push_subscriptions').delete().eq('user_id', userId);
+  if (error) throw error;
+}
+
+async function notifyWatchedFriendOnline(friendUserId) {
+  if (!WEB_PUSH_ENABLED) return;
+  const { data: friendProfile, error: profileError } = await supabase.from('social_profiles')
+    .select('display_name, show_presence').eq('user_id', friendUserId).maybeSingle();
+  if (profileError) throw profileError;
+  if (!friendProfile || friendProfile.show_presence === false) return;
+  const { data: watchers, error } = await supabase.from('friend_online_notifications')
+    .select('user_id').eq('friend_user_id', friendUserId);
+  if (error) throw error;
+  const { data: relations, error: relationsError } = await supabase.from('friendships')
+    .select('requester_user_id, addressee_user_id').eq('status', 'accepted')
+    .or(`requester_user_id.eq.${friendUserId},addressee_user_id.eq.${friendUserId}`);
+  if (relationsError) throw relationsError;
+  const acceptedFriendIds = new Set((relations || []).map((relation) => (
+    relation.requester_user_id === friendUserId
+      ? relation.addressee_user_id : relation.requester_user_id
+  )));
+  await Promise.all((watchers || []).filter(({ user_id: userId }) => acceptedFriendIds.has(userId))
+    .map(({ user_id: userId }) => sendOfflinePush(userId, {
+    title: 'Un ami est en ligne',
+    body: `${friendProfile.display_name} est maintenant en ligne.`,
+    tag: `friend-online-${friendUserId}`,
+    url: '/',
+  })));
 }
 
 const app = express();
@@ -1759,6 +1879,13 @@ app.get('/api/friends', requireHttpAuth, authBff.requireStandardSession, require
     catch (error) { next(error); }
   });
 
+app.get('/api/push/config', requireHttpAuth, authBff.requireStandardSession, requireConsent,
+  httpRateLimit({ keyPrefix: 'push-config', limit: 30, windowMs: 60_000, user: true }),
+  (req, res) => {
+    void req;
+    res.json({ enabled: WEB_PUSH_ENABLED, publicKey: WEB_PUSH_ENABLED ? WEB_PUSH_VAPID_PUBLIC_KEY : '' });
+  });
+
 app.post('/api/friends', requireHttpAuth, authBff.requireStandardSession, authBff.requireCsrf, requireConsent,
   httpRateLimit({ keyPrefix: 'friends-mutation', limit: 20, windowMs: 60_000, user: true }),
   async (req, res, next) => {
@@ -1766,7 +1893,8 @@ app.post('/api/friends', requireHttpAuth, authBff.requireStandardSession, authBf
       const payload = objectPayload(req.body, [
         'action', 'friendCode', 'relationId', 'roomId', 'invitationId',
         'status', 'showPresence', 'showGame', 'allowGameAccess',
-        'allowJoin', 'allowWatch', 'showQuickProfile',
+        'allowJoin', 'allowWatch', 'showQuickProfile', 'notifyGameInvites',
+        'enabled', 'endpoint', 'p256dh', 'auth',
       ]);
       const action = String(payload.action || '');
       const currentUserId = req.auth.user.id;
@@ -1793,7 +1921,7 @@ app.post('/api/friends', requireHttpAuth, authBff.requireStandardSession, authBf
         if (error) throw error;
       } else {
         const relationId = String(payload.relationId || '');
-        if (['accept', 'decline', 'remove', 'cancel', 'invite'].includes(action)
+        if (['accept', 'decline', 'remove', 'cancel', 'invite', 'online_notification'].includes(action)
           && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(relationId)) {
           throw new PublicError('invalid_friend', 'Ami invalide.', 400);
         }
@@ -1830,12 +1958,23 @@ app.post('/api/friends', requireHttpAuth, authBff.requireStandardSession, authBf
           affectedUserIds.push(
             data.requester_user_id === currentUserId ? data.addressee_user_id : data.requester_user_id,
           );
+          if (action === 'remove') {
+            const otherUserId = data.requester_user_id === currentUserId
+              ? data.addressee_user_id : data.requester_user_id;
+            const { error: watchDeleteError } = await supabase.from('friend_online_notifications')
+              .delete().or(`and(user_id.eq.${currentUserId},friend_user_id.eq.${otherUserId}),and(user_id.eq.${otherUserId},friend_user_id.eq.${currentUserId})`);
+            if (watchDeleteError) throw watchDeleteError;
+            await Promise.all([
+              deleteUnusedPushSubscriptions(currentUserId),
+              deleteUnusedPushSubscriptions(otherUserId),
+            ]);
+          }
         } else if (action === 'preferences') {
           const status = String(payload.status || 'available');
           if (!['available', 'dnd'].includes(status)) {
             throw new PublicError('invalid_friend_preferences', 'Statut invalide.', 400);
           }
-          const booleanKeys = ['showPresence', 'showGame', 'showQuickProfile'];
+          const booleanKeys = ['showPresence', 'showGame', 'showQuickProfile', 'notifyGameInvites'];
           if (booleanKeys.some((key) => typeof payload[key] !== 'boolean')) {
             throw new PublicError('invalid_friend_preferences', 'Préférences invalides.', 400);
           }
@@ -1849,9 +1988,11 @@ app.post('/api/friends', requireHttpAuth, authBff.requireStandardSession, authBf
             allow_friend_join: allowGameAccess,
             allow_friend_watch: allowGameAccess,
             show_quick_profile: payload.showQuickProfile,
+            notify_game_invites: payload.notifyGameInvites,
             updated_at: new Date().toISOString(),
           }).eq('user_id', currentUserId);
           if (error) throw error;
+          if (payload.notifyGameInvites === false) await deleteUnusedPushSubscriptions(currentUserId);
           const { data: friendRelations, error: friendRelationsError } = await supabase.from('friendships')
             .select('requester_user_id, addressee_user_id').eq('status', 'accepted')
             .or(`requester_user_id.eq.${currentUserId},addressee_user_id.eq.${currentUserId}`);
@@ -1860,6 +2001,62 @@ app.post('/api/friends', requireHttpAuth, authBff.requireStandardSession, authBf
             relation.requester_user_id === currentUserId
               ? relation.addressee_user_id : relation.requester_user_id
           )));
+        } else if (action === 'push_subscription') {
+          if (!WEB_PUSH_ENABLED) {
+            throw new PublicError('push_unavailable', 'Les notifications ne sont pas encore configurées.', 503);
+          }
+          const endpoint = normalizePushEndpoint(payload.endpoint);
+          const p256dh = String(payload.p256dh || '');
+          const auth = String(payload.auth || '');
+          if (!endpoint || !/^[A-Za-z0-9_-]{40,180}$/.test(p256dh)
+            || !/^[A-Za-z0-9_-]{16,64}$/.test(auth)) {
+            throw new PublicError('invalid_push_subscription', 'Abonnement aux notifications invalide.', 400);
+          }
+          const subscriptionValues = {
+            user_id: currentUserId,
+            endpoint,
+            p256dh,
+            auth,
+            updated_at: new Date().toISOString(),
+          };
+          const { error: insertError } = await supabase.from('web_push_subscriptions')
+            .insert(subscriptionValues);
+          if (insertError?.code === '23505') {
+            const { data: existingSubscription, error: existingError } = await supabase
+              .from('web_push_subscriptions').select('user_id')
+              .eq('endpoint', endpoint).maybeSingle();
+            if (existingError) throw existingError;
+            if (existingSubscription?.user_id !== currentUserId) {
+              throw new PublicError('invalid_push_subscription', 'Abonnement aux notifications invalide.', 400);
+            }
+            const { error: updateError } = await supabase.from('web_push_subscriptions')
+              .update({ p256dh, auth, updated_at: subscriptionValues.updated_at })
+              .eq('endpoint', endpoint).eq('user_id', currentUserId);
+            if (updateError) throw updateError;
+          } else if (insertError) {
+            throw insertError;
+          }
+        } else if (action === 'online_notification') {
+          if (typeof payload.enabled !== 'boolean') {
+            throw new PublicError('invalid_friend_preferences', 'Préférence invalide.', 400);
+          }
+          const { data: relation, error: relationError } = await supabase.from('friendships')
+            .select('requester_user_id, addressee_user_id').eq('id', relationId)
+            .eq('status', 'accepted').or(`requester_user_id.eq.${currentUserId},addressee_user_id.eq.${currentUserId}`)
+            .maybeSingle();
+          if (relationError) throw relationError;
+          if (!relation) throw new PublicError('friend_request_missing', 'Cet ami n’est plus disponible.', 404);
+          const friendUserId = relation.requester_user_id === currentUserId
+            ? relation.addressee_user_id : relation.requester_user_id;
+          const mutation = payload.enabled
+            ? supabase.from('friend_online_notifications').upsert({
+              user_id: currentUserId, friend_user_id: friendUserId,
+            }, { onConflict: 'user_id,friend_user_id' })
+            : supabase.from('friend_online_notifications').delete()
+              .eq('user_id', currentUserId).eq('friend_user_id', friendUserId);
+          const { error } = await mutation;
+          if (error) throw error;
+          if (payload.enabled === false) await deleteUnusedPushSubscriptions(currentUserId);
         } else if (action === 'mark_read') {
           const timestamp = new Date().toISOString();
           const [profileResult, notificationResult] = await Promise.all([
@@ -1883,7 +2080,7 @@ app.post('/api/friends', requireHttpAuth, authBff.requireStandardSession, authBf
           const [room, member, targetProfile] = await Promise.all([
             getOrLoadRoom(roomId),
             findMemberByUser(roomId, currentUserId),
-            supabase.from('social_profiles').select('allow_friend_join, presence_status')
+            supabase.from('social_profiles').select('allow_friend_join, presence_status, notify_game_invites')
               .eq('user_id', targetUserId).maybeSingle(),
           ]);
           const settings = room ? effectiveRoomSettings(room) : null;
@@ -1902,6 +2099,14 @@ app.post('/api/friends', requireHttpAuth, authBff.requireStandardSession, authBf
           if (error?.code === '23505') throw new PublicError('invitation_exists', 'Une invitation est déjà en attente.', 409);
           if (error) throw error;
           affectedUserIds.push(targetUserId);
+          if (targetProfile.data?.notify_game_invites === true) {
+            void sendOfflinePush(targetUserId, {
+              title: 'Invitation à jouer',
+              body: `${socialDisplayName(req.auth.user)} vous invite à rejoindre sa salle.`,
+              tag: `room-invitation-${roomId}`,
+              url: '/',
+            }).catch((pushError) => logInternal('friend_invitation_push', pushError));
+          }
         } else if (action === 'accept_invite' || action === 'decline_invite') {
           const invitationId = String(payload.invitationId || '');
           if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(invitationId)) {
@@ -2001,6 +2206,14 @@ io.use(async (socket, next) => {
 
 io.on('connection', (socket) => {
   scheduleSocketExpiry(socket);
+  socket.data.appVisible = true;
+  const connectedUserId = socket.data.auth?.user?.id;
+  const isFirstUserSocket = connectedUserId && [...io.sockets.sockets.values()]
+    .filter((candidate) => candidate.data.auth?.user?.id === connectedUserId).length === 1;
+  if (isFirstUserSocket) {
+    void notifyWatchedFriendOnline(connectedUserId)
+      .catch((error) => logInternal('friend_online_push', error));
+  }
   const initialRoomId = normalizeRoomId(socket.handshake.auth?.roomId);
   const initialRoomRole = normalizeRoomRole(socket.handshake.auth?.roomRole);
   const discoverActiveRoom = socket.handshake.auth?.discoverActiveRoom === true;
@@ -2041,6 +2254,14 @@ io.on('connection', (socket) => {
     }
     return null;
   });
+
+  socket.on(SOCKET_EVENTS.APP_VISIBILITY, withSocketGuard(socket, SOCKET_EVENTS.APP_VISIBILITY, (payload) => {
+    const { visible } = objectPayload(payload, socketPayloadKeys(SOCKET_EVENTS.APP_VISIBILITY));
+    if (typeof visible !== 'boolean') {
+      throw new PublicError('invalid_visibility', 'Visibilité de l’application invalide.', 400);
+    }
+    socket.data.appVisible = visible;
+  }));
 
   socket.on(SOCKET_EVENTS.JOIN_ROOM, withSocketGuard(socket, SOCKET_EVENTS.JOIN_ROOM, async (payload = {}) => {
     const data = objectPayload(payload, socketPayloadKeys(SOCKET_EVENTS.JOIN_ROOM));

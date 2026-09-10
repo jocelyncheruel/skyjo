@@ -36,4 +36,8 @@ export default [
     files: ['src/**/*.test.{js,jsx}'],
     rules: { 'security/detect-non-literal-fs-filename': 'off' },
   },
+  {
+    files: ['public/service-worker.js'],
+    languageOptions: { globals: globals.serviceworker },
+  },
 ];

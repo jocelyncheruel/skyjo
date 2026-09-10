@@ -178,7 +178,8 @@ ALTER TABLE public.social_profiles
   ADD COLUMN IF NOT EXISTS allow_friend_join BOOLEAN NOT NULL DEFAULT TRUE,
   ADD COLUMN IF NOT EXISTS allow_friend_watch BOOLEAN NOT NULL DEFAULT TRUE,
   ADD COLUMN IF NOT EXISTS show_quick_profile BOOLEAN NOT NULL DEFAULT TRUE,
-  ADD COLUMN IF NOT EXISTS friends_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+  ADD COLUMN IF NOT EXISTS friends_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  ADD COLUMN IF NOT EXISTS notify_game_invites BOOLEAN NOT NULL DEFAULT FALSE;
 
 DO $$
 BEGIN
@@ -247,6 +248,39 @@ CREATE UNIQUE INDEX IF NOT EXISTS friend_room_invitations_pending_idx
   WHERE status = 'pending';
 CREATE INDEX IF NOT EXISTS friend_room_invitations_recipient_idx
   ON public.friend_room_invitations (recipient_user_id, status, expires_at DESC);
+
+CREATE TABLE IF NOT EXISTS public.friend_online_notifications (
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  friend_user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (user_id, friend_user_id),
+  CONSTRAINT friend_online_notifications_distinct_users_check CHECK (user_id <> friend_user_id)
+);
+
+CREATE INDEX IF NOT EXISTS friend_online_notifications_friend_idx
+  ON public.friend_online_notifications (friend_user_id, user_id);
+
+CREATE TABLE IF NOT EXISTS public.web_push_subscriptions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  endpoint TEXT NOT NULL UNIQUE,
+  p256dh TEXT NOT NULL,
+  auth TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT web_push_subscriptions_endpoint_check CHECK (
+    endpoint ~ '^https://' AND char_length(endpoint) BETWEEN 16 AND 2048
+  ),
+  CONSTRAINT web_push_subscriptions_p256dh_check CHECK (char_length(p256dh) BETWEEN 40 AND 180),
+  CONSTRAINT web_push_subscriptions_auth_check CHECK (char_length(auth) BETWEEN 16 AND 64)
+);
+
+CREATE INDEX IF NOT EXISTS web_push_subscriptions_user_idx
+  ON public.web_push_subscriptions (user_id, updated_at DESC);
+
+INSERT INTO public.skyjo_schema_migrations (version)
+VALUES ('v9')
+ON CONFLICT (version) DO NOTHING;
 
 INSERT INTO public.skyjo_schema_migrations (version)
 VALUES ('v7')
@@ -341,6 +375,10 @@ ALTER TABLE public.friend_notifications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.friend_notifications FORCE ROW LEVEL SECURITY;
 ALTER TABLE public.friend_room_invitations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.friend_room_invitations FORCE ROW LEVEL SECURITY;
+ALTER TABLE public.friend_online_notifications ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.friend_online_notifications FORCE ROW LEVEL SECURITY;
+ALTER TABLE public.web_push_subscriptions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.web_push_subscriptions FORCE ROW LEVEL SECURITY;
 
 REVOKE ALL ON TABLE public.rooms FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON TABLE public.skyjo_schema_migrations FROM PUBLIC, anon, authenticated;
@@ -354,6 +392,8 @@ REVOKE ALL ON TABLE public.social_profiles FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON TABLE public.friendships FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON TABLE public.friend_notifications FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON TABLE public.friend_room_invitations FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON TABLE public.friend_online_notifications FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON TABLE public.web_push_subscriptions FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON SEQUENCE public.game_decision_events_id_seq FROM PUBLIC, anon, authenticated;
 
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.rooms TO service_role;
@@ -367,6 +407,8 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.social_profiles TO service_
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.friendships TO service_role;
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.friend_notifications TO service_role;
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.friend_room_invitations TO service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.friend_online_notifications TO service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.web_push_subscriptions TO service_role;
 GRANT USAGE, SELECT ON SEQUENCE public.game_decision_events_id_seq TO service_role;
 
 CREATE OR REPLACE FUNCTION public.commit_skyjo_room(
