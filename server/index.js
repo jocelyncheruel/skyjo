@@ -1502,8 +1502,18 @@ async function friendshipPayload(user) {
     const livePresence = includePresence ? liveFriendPresence(otherUserId) : null;
     const rawGame = livePresence?.game || storedGames.get(otherUserId) || null;
     const gameVisible = otherProfile.show_game !== false;
-    const canJoin = Boolean(gameVisible && rawGame?.canJoin && otherProfile.allow_friend_join !== false);
-    const canWatch = Boolean(gameVisible && rawGame?.canWatch && otherProfile.allow_friend_watch !== false);
+    const canJoin = Boolean(
+      livePresence?.online === true
+      && gameVisible
+      && rawGame?.canJoin
+      && otherProfile.allow_friend_join !== false
+    );
+    const canWatch = Boolean(
+      livePresence?.online === true
+      && gameVisible
+      && rawGame?.canWatch
+      && otherProfile.allow_friend_watch !== false
+    );
     const visibleGame = gameVisible && rawGame ? {
       phase: rawGame.phase,
       visibility: rawGame.visibility,
