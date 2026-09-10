@@ -9,6 +9,7 @@ import {
   QrCode,
   Sparkles,
   UserMinus,
+  UserPlus,
   Users,
 } from 'lucide-react';
 import { roomVariantLabel } from '../../../shared/roomVariants.js';
@@ -37,6 +38,7 @@ export default function RoomLobby({
   onSetGameMode = () => {},
   onUpdateSettings = () => {},
   onOpenGuide = () => {},
+  onOpenFriends = () => {},
   onStart = () => {},
 }) {
   const [mobilePanel, setMobilePanel] = useState('players');
@@ -214,6 +216,7 @@ export default function RoomLobby({
       <footer className="sj-room-lobby-footer">
         <div className="sj-room-lobby-actions">
           <GameGuideButton onClick={onOpenGuide} />
+          {!isSpectator && availableSeats > 0 && <button type="button" className="sj-btn sj-room-lobby-friends" onClick={onOpenFriends}><UserPlus aria-hidden="true" size={16} /> Inviter des amis</button>}
           {hostControlsEnabled && (
             <button
               className="sj-btn sj-btn-primary sj-room-lobby-start"

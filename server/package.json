@@ -25,5 +25,8 @@
     "eslint": "10.8.0",
     "eslint-plugin-security": "4.0.1",
     "globals": "17.7.0"
+  },
+  "overrides": {
+    "qs": "6.16.0"
   }
 }

@@ -48,6 +48,7 @@ import PlayerBoard from './components/PlayerBoard.jsx';
 import GameEndCelebration from './components/GameEndCelebration.jsx';
 import PublicRoomPreviewModal from './components/PublicRoomPreviewModal.jsx';
 import InstallAppPrompt from './components/InstallAppPrompt.jsx';
+import FriendsModal, { FriendInvitationPrompt, FriendsButton, friendsApi } from './components/FriendsModal.jsx';
 import RoomLobby from './components/RoomLobby.jsx';
 import {
   RoomAdministrationButton,
@@ -397,9 +398,15 @@ function GameApp() {
   const [homePanel, setHomePanel] = useState('home');
   const [profileOpen, setProfileOpen] = useState(false);
   const [activityOpen, setActivityOpen] = useState(false);
+  const [friendsOpen, setFriendsOpen] = useState(false);
+  const [friendsRevision, setFriendsRevision] = useState(0);
+  const [queuedFriendInvitation, setQueuedFriendInvitation] = useState(null);
+  const [friendInvitationPrompt, setFriendInvitationPrompt] = useState(null);
+  const [friendInvitationBusy, setFriendInvitationBusy] = useState(false);
   const [qrScannerSupported, setQrScannerSupported] = useState(false);
   const [qrScannerOpen, setQrScannerOpen] = useState(false);
   const [state, setState] = useState(null);
+  const currentRoomPhase = state?.phase || null;
   const [chatMessages, setChatMessages] = useState([]);
   const [chatHasMore, setChatHasMore] = useState(false);
   const [chatBefore, setChatBefore] = useState(null);
@@ -419,8 +426,51 @@ function GameApp() {
   const inviteJoinAttemptedRef = useRef(false);
   const inviteJoinPendingRef = useRef(inviteJoinPending);
   const initialInvitePlayerNameRef = useRef(normalizePlayerNameInput(accountPlayerName || playerName));
+  const seenFriendInvitationIdsRef = useRef(new Set());
+  const friendInvitationJoinPendingRef = useRef(false);
   const gameNameSelectRef = useRef(null);
   const closeQrScanner = useCallback(() => setQrScannerOpen(false), []);
+
+  useEffect(() => {
+    let cancelled = false;
+    friendsApi().then((data) => {
+      if (cancelled) return;
+      const invitations = Array.isArray(data?.invitations) ? data.invitations : [];
+      const unseen = invitations.filter(({ invitationId }) => (
+        invitationId && !seenFriendInvitationIdsRef.current.has(invitationId)
+      ));
+      invitations.forEach(({ invitationId }) => {
+        if (invitationId) seenFriendInvitationIdsRef.current.add(invitationId);
+      });
+      setQueuedFriendInvitation((current) => {
+        if (unseen.length > 0) return unseen[0];
+        if (current && !invitations.some(({ invitationId }) => invitationId === current.invitationId)) {
+          return null;
+        }
+        return current;
+      });
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [friendsRevision]);
+
+  useEffect(() => {
+    if (!friendInvitationPrompt || !currentRoomPhase
+      || ['lobby', 'gameEnd'].includes(currentRoomPhase)) return;
+    setQueuedFriendInvitation(friendInvitationPrompt);
+    setFriendInvitationPrompt(null);
+  }, [currentRoomPhase, friendInvitationPrompt]);
+
+  useEffect(() => {
+    if (!queuedFriendInvitation) return undefined;
+    const deferUntilResults = currentRoomPhase && !['lobby', 'gameEnd'].includes(currentRoomPhase);
+    if (deferUntilResults) return undefined;
+    const revealTimer = window.setTimeout(() => {
+      setFriendInvitationPrompt(queuedFriendInvitation);
+      setQueuedFriendInvitation(null);
+    }, 0);
+    return () => window.clearTimeout(revealTimer);
+  }, [currentRoomPhase, queuedFriendInvitation]);
+
 
   useEffect(() => {
     if (!gameNameMenuOpen) return undefined;
@@ -766,6 +816,11 @@ function GameApp() {
         void logout();
         return;
       }
+      if (friendInvitationJoinPendingRef.current) {
+        friendInvitationJoinPendingRef.current = false;
+        resetRoomAccess(message);
+        return;
+      }
       if (autoReconnectPendingRef.current && (
         code === 'room_unavailable'
         || code === 'seat_unavailable'
@@ -799,6 +854,7 @@ function GameApp() {
     });
     const applyRoomState = (nextState) => {
       releasePendingGameAction(nextSocket);
+      friendInvitationJoinPendingRef.current = false;
       if (inviteJoinPendingRef.current) {
         inviteJoinPendingRef.current = false;
         setInviteJoinPending(false);
@@ -832,6 +888,9 @@ function GameApp() {
     nextSocket.on(SOCKET_EVENTS.CHAT_MESSAGE, (message) => {
       if (!message?.id) return;
       setChatMessages((current) => current.some((item) => item.id === message.id) ? current : [...current, message]);
+    });
+    nextSocket.on(SOCKET_EVENTS.FRIENDS_UPDATED, () => {
+      setFriendsRevision((revision) => revision + 1);
     });
     nextSocket.on(SOCKET_EVENTS.ROOM_EXPIRED, () => {
       resetRoomAccess('Cette salle n’existe plus. Retour à l’accueil.');
@@ -993,6 +1052,47 @@ function GameApp() {
     setPendingReconnectState(null);
   }
 
+  async function respondToFriendInvitation(action) {
+    if (!friendInvitationPrompt || friendInvitationBusy) return;
+    setFriendInvitationBusy(true);
+    try {
+      const next = await friendsApi({
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, invitationId: friendInvitationPrompt.invitationId }),
+      });
+      setFriendsRevision((revision) => revision + 1);
+      if (action === 'accept_invite' && next.joinRoomId) {
+        if (state) {
+          await new Promise((resolve, reject) => {
+            const timeout = window.setTimeout(() => reject(new Error('Impossible de quitter la salle actuelle.')), 5000);
+            socket.emit(SOCKET_EVENTS.LEAVE_ROOM, (result) => {
+              window.clearTimeout(timeout);
+              if (result?.ok === false) reject(new Error('Impossible de quitter la salle actuelle.'));
+              else resolve();
+            });
+          });
+          clearSocketRoomAuth(socket);
+          saveGameValue('sj-room-id', '');
+          saveGameValue(ROOM_ROLE_KEY, '');
+          setRoomRole(ROOM_ROLES.PLAYER);
+          roomRoleRef.current = ROOM_ROLES.PLAYER;
+          setChatMessages([]);
+          setJoinRoomInput('');
+          setAutoReconnectPending(false);
+          setPendingReconnectState(null);
+        }
+        friendInvitationJoinPendingRef.current = true;
+        joinRoomById(next.joinRoomId, ROOM_ROLES.PLAYER);
+      }
+      setFriendInvitationPrompt(null);
+    } catch (invitationError) {
+      showError(invitationError.message || 'Cette invitation n’est plus disponible.');
+    } finally {
+      setFriendInvitationBusy(false);
+    }
+  }
+
   async function logoutFromHome() {
     socket?.disconnect();
     saveGameValue('sj-room-id', '');
@@ -1121,6 +1221,7 @@ function GameApp() {
               </div>
               <div className="sj-account-controls">
                 <ActivityButton onClick={() => setActivityOpen(true)} />
+                <FriendsButton refreshToken={friendsRevision} onClick={() => setFriendsOpen(true)} />
                 <ProfileButton onClick={() => setProfileOpen(true)} />
                 <button type="button" className="sj-account-logout" onClick={logoutFromHome} aria-label="Se déconnecter du compte" title="Se déconnecter">
                   <LogOut aria-hidden="true" size={16} />
@@ -1271,6 +1372,26 @@ function GameApp() {
         open={activityOpen}
         onClose={() => setActivityOpen(false)}
       />
+      <FriendsModal
+        open={friendsOpen}
+        refreshToken={friendsRevision}
+        onError={showError}
+        onClose={() => setFriendsOpen(false)}
+        onWatch={(friendRoomId) => {
+          setFriendsOpen(false);
+          joinRoomById(friendRoomId, ROOM_ROLES.SPECTATOR);
+        }}
+        onJoin={(friendRoomId) => {
+          setFriendsOpen(false);
+          joinRoomById(friendRoomId, ROOM_ROLES.PLAYER);
+        }}
+      />
+      <FriendInvitationPrompt
+        invitation={friendInvitationPrompt}
+        busy={friendInvitationBusy}
+        onAccept={() => respondToFriendInvitation('accept_invite')}
+        onDecline={() => respondToFriendInvitation('decline_invite')}
+      />
       <RoomQrScannerModal
         open={qrScannerOpen}
         onScan={handleRoomQrScan}
@@ -1314,6 +1435,12 @@ function GameApp() {
       chatMessages={chatMessages}
       chatHasMore={chatHasMore}
       getProfileStats={getProfileStats}
+      friendsRevision={friendsRevision}
+      friendInvitationPrompt={friendInvitationPrompt}
+      friendInvitationBusy={friendInvitationBusy}
+      onAcceptFriendInvitation={() => respondToFriendInvitation('accept_invite')}
+      onDeclineFriendInvitation={() => respondToFriendInvitation('decline_invite')}
+      onFriendsError={showError}
       onLoadOlderChat={() => {
         if (chatHasMore && chatBefore) emitSocket(socket, SOCKET_EVENTS.LOAD_CHAT_HISTORY, { before: chatBefore });
       }}
@@ -1323,6 +1450,7 @@ function GameApp() {
 
 const CARD_REVEAL_SETTLE_MS = 380;
 const CARD_MOTION_SETTLE_BUFFER_MS = 40;
+const GAME_END_INVITATION_DELAY_MS = 1600;
 
 function getCardMotionSettleDelay(moveType, motionEndsAt) {
   const fallbackDelay = ['reveal', 'roundReveal'].includes(moveType)
@@ -1346,7 +1474,9 @@ function GameScreen({
   socket, state, myId, roomId, isSpectator = false, connected = true,
   error, errorSerial, onLeaveRoom,
   chatMessages = [], chatHasMore = false, onLoadOlderChat,
-  getProfileStats,
+  getProfileStats, friendsRevision = 0, friendInvitationPrompt = null,
+  friendInvitationBusy = false, onAcceptFriendInvitation = () => {},
+  onDeclineFriendInvitation = () => {}, onFriendsError = () => {},
 }) {
   const [copied, setCopied] = useState(false);
   const [inviteModalOpen, setInviteModalOpen] = useState(false);
@@ -1358,6 +1488,7 @@ function GameScreen({
   const [viewedActionPlayerId, setViewedActionPlayerId] = useState(null);
   const [chatModalOpen, setChatModalOpen] = useState(false);
   const [roomAdministrationOpen, setRoomAdministrationOpen] = useState(false);
+  const [friendsOpen, setFriendsOpen] = useState(false);
   const [visibleActionPlayId, setVisibleActionPlayId] = useState(null);
   const [roundScoresReady, setRoundScoresReady] = useState(true);
   const [starterTieToast, setStarterTieToast] = useState(null);
@@ -1379,12 +1510,14 @@ function GameScreen({
   const [roundRevealEndsAt, setRoundRevealEndsAt] = useState(0);
   const [gameEndStats, setGameEndStats] = useState(null);
   const [gameEndStatsLoading, setGameEndStatsLoading] = useState(false);
+  const [gameEndInvitationReady, setGameEndInvitationReady] = useState(false);
   const preGameStatsRef = useRef(null);
   const statsGameSerialRef = useRef(null);
   const gameEndSnapshotRef = useRef(null);
   const hydratedGameEndSerialRef = useRef(
     state.phase === 'gameEnd' ? state.gameSerial : null,
   );
+  const gameEndVisibleAtRef = useRef(0);
   const initializedChatRoomRef = useRef('');
   const starterTieToastTimerRef = useRef(null);
   const closeChatModal = useCallback(() => setChatModalOpen(false), []);
@@ -1863,6 +1996,25 @@ function GameScreen({
     const timeout = window.setTimeout(updateScoresReady, delay);
     return () => window.clearTimeout(timeout);
   }, [roundScoreDeadline, state.phase]);
+
+  useEffect(() => {
+    if (state.phase !== 'gameEnd' || !roundScoresVisible) {
+      gameEndVisibleAtRef.current = 0;
+      setGameEndInvitationReady(false);
+      return undefined;
+    }
+    if (!gameEndVisibleAtRef.current) gameEndVisibleAtRef.current = Date.now();
+    if (!friendInvitationPrompt) {
+      setGameEndInvitationReady(false);
+      return undefined;
+    }
+    const delay = Math.max(
+      0,
+      gameEndVisibleAtRef.current + GAME_END_INVITATION_DELAY_MS - Date.now(),
+    );
+    const timeout = window.setTimeout(() => setGameEndInvitationReady(true), delay);
+    return () => window.clearTimeout(timeout);
+  }, [friendInvitationPrompt, roundScoresVisible, state.phase]);
 
   useEffect(() => {
     if (!myActionState.peek?.expiresAt) return undefined;
@@ -2503,6 +2655,7 @@ function GameScreen({
             onSetGameMode={(gameMode) => emitSocket(socket, SOCKET_EVENTS.SET_GAME_MODE, { gameMode })}
             onUpdateSettings={(settings) => emitSocket(socket, SOCKET_EVENTS.UPDATE_ROOM_SETTINGS, settings)}
             onOpenGuide={() => setGameGuideOpen(true)}
+            onOpenFriends={() => setFriendsOpen(true)}
             onStart={() => {
               if (disconnectedPlayers.length > 0) {
                 setDisconnectedPlayersModalOpen(true);
@@ -2512,6 +2665,23 @@ function GameScreen({
             }}
           />
         </div>
+        <FriendsModal
+          open={friendsOpen}
+          inRoom
+          roomId={isSpectator || state.players.length >= (state.roomSettings?.maxPlayers || 8) ? '' : roomId}
+          refreshToken={friendsRevision}
+          onError={onFriendsError}
+          onClose={() => setFriendsOpen(false)}
+          onJoin={() => onFriendsError('Quittez d’abord votre salle actuelle.')}
+          onWatch={() => onFriendsError('Quittez d’abord votre salle actuelle.')}
+        />
+        <FriendInvitationPrompt
+          invitation={friendInvitationPrompt}
+          busy={friendInvitationBusy}
+          inRoom
+          onAccept={onAcceptFriendInvitation}
+          onDecline={onDeclineFriendInvitation}
+        />
         {leaveModal}
         {chatModal}
         {roomAdministrationModal}
@@ -2563,6 +2733,13 @@ function GameScreen({
         {leaveModal}
         {chatModal}
         {roomAdministrationModal}
+        <FriendInvitationPrompt
+          invitation={gameEndInvitationReady ? friendInvitationPrompt : null}
+          busy={friendInvitationBusy}
+          inRoom
+          onAccept={onAcceptFriendInvitation}
+          onDecline={onDeclineFriendInvitation}
+        />
       </>
     );
   }

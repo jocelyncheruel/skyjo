@@ -124,7 +124,7 @@ export function ActivityButton({ onClick }) {
   );
 }
 
-export default function ProfileModal({ open, onClose, onProfileUpdated, mode = 'profile' }) {
+export default function ProfileModal({ open, onClose, onProfileUpdated, mode = 'profile', statsOverride = null, displayName = '' }) {
   const {
     user,
     updateProfile,
@@ -166,7 +166,8 @@ export default function ProfileModal({ open, onClose, onProfileUpdated, mode = '
   const [activeContentTab, setActiveContentTab] = useState('statistics');
   const [statisticsSubtab, setStatisticsSubtab] = useState('statistics');
   const [compactProfile, setCompactProfile] = useState(() => mediaMatches(PROFILE_COMPACT_QUERY));
-  const activityMode = mode === 'activity';
+  const friendMode = mode === 'friend';
+  const activityMode = mode === 'activity' || friendMode;
   const normalizedFirstName = firstName.trim();
   const normalizedLastName = lastName.trim();
   const normalizedPlayerName = playerName.trim();
@@ -314,10 +315,10 @@ export default function ProfileModal({ open, onClose, onProfileUpdated, mode = '
   }, [activityMode, open, user]);
 
   useEffect(() => {
-    if (!open || !user?.id) return undefined;
+    if (!open || !user?.id || statsOverride) return undefined;
     getProfileStats({ force: true }).catch(() => {});
     return undefined;
-  }, [getProfileStats, open, user?.id]);
+  }, [getProfileStats, open, statsOverride, user?.id]);
 
   useEffect(() => {
     if (!leaderboardFormatOpen) return undefined;
@@ -426,9 +427,9 @@ export default function ProfileModal({ open, onClose, onProfileUpdated, mode = '
   const savedDisplayName = user.displayName
     || `${user.firstName || ''} ${user.lastName || ''}`.trim()
     || user.email;
-  const statistics = profileStats;
-  const statisticsLoading = profileStatsLoading && !statistics;
-  const statisticsError = statistics ? '' : profileStatsError;
+  const statistics = statsOverride || profileStats;
+  const statisticsLoading = statsOverride ? false : profileStatsLoading && !statistics;
+  const statisticsError = statsOverride ? '' : statistics ? '' : profileStatsError;
   const completedGames = (statistics?.gamesWon || 0)
     + (statistics?.gamesLost || 0)
     + (statistics?.gamesDrawn || 0);
@@ -493,9 +494,9 @@ export default function ProfileModal({ open, onClose, onProfileUpdated, mode = '
   const showProgression = compactProfile
     ? statisticsSubtab === 'progression'
     : activeContentTab === 'progression';
-  const showLeaderboard = compactProfile
+  const showLeaderboard = !friendMode && (compactProfile
     ? statisticsSubtab === 'leaderboard'
-    : activeContentTab === 'leaderboard';
+    : activeContentTab === 'leaderboard');
   const currentLeaderboardEntry = leaderboard.find((entry) => entry.isCurrentUser);
 
   function showNotification(tone, message) {
@@ -645,14 +646,14 @@ export default function ProfileModal({ open, onClose, onProfileUpdated, mode = '
       </div>
     )}
     <div
-      className="sj-modal-overlay sj-profile-overlay sj-fade-in"
+      className={`sj-modal-overlay sj-profile-overlay ${friendMode ? 'sj-friend-profile-overlay' : ''} sj-fade-in`}
       onMouseDown={(event) => {
         if (event.target === event.currentTarget && !busy && !securityBusy) requestProfileClose();
       }}
     >
       <section
         ref={profileModalRef}
-        className={`sj-profile-modal ${activityMode ? 'sj-profile-modal-activity' : 'sj-profile-modal-account'} sj-pop-in`}
+        className={`sj-profile-modal ${activityMode ? 'sj-profile-modal-activity' : 'sj-profile-modal-account'} ${friendMode ? 'sj-profile-modal-friend' : ''} sj-pop-in`}
         role="dialog"
         aria-modal="true"
         aria-labelledby="profile-title"
@@ -662,8 +663,8 @@ export default function ProfileModal({ open, onClose, onProfileUpdated, mode = '
       >
         <header className="sj-profile-head">
           <div>
-            <span>{activityMode ? 'Votre activité' : 'Votre compte'}</span>
-            <h2 id="profile-title">{activityMode ? 'Statistiques et progression' : 'Votre profil'}</h2>
+            <span>{friendMode ? 'Profil d’un ami' : activityMode ? 'Votre activité' : 'Votre compte'}</span>
+            <h2 id="profile-title">{friendMode ? displayName : activityMode ? 'Statistiques et progression' : 'Votre profil'}</h2>
           </div>
           <button
             type="button"
@@ -756,7 +757,7 @@ export default function ProfileModal({ open, onClose, onProfileUpdated, mode = '
                   ['statistics', 'Statistiques', BarChart3],
                   ['progression', 'Progression', Award],
                   ['leaderboard', 'Classement', Crown],
-                ].map(([tabId, label, Icon]) => (
+                ].filter(([tabId]) => !friendMode || tabId !== 'leaderboard').map(([tabId, label, Icon]) => (
                   <button
                     key={tabId}
                     type="button"
@@ -774,7 +775,7 @@ export default function ProfileModal({ open, onClose, onProfileUpdated, mode = '
               id="profile-panel-statistics"
               className="sj-profile-accordion-panel sj-profile-accordion-panel-open"
               role={compactProfile ? 'region' : undefined}
-              aria-label={compactProfile ? 'Statistiques, progression et classement' : undefined}
+              aria-label={compactProfile ? (friendMode ? 'Statistiques et progression' : 'Statistiques, progression et classement') : undefined}
               hidden={!compactProfile && activeContentTab === 'profile'}
             >
               <div className="sj-profile-accordion-panel-clip">
@@ -784,7 +785,7 @@ export default function ProfileModal({ open, onClose, onProfileUpdated, mode = '
                   aria-busy={statisticsLoading}
                 >
                   {compactProfile && (
-                    <div className="sj-profile-statistics-tabs" role="tablist" aria-label="Statistiques, progression et classement">
+                    <div className="sj-profile-statistics-tabs" role="tablist" aria-label={friendMode ? 'Statistiques et progression' : 'Statistiques, progression et classement'}>
                       <button
                         id="profile-statistics-tab-statistics"
                         type="button"
@@ -807,7 +808,7 @@ export default function ProfileModal({ open, onClose, onProfileUpdated, mode = '
                       >
                         <Award aria-hidden="true" size={14} /> Progression
                       </button>
-                      <button
+                      {!friendMode && <button
                         id="profile-statistics-tab-leaderboard"
                         type="button"
                         role="tab"
@@ -817,7 +818,7 @@ export default function ProfileModal({ open, onClose, onProfileUpdated, mode = '
                         onKeyDown={handleStatisticsTabKeyDown}
                       >
                         <Crown aria-hidden="true" size={14} /> Classement
-                      </button>
+                      </button>}
                     </div>
                   )}
                   <div

@@ -1378,8 +1378,238 @@ const authBff = createAuthBff({
 });
 const requireHttpAuth = authBff.requireAuth;
 
+function socialDisplayName(user) {
+  const metadata = user?.user_metadata || {};
+  return normalizePlayerName(
+    metadata.player_name || metadata.first_name || metadata.name || 'Joueur',
+  ) || 'Joueur';
+}
+
+async function ensureSocialProfile(user) {
+  const displayName = socialDisplayName(user);
+  const { data, error } = await supabase.from('social_profiles').upsert({
+    user_id: user.id,
+    display_name: displayName,
+    updated_at: new Date().toISOString(),
+  }, { onConflict: 'user_id' }).select('user_id, friend_code, display_name, presence_status, show_presence, show_game, allow_friend_join, allow_friend_watch, show_quick_profile, friends_seen_at').single();
+  if (error) throw error;
+  return data;
+}
+
+function liveFriendPresence(userId) {
+  const sockets = [...io.sockets.sockets.values()]
+    .filter((candidate) => candidate.data.auth?.user?.id === userId);
+  const roomConnection = sockets.map((candidate) => socketToPlayer.get(candidate.id)).find(Boolean);
+  if (!roomConnection) return { online: sockets.length > 0, game: null };
+  const state = rooms.get(roomConnection.roomId);
+  if (!state) return { online: true, game: null };
+  const settings = effectiveRoomSettings(state);
+  const canWatch = settings.allowSpectators !== false;
+  const canJoin = state.phase === 'lobby' && !settings.locked && state.order.length < settings.maxPlayers;
+  return {
+    online: true,
+    game: {
+      phase: state.phase,
+      visibility: state.roomVisibility === 'public' ? 'public' : 'private',
+      roomId: state.roomId,
+      canWatch,
+      canJoin,
+    },
+  };
+}
+
+async function persistedFriendGames(userIds) {
+  if (!userIds.length) return new Map();
+  const { data: memberships, error: membershipError } = await supabase.from('room_members')
+    .select('user_id, room_id').in('user_id', userIds);
+  if (membershipError) throw membershipError;
+  const roomIds = [...new Set((memberships || []).map(({ room_id: roomId }) => roomId))];
+  if (!roomIds.length) return new Map();
+  const { data: storedRooms, error: roomError } = await supabase.from('rooms')
+    .select('room_id, visibility, phase, state_json, updated_at')
+    .in('room_id', roomIds).is('quarantined_at', null).neq('phase', 'gameEnd')
+    .order('updated_at', { ascending: false });
+  if (roomError) throw roomError;
+  const games = new Map();
+  for (const room of storedRooms || []) {
+    for (const membership of (memberships || []).filter(({ room_id: roomId }) => roomId === room.room_id)) {
+      if (games.has(membership.user_id)) continue;
+      const settings = effectiveRoomSettings(room.state_json);
+      const canWatch = settings.allowSpectators !== false;
+      const canJoin = room.phase === 'lobby' && !settings.locked
+        && (room.state_json?.order?.length || 0) < settings.maxPlayers;
+      games.set(membership.user_id, {
+        phase: room.phase,
+        visibility: room.visibility === 'public' ? 'public' : 'private',
+        roomId: room.room_id,
+        canWatch,
+        canJoin,
+      });
+    }
+  }
+  return games;
+}
+
+async function friendshipPayload(user) {
+  const profile = await ensureSocialProfile(user);
+  const { data: relations, error } = await supabase.from('friendships')
+    .select('id, requester_user_id, addressee_user_id, status, created_at, updated_at')
+    .or(`requester_user_id.eq.${user.id},addressee_user_id.eq.${user.id}`)
+    .order('updated_at', { ascending: false });
+  if (error) throw error;
+  const ids = [...new Set((relations || []).map((relation) => (
+    relation.requester_user_id === user.id ? relation.addressee_user_id : relation.requester_user_id
+  )))];
+  let profiles = [];
+  if (ids.length) {
+    const result = await supabase.from('social_profiles')
+      .select('user_id, display_name, presence_status, show_presence, show_game, allow_friend_join, allow_friend_watch, show_quick_profile').in('user_id', ids);
+    if (result.error) throw result.error;
+    profiles = result.data || [];
+  }
+  const profilesById = new Map(profiles.map((entry) => [entry.user_id, entry]));
+  const acceptedUserIds = (relations || []).filter(({ status }) => status === 'accepted')
+    .map((relation) => relation.requester_user_id === user.id
+      ? relation.addressee_user_id : relation.requester_user_id);
+  const storedGames = await persistedFriendGames(acceptedUserIds);
+  const quickProfilesResult = acceptedUserIds.length
+    ? await supabase.rpc('get_skyjo_friend_quick_profiles', { p_user_id: user.id })
+    : { data: [], error: null };
+  if (quickProfilesResult.error) throw quickProfilesResult.error;
+  const stats = new Map((quickProfilesResult.data || []).map((entry) => [entry.user_id, {
+    gamesPlayed: Number(entry.games_played) || 0,
+    gamesWon: Number(entry.games_won) || 0,
+    gamesLost: Number(entry.games_lost) || 0,
+    gamesDrawn: Number(entry.games_drawn) || 0,
+    gamesAbandoned: Number(entry.games_abandoned) || 0,
+    gamesInProgress: Number(entry.games_in_progress) || 0,
+    classicGames: Number(entry.classic_games) || 0,
+    roundsPlayed: Number(entry.rounds_played) || 0,
+    actionGames: Number(entry.action_games) || 0,
+    bestScore: entry.best_score === null || entry.best_score === undefined
+      ? null : Number(entry.best_score),
+    lastGameAt: entry.last_game_at || null,
+    competitiveRating: Number(entry.competitive_rating) || 0,
+    currentWinStreak: Number(entry.current_win_streak) || 0,
+    recentGames: Array.isArray(entry.recent_games) ? entry.recent_games : [],
+    usageMetrics: entry.usage_metrics && typeof entry.usage_metrics === 'object'
+      ? entry.usage_metrics : {},
+  }]));
+  const format = (relation, includePresence = false) => {
+    const otherUserId = relation.requester_user_id === user.id
+      ? relation.addressee_user_id : relation.requester_user_id;
+    const otherProfile = profilesById.get(otherUserId) || {};
+    const livePresence = includePresence ? liveFriendPresence(otherUserId) : null;
+    const rawGame = livePresence?.game || storedGames.get(otherUserId) || null;
+    const gameVisible = otherProfile.show_game !== false;
+    const canJoin = Boolean(gameVisible && rawGame?.canJoin && otherProfile.allow_friend_join !== false);
+    const canWatch = Boolean(gameVisible && rawGame?.canWatch && otherProfile.allow_friend_watch !== false);
+    const visibleGame = gameVisible && rawGame ? {
+      phase: rawGame.phase,
+      visibility: rawGame.visibility,
+      roomId: canJoin || canWatch ? rawGame.roomId : null,
+      canJoin,
+      canWatch,
+    } : null;
+    const quickStats = stats.get(otherUserId) || null;
+    return {
+      relationId: relation.id,
+      name: otherProfile.display_name || 'Joueur',
+      direction: relation.requester_user_id === user.id ? 'outgoing' : 'incoming',
+      ...(livePresence ? {
+        online: otherProfile.show_presence === false ? null : livePresence.online,
+        status: otherProfile.show_presence === false ? 'hidden'
+          : livePresence.online && visibleGame ? 'playing'
+            : livePresence.online ? otherProfile.presence_status || 'available' : 'offline',
+        game: visibleGame,
+        profile: otherProfile.show_quick_profile === false ? null : quickStats,
+      } : {}),
+    };
+  };
+  const now = new Date().toISOString();
+  const { error: timedExpiryError } = await supabase.from('friend_room_invitations')
+    .update({ status: 'expired', updated_at: now }).eq('recipient_user_id', user.id)
+    .eq('status', 'pending').lte('expires_at', now);
+  if (timedExpiryError) throw timedExpiryError;
+  const { data: invitations, error: invitationsError } = await supabase.from('friend_room_invitations')
+    .select('id, room_id, sender_user_id, recipient_user_id, expires_at, created_at')
+    .eq('recipient_user_id', user.id).eq('status', 'pending').gt('expires_at', now)
+    .order('created_at', { ascending: false });
+  if (invitationsError) throw invitationsError;
+  const { data: sentInvitations, error: sentInvitationsError } = await supabase
+    .from('friend_room_invitations')
+    .select('room_id, recipient_user_id')
+    .eq('sender_user_id', user.id).eq('status', 'pending').gt('expires_at', now);
+  if (sentInvitationsError) throw sentInvitationsError;
+  const validInvitations = [];
+  const expiredInvitationIds = [];
+  for (const invitation of invitations || []) {
+    const room = await getOrLoadRoom(invitation.room_id);
+    const settings = room ? effectiveRoomSettings(room) : null;
+    if (!room || room.phase !== 'lobby' || settings.locked || room.order.length >= settings.maxPlayers) {
+      expiredInvitationIds.push(invitation.id);
+      continue;
+    }
+    validInvitations.push({
+      invitationId: invitation.id,
+      roomId: invitation.room_id,
+      name: profilesById.get(invitation.sender_user_id)?.display_name || 'Un ami',
+      expiresAt: invitation.expires_at,
+    });
+  }
+  if (expiredInvitationIds.length) {
+    const { error: expiryError } = await supabase.from('friend_room_invitations')
+      .update({ status: 'expired', updated_at: now }).in('id', expiredInvitationIds);
+    if (expiryError) throw expiryError;
+  }
+  const { data: notifications, error: notificationsError } = await supabase.from('friend_notifications')
+    .select('id, kind, message, created_at, read_at').eq('user_id', user.id)
+    .order('created_at', { ascending: false }).limit(10);
+  if (notificationsError) throw notificationsError;
+  const incomingUnread = (relations || []).filter((relation) => relation.status === 'pending'
+    && relation.addressee_user_id === user.id && new Date(relation.created_at) > new Date(profile.friends_seen_at)).length;
+  return {
+    friendCode: profile.friend_code,
+    preferences: {
+      status: profile.presence_status,
+      showPresence: profile.show_presence,
+      showGame: profile.show_game,
+      allowGameAccess: profile.allow_friend_join && profile.allow_friend_watch,
+      showQuickProfile: profile.show_quick_profile,
+    },
+    friends: (relations || []).filter(({ status }) => status === 'accepted')
+      .map((relation) => format(relation, true)),
+    requests: (relations || []).filter(({ status }) => status === 'pending').map(format),
+    invitations: validInvitations,
+    sentInvitations: (sentInvitations || []).map((invitation) => ({
+      roomId: invitation.room_id,
+      relationId: (relations || []).find((relation) => relation.status === 'accepted' && (
+        relation.requester_user_id === invitation.recipient_user_id
+        || relation.addressee_user_id === invitation.recipient_user_id
+      ))?.id || null,
+    })).filter((invitation) => invitation.relationId),
+    notifications: notifications || [],
+    unreadCount: incomingUnread
+      + validInvitations.length
+      + (notifications || []).filter(({ read_at: readAt }) => !readAt).length,
+  };
+}
+
+function notifyFriendshipUsers(userIds) {
+  const recipients = new Set(userIds.filter(Boolean));
+  for (const socket of io.sockets.sockets.values()) {
+    if (recipients.has(socket.data.auth?.user?.id)) {
+      socket.emit(
+        SOCKET_EVENTS.FRIENDS_UPDATED,
+        socketServerPayload(SOCKET_EVENTS.FRIENDS_UPDATED, undefined),
+      );
+    }
+  }
+}
+
 const app = express();
 app.set('trust proxy', 1);
+app.set('query parser', 'simple');
 app.disable('x-powered-by');
 app.disable('etag');
 app.use((req, res, next) => {
@@ -1514,6 +1744,189 @@ app.get('/api/rooms/public/:roomId/preview', requireHttpAuth, authBff.requireSta
         : null;
       if (!preview) throw new PublicError('room_unavailable', 'Cette partie publique n’est plus disponible.', 404);
       res.json({ room: preview });
+    } catch (error) { next(error); }
+  });
+
+app.get('/api/friends', requireHttpAuth, authBff.requireStandardSession, requireConsent,
+  httpRateLimit({ keyPrefix: 'friends-list', limit: 60, windowMs: 60_000, user: true }),
+  async (req, res, next) => {
+    try { res.json(await friendshipPayload(req.auth.user)); }
+    catch (error) { next(error); }
+  });
+
+app.post('/api/friends', requireHttpAuth, authBff.requireStandardSession, authBff.requireCsrf, requireConsent,
+  httpRateLimit({ keyPrefix: 'friends-mutation', limit: 20, windowMs: 60_000, user: true }),
+  async (req, res, next) => {
+    try {
+      const payload = objectPayload(req.body, [
+        'action', 'friendCode', 'relationId', 'roomId', 'invitationId',
+        'status', 'showPresence', 'showGame', 'allowGameAccess',
+        'allowJoin', 'allowWatch', 'showQuickProfile',
+      ]);
+      const action = String(payload.action || '');
+      const currentUserId = req.auth.user.id;
+      const affectedUserIds = [currentUserId];
+      await ensureSocialProfile(req.auth.user);
+      let joinRoomId = null;
+      if (action === 'request') {
+        const friendCode = String(payload.friendCode || '').trim().toUpperCase();
+        if (!/^[A-Z0-9]{8}$/.test(friendCode)) {
+          throw new PublicError('invalid_friend_code', 'Code ami invalide.', 400);
+        }
+        const { data: target, error: targetError } = await supabase.from('social_profiles')
+          .select('user_id').eq('friend_code', friendCode).maybeSingle();
+        if (targetError) throw targetError;
+        if (!target || target.user_id === currentUserId) {
+          throw new PublicError('friend_unavailable', 'Impossible d’envoyer cette demande.', 404);
+        }
+        affectedUserIds.push(target.user_id);
+        const { error } = await supabase.from('friendships').insert({
+          requester_user_id: currentUserId,
+          addressee_user_id: target.user_id,
+        });
+        if (error?.code === '23505') throw new PublicError('friendship_exists', 'Une relation existe déjà avec ce joueur.', 409);
+        if (error) throw error;
+      } else {
+        const relationId = String(payload.relationId || '');
+        if (['accept', 'decline', 'remove', 'cancel', 'invite'].includes(action)
+          && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(relationId)) {
+          throw new PublicError('invalid_friend', 'Ami invalide.', 400);
+        }
+        if (action === 'accept') {
+          const { data, error } = await supabase.from('friendships').update({
+            status: 'accepted', updated_at: new Date().toISOString(),
+          }).eq('id', relationId).eq('addressee_user_id', currentUserId)
+            .eq('status', 'pending').select('requester_user_id').maybeSingle();
+          if (error) throw error;
+          if (!data) throw new PublicError('friend_request_missing', 'Cette demande n’est plus disponible.', 404);
+          affectedUserIds.push(data.requester_user_id);
+          const accepterName = socialDisplayName(req.auth.user);
+          const { error: notificationError } = await supabase.from('friend_notifications').insert({
+            user_id: data.requester_user_id,
+            actor_user_id: currentUserId,
+            kind: 'friend_accepted',
+            message: `${accepterName} fait désormais partie de vos amis.`,
+          });
+          if (notificationError) throw notificationError;
+        } else if (action === 'decline' || action === 'remove' || action === 'cancel') {
+          let deletion = supabase.from('friendships').delete().eq('id', relationId);
+          if (action === 'decline') {
+            deletion = deletion.eq('addressee_user_id', currentUserId).eq('status', 'pending');
+          } else if (action === 'cancel') {
+            deletion = deletion.eq('requester_user_id', currentUserId).eq('status', 'pending');
+          } else {
+            deletion = deletion.eq('status', 'accepted')
+              .or(`requester_user_id.eq.${currentUserId},addressee_user_id.eq.${currentUserId}`);
+          }
+          const { data, error } = await deletion
+            .select('requester_user_id, addressee_user_id').maybeSingle();
+          if (error) throw error;
+          if (!data) throw new PublicError('friend_request_missing', 'Cette relation n’est plus disponible.', 404);
+          affectedUserIds.push(
+            data.requester_user_id === currentUserId ? data.addressee_user_id : data.requester_user_id,
+          );
+        } else if (action === 'preferences') {
+          const status = String(payload.status || 'available');
+          if (!['available', 'dnd'].includes(status)) {
+            throw new PublicError('invalid_friend_preferences', 'Statut invalide.', 400);
+          }
+          const booleanKeys = ['showPresence', 'showGame', 'showQuickProfile'];
+          if (booleanKeys.some((key) => typeof payload[key] !== 'boolean')) {
+            throw new PublicError('invalid_friend_preferences', 'Préférences invalides.', 400);
+          }
+          const allowGameAccess = typeof payload.allowGameAccess === 'boolean'
+            ? payload.allowGameAccess
+            : payload.allowJoin === true && payload.allowWatch === true;
+          const { error } = await supabase.from('social_profiles').update({
+            presence_status: status,
+            show_presence: payload.showPresence,
+            show_game: payload.showGame,
+            allow_friend_join: allowGameAccess,
+            allow_friend_watch: allowGameAccess,
+            show_quick_profile: payload.showQuickProfile,
+            updated_at: new Date().toISOString(),
+          }).eq('user_id', currentUserId);
+          if (error) throw error;
+          const { data: friendRelations, error: friendRelationsError } = await supabase.from('friendships')
+            .select('requester_user_id, addressee_user_id').eq('status', 'accepted')
+            .or(`requester_user_id.eq.${currentUserId},addressee_user_id.eq.${currentUserId}`);
+          if (friendRelationsError) throw friendRelationsError;
+          affectedUserIds.push(...(friendRelations || []).map((relation) => (
+            relation.requester_user_id === currentUserId
+              ? relation.addressee_user_id : relation.requester_user_id
+          )));
+        } else if (action === 'mark_read') {
+          const timestamp = new Date().toISOString();
+          const [profileResult, notificationResult] = await Promise.all([
+            supabase.from('social_profiles').update({ friends_seen_at: timestamp }).eq('user_id', currentUserId),
+            supabase.from('friend_notifications').update({ read_at: timestamp })
+              .eq('user_id', currentUserId).is('read_at', null),
+          ]);
+          if (profileResult.error) throw profileResult.error;
+          if (notificationResult.error) throw notificationResult.error;
+        } else if (action === 'invite') {
+          const roomId = normalizeRoomId(payload.roomId);
+          if (!roomId) throw new PublicError('invalid_room', 'Salle invalide.', 400);
+          const { data: relation, error: relationError } = await supabase.from('friendships')
+            .select('requester_user_id, addressee_user_id').eq('id', relationId)
+            .eq('status', 'accepted').or(`requester_user_id.eq.${currentUserId},addressee_user_id.eq.${currentUserId}`)
+            .maybeSingle();
+          if (relationError) throw relationError;
+          if (!relation) throw new PublicError('friend_request_missing', 'Cet ami n’est plus disponible.', 404);
+          const targetUserId = relation.requester_user_id === currentUserId
+            ? relation.addressee_user_id : relation.requester_user_id;
+          const [room, member, targetProfile] = await Promise.all([
+            getOrLoadRoom(roomId),
+            findMemberByUser(roomId, currentUserId),
+            supabase.from('social_profiles').select('allow_friend_join, presence_status')
+              .eq('user_id', targetUserId).maybeSingle(),
+          ]);
+          const settings = room ? effectiveRoomSettings(room) : null;
+          if (!room || !member || room.phase !== 'lobby' || settings.locked || room.order.length >= settings.maxPlayers) {
+            throw new PublicError('room_unavailable', 'Cette salle ne peut plus recevoir d’invitation.', 409);
+          }
+          if (targetProfile.error) throw targetProfile.error;
+          if (targetProfile.data?.allow_friend_join === false || targetProfile.data?.presence_status === 'dnd') {
+            throw new PublicError('friend_unavailable', 'Cet ami n’accepte pas les invitations actuellement.', 409);
+          }
+          const { error } = await supabase.from('friend_room_invitations').insert({
+            room_id: roomId,
+            sender_user_id: currentUserId,
+            recipient_user_id: targetUserId,
+          });
+          if (error?.code === '23505') throw new PublicError('invitation_exists', 'Une invitation est déjà en attente.', 409);
+          if (error) throw error;
+          affectedUserIds.push(targetUserId);
+        } else if (action === 'accept_invite' || action === 'decline_invite') {
+          const invitationId = String(payload.invitationId || '');
+          if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(invitationId)) {
+            throw new PublicError('invalid_invitation', 'Invitation invalide.', 400);
+          }
+          const { data: invitation, error } = await supabase.from('friend_room_invitations')
+            .update({ status: action === 'accept_invite' ? 'accepted' : 'declined', updated_at: new Date().toISOString() })
+            .eq('id', invitationId).eq('recipient_user_id', currentUserId).eq('status', 'pending')
+            .gt('expires_at', new Date().toISOString())
+            .select('room_id, sender_user_id').maybeSingle();
+          if (error) throw error;
+          if (!invitation) throw new PublicError('invitation_missing', 'Cette invitation a expiré.', 404);
+          affectedUserIds.push(invitation.sender_user_id);
+          if (action === 'accept_invite') {
+            const room = await getOrLoadRoom(invitation.room_id);
+            const settings = room ? effectiveRoomSettings(room) : null;
+            if (!room || room.phase !== 'lobby' || settings.locked || room.order.length >= settings.maxPlayers) {
+              await supabase.from('friend_room_invitations').update({
+                status: 'expired', updated_at: new Date().toISOString(),
+              }).eq('id', invitationId);
+              throw new PublicError('room_unavailable', 'Cette salle n’est plus disponible.', 409);
+            }
+            joinRoomId = invitation.room_id;
+          }
+        } else {
+          throw new PublicError('invalid_friend_action', 'Action ami invalide.', 400);
+        }
+      }
+      notifyFriendshipUsers(affectedUserIds);
+      res.json({ ...(await friendshipPayload(req.auth.user)), ...(joinRoomId ? { joinRoomId } : {}) });
     } catch (error) { next(error); }
   });
 

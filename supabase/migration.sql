@@ -162,6 +162,100 @@ CREATE INDEX IF NOT EXISTS game_decision_events_user_idx
 CREATE INDEX IF NOT EXISTS game_decision_events_game_idx
   ON public.game_decision_events (room_id, game_serial, turn_serial);
 
+CREATE TABLE IF NOT EXISTS public.social_profiles (
+  user_id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  friend_code TEXT NOT NULL UNIQUE DEFAULT UPPER(SUBSTRING(REPLACE(gen_random_uuid()::TEXT, '-', '') FROM 1 FOR 8)),
+  display_name TEXT NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT social_profiles_friend_code_check CHECK (friend_code ~ '^[A-Z0-9]{8}$'),
+  CONSTRAINT social_profiles_display_name_check CHECK (char_length(display_name) BETWEEN 1 AND 20)
+);
+
+ALTER TABLE public.social_profiles
+  ADD COLUMN IF NOT EXISTS presence_status TEXT NOT NULL DEFAULT 'available',
+  ADD COLUMN IF NOT EXISTS show_presence BOOLEAN NOT NULL DEFAULT TRUE,
+  ADD COLUMN IF NOT EXISTS show_game BOOLEAN NOT NULL DEFAULT TRUE,
+  ADD COLUMN IF NOT EXISTS allow_friend_join BOOLEAN NOT NULL DEFAULT TRUE,
+  ADD COLUMN IF NOT EXISTS allow_friend_watch BOOLEAN NOT NULL DEFAULT TRUE,
+  ADD COLUMN IF NOT EXISTS show_quick_profile BOOLEAN NOT NULL DEFAULT TRUE,
+  ADD COLUMN IF NOT EXISTS friends_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conrelid = 'public.social_profiles'::regclass
+      AND conname = 'social_profiles_presence_status_check'
+  ) THEN
+    ALTER TABLE public.social_profiles ADD CONSTRAINT social_profiles_presence_status_check
+      CHECK (presence_status IN ('available', 'dnd'));
+  END IF;
+END;
+$$;
+
+CREATE TABLE IF NOT EXISTS public.friendships (
+  id UUID NOT NULL DEFAULT gen_random_uuid() UNIQUE,
+  requester_user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  addressee_user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  status TEXT NOT NULL DEFAULT 'pending',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (requester_user_id, addressee_user_id),
+  CONSTRAINT friendships_distinct_users_check CHECK (requester_user_id <> addressee_user_id),
+  CONSTRAINT friendships_status_check CHECK (status IN ('pending', 'accepted'))
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS friendships_unique_pair_idx
+  ON public.friendships (
+    LEAST(requester_user_id, addressee_user_id),
+    GREATEST(requester_user_id, addressee_user_id)
+  );
+CREATE INDEX IF NOT EXISTS friendships_addressee_idx
+  ON public.friendships (addressee_user_id, status, updated_at DESC);
+
+CREATE TABLE IF NOT EXISTS public.friend_notifications (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  actor_user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  kind TEXT NOT NULL,
+  message TEXT NOT NULL,
+  read_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT friend_notifications_kind_check CHECK (kind IN ('friend_accepted')),
+  CONSTRAINT friend_notifications_message_check CHECK (char_length(message) BETWEEN 1 AND 120)
+);
+
+CREATE INDEX IF NOT EXISTS friend_notifications_user_idx
+  ON public.friend_notifications (user_id, read_at, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS public.friend_room_invitations (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  room_id TEXT NOT NULL REFERENCES public.rooms(room_id) ON DELETE CASCADE,
+  sender_user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  recipient_user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  status TEXT NOT NULL DEFAULT 'pending',
+  expires_at TIMESTAMPTZ NOT NULL DEFAULT NOW() + INTERVAL '30 minutes',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT friend_room_invitations_distinct_users_check CHECK (sender_user_id <> recipient_user_id),
+  CONSTRAINT friend_room_invitations_status_check CHECK (status IN ('pending', 'accepted', 'declined', 'expired')),
+  CONSTRAINT friend_room_invitations_expiry_check CHECK (expires_at > created_at)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS friend_room_invitations_pending_idx
+  ON public.friend_room_invitations (room_id, sender_user_id, recipient_user_id)
+  WHERE status = 'pending';
+CREATE INDEX IF NOT EXISTS friend_room_invitations_recipient_idx
+  ON public.friend_room_invitations (recipient_user_id, status, expires_at DESC);
+
+INSERT INTO public.skyjo_schema_migrations (version)
+VALUES ('v7')
+ON CONFLICT (version) DO NOTHING;
+
+INSERT INTO public.skyjo_schema_migrations (version)
+VALUES ('v8')
+ON CONFLICT (version) DO NOTHING;
+
 INSERT INTO public.skyjo_schema_migrations (version)
 VALUES ('v6')
 ON CONFLICT (version) DO NOTHING;
@@ -239,6 +333,14 @@ ALTER TABLE public.user_game_participations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.user_game_participations FORCE ROW LEVEL SECURITY;
 ALTER TABLE public.game_decision_events ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.game_decision_events FORCE ROW LEVEL SECURITY;
+ALTER TABLE public.social_profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.social_profiles FORCE ROW LEVEL SECURITY;
+ALTER TABLE public.friendships ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.friendships FORCE ROW LEVEL SECURITY;
+ALTER TABLE public.friend_notifications ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.friend_notifications FORCE ROW LEVEL SECURITY;
+ALTER TABLE public.friend_room_invitations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.friend_room_invitations FORCE ROW LEVEL SECURITY;
 
 REVOKE ALL ON TABLE public.rooms FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON TABLE public.skyjo_schema_migrations FROM PUBLIC, anon, authenticated;
@@ -248,6 +350,10 @@ REVOKE ALL ON TABLE public.account_consents FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON TABLE public.app_sessions FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON TABLE public.user_game_participations FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON TABLE public.game_decision_events FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON TABLE public.social_profiles FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON TABLE public.friendships FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON TABLE public.friend_notifications FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON TABLE public.friend_room_invitations FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON SEQUENCE public.game_decision_events_id_seq FROM PUBLIC, anon, authenticated;
 
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.rooms TO service_role;
@@ -257,6 +363,10 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.account_consents TO service
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.app_sessions TO service_role;
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.user_game_participations TO service_role;
 GRANT SELECT, INSERT, DELETE ON TABLE public.game_decision_events TO service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.social_profiles TO service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.friendships TO service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.friend_notifications TO service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.friend_room_invitations TO service_role;
 GRANT USAGE, SELECT ON SEQUENCE public.game_decision_events_id_seq TO service_role;
 
 CREATE OR REPLACE FUNCTION public.commit_skyjo_room(
@@ -512,6 +622,7 @@ AS $$
   );
 $$;
 
+DROP FUNCTION IF EXISTS public.get_skyjo_friend_quick_profiles(UUID);
 DROP FUNCTION IF EXISTS public.get_skyjo_user_stats(UUID);
 DROP FUNCTION IF EXISTS public.get_skyjo_leaderboard(INTEGER);
 DROP FUNCTION IF EXISTS public.skyjo_placement_trophies(INTEGER, INTEGER);
@@ -663,6 +774,51 @@ AS $$
   FROM rated_results;
 $$;
 
+CREATE OR REPLACE FUNCTION public.get_skyjo_friend_quick_profiles(p_user_id UUID)
+RETURNS TABLE (
+  user_id UUID,
+  games_played BIGINT,
+  games_won BIGINT,
+  games_lost BIGINT,
+  games_drawn BIGINT,
+  games_abandoned BIGINT,
+  games_in_progress BIGINT,
+  classic_games BIGINT,
+  rounds_played BIGINT,
+  action_games BIGINT,
+  best_score INTEGER,
+  last_game_at TIMESTAMPTZ,
+  competitive_rating BIGINT,
+  current_win_streak BIGINT,
+  recent_games JSONB,
+  usage_metrics JSONB
+)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+  SELECT friend.friend_user_id,
+    stats.games_played, stats.games_won, stats.games_lost, stats.games_drawn,
+    stats.games_abandoned, stats.games_in_progress, stats.classic_games,
+    stats.rounds_played, stats.action_games, stats.best_score, stats.last_game_at,
+    stats.competitive_rating, stats.current_win_streak, stats.recent_games,
+    stats.usage_metrics
+  FROM (
+    SELECT CASE
+      WHEN relation.requester_user_id = p_user_id THEN relation.addressee_user_id
+      ELSE relation.requester_user_id
+    END AS friend_user_id
+    FROM public.friendships AS relation
+    WHERE relation.status = 'accepted'
+      AND (relation.requester_user_id = p_user_id OR relation.addressee_user_id = p_user_id)
+    LIMIT 100
+  ) AS friend
+  INNER JOIN public.social_profiles AS profile
+    ON profile.user_id = friend.friend_user_id AND profile.show_quick_profile = TRUE
+  CROSS JOIN LATERAL public.get_skyjo_user_stats(friend.friend_user_id) AS stats;
+$$;
+
 CREATE FUNCTION public.get_skyjo_leaderboard(
   p_limit INTEGER DEFAULT 100
 )
@@ -811,6 +967,7 @@ REVOKE ALL ON FUNCTION public.commit_skyjo_room(TEXT, JSONB, BIGINT, SMALLINT, U
 REVOKE ALL ON FUNCTION public.append_skyjo_message(TEXT, TEXT, TEXT, TEXT, TEXT, TIMESTAMPTZ) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.is_skyjo_session_active(UUID, UUID) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.get_skyjo_user_stats(UUID) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.get_skyjo_friend_quick_profiles(UUID) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.get_skyjo_leaderboard(INTEGER) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.delete_stale_skyjo_rooms() FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.delete_expired_skyjo_app_sessions() FROM PUBLIC, anon, authenticated;
@@ -819,6 +976,7 @@ GRANT EXECUTE ON FUNCTION public.commit_skyjo_room(TEXT, JSONB, BIGINT, SMALLINT
 GRANT EXECUTE ON FUNCTION public.append_skyjo_message(TEXT, TEXT, TEXT, TEXT, TEXT, TIMESTAMPTZ) TO service_role;
 GRANT EXECUTE ON FUNCTION public.is_skyjo_session_active(UUID, UUID) TO service_role;
 GRANT EXECUTE ON FUNCTION public.get_skyjo_user_stats(UUID) TO service_role;
+GRANT EXECUTE ON FUNCTION public.get_skyjo_friend_quick_profiles(UUID) TO service_role;
 GRANT EXECUTE ON FUNCTION public.get_skyjo_leaderboard(INTEGER) TO service_role;
 GRANT EXECUTE ON FUNCTION public.delete_stale_skyjo_rooms() TO service_role;
 GRANT EXECUTE ON FUNCTION public.delete_expired_skyjo_app_sessions() TO service_role;

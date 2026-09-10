@@ -1,4 +1,4 @@
-export const SOCKET_PROTOCOL_VERSION = 17;
+export const SOCKET_PROTOCOL_VERSION = 18;
 
 export const SOCKET_EVENTS = Object.freeze({
   CONNECT: 'connect',
@@ -11,6 +11,7 @@ export const SOCKET_EVENTS = Object.freeze({
   PUBLIC_PREVIEW_STATE: 'publicPreviewState',
   CHAT_HISTORY: 'chatHistory',
   CHAT_MESSAGE: 'chatMessage',
+  FRIENDS_UPDATED: 'friendsUpdated',
   ROOM_EXPIRED: 'roomExpired',
   REMOVED_FROM_ROOM: 'removedFromRoom',
   ROOM_ACCESS_REVOKED: 'roomAccessRevoked',
@@ -111,6 +112,7 @@ export const SOCKET_SERVER_PAYLOAD_KEYS = Object.freeze({
   [SOCKET_EVENTS.CHAT_MESSAGE]: Object.freeze([
     'id', 't', 'type', 'playerId', 'playerName', 'text',
   ]),
+  [SOCKET_EVENTS.FRIENDS_UPDATED]: Object.freeze([]),
   [SOCKET_EVENTS.ROOM_ACCESS_REVOKED]: Object.freeze(['reason', 'message']),
 });
 
