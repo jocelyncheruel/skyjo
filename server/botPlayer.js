@@ -108,6 +108,15 @@ function plausibleFinalTurnScore(player) {
   return bestScore;
 }
 
+function plausibleUpsetTurnScore(player) {
+  if (hiddenSlots(player).length === 0) return estimatedBoardScore(player);
+  const highestVisibleValue = Math.max(
+    0,
+    ...visibleSlots(player).map(({ slot }) => slotValue(slot)),
+  );
+  return visibleBoardScore(player) - highestVisibleValue;
+}
+
 function cardMemoryKey(card) {
   if (isStarCard(card)) return 'star';
   return Number.isFinite(card?.value) ? String(card.value) : null;
@@ -317,6 +326,8 @@ export function evaluateBotTurnStrategy(state, playerId) {
     .map(({ projectedRoundScore: score }) => score));
   const bestOpponentClosingRoundScore = Math.min(...opponentStates
     .map(({ plausibleFinalTurnScore: score }) => score));
+  const bestOpponentUpsetRoundScore = Math.min(...opponents
+    .map((opponent) => plausibleUpsetTurnScore(opponent)));
   const opponentsNearFinish = opponentStates.filter(({ hiddenCount }) => hiddenCount <= 2).length;
   const closestOpponentHidden = Math.min(...opponentStates.map(({ hiddenCount }) => hiddenCount));
   const alreadyInLastTurns = !!state.roundEnderId;
@@ -400,6 +411,7 @@ export function evaluateBotTurnStrategy(state, playerId) {
     playerPlausibleFinalTurnScore,
     bestOpponentRoundScore,
     bestOpponentClosingRoundScore,
+    bestOpponentUpsetRoundScore,
     playerTotalScore: player.totalScore || 0,
     opponentProjectedTotals,
     opponentsNearFinish,
@@ -611,6 +623,27 @@ export function evaluateBotCardChoice(player, card, strategy = { closeBoard: tru
   const best = candidates[0] || { index: undefined, score: -Infinity, completesColumn: false };
   const cardValue = slotValue({ card });
   const hiddenCount = hiddenSlots(player).length;
+  const finishingChoice = candidates.find(({ finishesBoard }) => finishesBoard);
+  const cautiousVisibleReplacement = candidates.find(({ replacesVisible, immediateGain, discardGiftPenalty }) => (
+    replacesVisible && immediateGain >= -2 && discardGiftPenalty <= 2
+  ));
+  const projectedClosingScore = finishingChoice
+    ? strategy.projectedRoundScore - finishingChoice.immediateGain
+    : Infinity;
+  const avoidRiskyHighClosure = hiddenCount === 1
+    && cardValue >= 7
+    && !strategy.alreadyInLastTurns
+    && !finishingChoice?.completesColumn
+    && Number.isFinite(strategy.bestOpponentUpsetRoundScore)
+    && projectedClosingScore > strategy.bestOpponentUpsetRoundScore
+    && cautiousVisibleReplacement;
+  if (avoidRiskyHighClosure) {
+    return {
+      ...cautiousVisibleReplacement,
+      keep: true,
+      avoidsRiskyFinish: true,
+    };
+  }
   let minimumGain = KEEP_CARD_MINIMUM_GAIN;
   if (hiddenCount >= 8) {
     if (cardValue >= 9) minimumGain = 6.5;
