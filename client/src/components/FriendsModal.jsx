@@ -100,6 +100,7 @@ export default function FriendsModal({ open, onClose, onWatch, onJoin, onError, 
   const [friendToRemove, setFriendToRemove] = useState(null);
   const [profileFriend, setProfileFriend] = useState(null);
   const [friendMenu, setFriendMenu] = useState(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const applyOnlineNotificationOverrides = useCallback((nextData) => {
     const desiredByRelation = onlineNotificationDesiredRef.current;
     const overridesByRelation = onlineNotificationOverrideRef.current;
@@ -146,7 +147,7 @@ export default function FriendsModal({ open, onClose, onWatch, onJoin, onError, 
   }, [applyOnlineNotificationOverrides, open]);
 
   useEffect(() => {
-    if (!open) { markedOpenRef.current = false; setFriendMenu(null); return undefined; }
+    if (!open) { markedOpenRef.current = false; setFriendMenu(null); setSettingsOpen(false); return undefined; }
     load(true);
     const timer = window.setInterval(load, 15_000);
     if (!markedOpenRef.current) {
@@ -177,12 +178,12 @@ export default function FriendsModal({ open, onClose, onWatch, onJoin, onError, 
     if (!open) return undefined;
     const closeFloatingMenus = (event) => {
       const settings = settingsRef.current;
-      if (settings?.open && !settings.contains(event.target)) settings.open = false;
+      if (settingsOpen && !settings?.contains(event.target)) setSettingsOpen(false);
       if (friendMenu && !event.target.closest?.('.sj-friends-more, .sj-friends-more-menu')) setFriendMenu(null);
     };
     document.addEventListener('pointerdown', closeFloatingMenus);
     return () => document.removeEventListener('pointerdown', closeFloatingMenus);
-  }, [friendMenu, open]);
+  }, [friendMenu, open, settingsOpen]);
   useEffect(() => {
     if (!friendMenu) return undefined;
     const closeMenu = () => setFriendMenu(null);
@@ -410,7 +411,7 @@ export default function FriendsModal({ open, onClose, onWatch, onJoin, onError, 
               return <li className={`sj-pop-in ${friend.online === false ? 'is-disconnected' : ''} ${menuOpen ? 'is-menu-open' : ''}`} key={friend.relationId}><span className="sj-lobby-player-copy"><strong>{friend.name}</strong>{friend.online !== null && <i className="sj-lobby-player-presence" role="img" aria-label={friend.status} title={friend.status} />}</span><span className="sj-lobby-player-badges"><span className={friend.status === 'available' ? 'is-online' : ''}>{friend.status === 'lobby' ? 'Dans le lobby' : friend.status === 'playing' ? 'En partie' : friend.status === 'dnd' ? 'Ne pas déranger' : friend.status === 'hidden' ? 'Masqué' : friend.online ? 'Disponible' : 'Hors ligne'}</span>{invitationPending && <span className="is-invited">Invitation envoyée</span>}</span><span className="sj-friends-player-actions">{friend.online === true && friend.game?.visibility === 'public' && friend.game?.canJoin && actionButton('sj-friends-join', 'Rejoindre', <LogIn aria-hidden="true" size={17} />, () => onJoin(friend.game.roomId))}{!inRoom && friend.online === true && friend.game?.visibility === 'public' && friend.game?.canWatch && actionButton('sj-friends-watch', 'Regarder', <Eye aria-hidden="true" size={17} />, () => onWatch(friend.game.roomId))}{roomId && friend.status !== 'dnd' && !invitationPending && actionButton('sj-friends-invite', 'Inviter', <Gamepad2 aria-hidden="true" size={17} />, () => mutate('invite', { relationId: friend.relationId, roomId }))}<span className="sj-friends-more"><button type="button" className="sj-lobby-player-remove sj-friends-more-trigger" aria-label={`Plus d’actions pour ${friend.name}`} aria-haspopup="menu" aria-expanded={menuOpen} aria-controls={`friend-actions-${friend.relationId}`} onClick={(event) => toggleFriendMenu(event, friend.relationId, Boolean(friend.profile))}><Ellipsis aria-hidden="true" size={18} /></button>{menuOpen && createPortal(<span id={`friend-actions-${friend.relationId}`} className={`sj-friends-more-menu ${friendMenu.opensUp ? 'opens-up' : ''}`} style={{ right: friendMenu.right, top: friendMenu.top }} role="menu"><button type="button" className={friend.notifyOnline ? 'is-active' : ''} role="menuitemcheckbox" aria-checked={friend.notifyOnline} onClick={() => { setFriendMenu(null); toggleOnlineNotification(friend.relationId, friend.notifyOnline); }}><Bell aria-hidden="true" size={16} /><span>{friend.notifyOnline ? 'Ne plus signaler sa connexion' : 'Me prévenir lorsqu’il est en ligne'}</span></button>{friend.profile && <button type="button" role="menuitem" onClick={() => { setFriendMenu(null); setProfileFriend(friend); }}><BarChart3 aria-hidden="true" size={16} /><span>Voir les statistiques et la progression</span></button>}<button type="button" className="is-danger" role="menuitem" onClick={() => { setFriendMenu(null); setFriendToRemove(friend); }}><UserMinus aria-hidden="true" size={16} /><span>Retirer l’ami</span></button></span>, document.body)}</span></span></li>;
             })}</ul> : <p className="sj-friends-empty"><UsersRound aria-hidden="true" /> Ajoutez un joueur grâce à son code ami.</p>}</section>
           </div>
-          <details ref={settingsRef} className="sj-friends-settings"><summary><Settings aria-hidden="true" size={15} /><span>Statut et confidentialité</span></summary><div><label>Mon statut<select value={data.preferences.status} disabled={!loaded} onChange={(event) => updatePreferences({ status: event.target.value })}><option value="available">Disponible</option><option value="dnd">Ne pas déranger</option></select></label>{preferenceLabels.map(([key, label]) => <label className="sj-friends-toggle" key={key}><span>{label}</span><input type="checkbox" checked={data.preferences[key]} disabled={!loaded} onChange={(event) => updatePreferences({ [key]: event.target.checked })} /><i aria-hidden="true" /></label>)}<label className="sj-friends-toggle"><span>Invitations à jouer hors de l’app</span><input type="checkbox" checked={data.preferences.notifyGameInvites} disabled={!loaded} onChange={(event) => updatePreferences({ notifyGameInvites: event.target.checked })} /><i aria-hidden="true" /></label></div></details>
+          <div ref={settingsRef} className={`sj-friends-settings ${settingsOpen ? 'is-open' : ''}`}><button type="button" className="sj-friends-settings-trigger" aria-expanded={settingsOpen} aria-controls="friends-settings-panel" onClick={() => setSettingsOpen((value) => !value)}><Settings aria-hidden="true" size={15} /><span>Statut et confidentialité</span></button><div id="friends-settings-panel" aria-hidden={!settingsOpen} inert={settingsOpen ? undefined : ''}><label>Mon statut<select value={data.preferences.status} disabled={!loaded} onChange={(event) => updatePreferences({ status: event.target.value })}><option value="available">Disponible</option><option value="dnd">Ne pas déranger</option></select></label>{preferenceLabels.map(([key, label]) => <label className="sj-friends-toggle" key={key}><span>{label}</span><input type="checkbox" checked={data.preferences[key]} disabled={!loaded} onChange={(event) => updatePreferences({ [key]: event.target.checked })} /><i aria-hidden="true" /></label>)}<label className="sj-friends-toggle"><span>Invitations à jouer hors de l’app</span><input type="checkbox" checked={data.preferences.notifyGameInvites} disabled={!loaded} onChange={(event) => updatePreferences({ notifyGameInvites: event.target.checked })} /><i aria-hidden="true" /></label></div></div>
         </div>
       </section>
     </div>

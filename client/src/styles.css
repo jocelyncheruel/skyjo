@@ -4496,9 +4496,9 @@ button.sj-action-count-badge:focus-visible {
 .sj-friends-notifications p { display: flex; align-items: center; gap: 7px; padding: 9px 11px; border: 1px solid rgba(91,211,169,.14); border-radius: 10px; color: #b9c7c2; background: rgba(91,211,169,.055); font-size: 9px; font-weight: 700; }
 .sj-friends-notifications svg { flex: 0 0 auto; color: #65d7a9; }
 .sj-friends-settings { flex: 0 0 auto; position: relative; margin: auto 20px 16px; border: 1px solid rgba(255,255,255,.08); border-radius: 12px; background: #151c25; z-index: 4; }
-.sj-friends-settings summary { display: flex; align-items: center; gap: 8px; padding: 11px 12px; color: #b7c1cb; font-size: 10px; font-weight: 850; cursor: pointer; list-style: none; }
-.sj-friends-settings summary::-webkit-details-marker { display: none; }
-.sj-friends-settings > div { position: absolute; right: 0; bottom: calc(100% + 7px); left: 0; height: max-content; display: grid; gap: 9px; padding: 12px; overflow: visible; border: 1px solid rgba(255,255,255,.11); border-radius: 12px; background: #151c25; box-shadow: 0 -14px 32px rgba(0,0,0,.38); }
+.sj-friends-settings-trigger { width: 100%; display: flex; align-items: center; gap: 8px; padding: 11px 12px; border: 0; color: #b7c1cb; background: transparent; font-size: 10px; font-weight: 850; text-align: left; cursor: pointer; }
+.sj-friends-settings > div { position: absolute; right: 0; bottom: calc(100% + 7px); left: 0; height: max-content; display: grid; gap: 9px; padding: 12px; overflow: visible; visibility: hidden; border: 1px solid rgba(255,255,255,.11); border-radius: 12px; background: #151c25; box-shadow: 0 -14px 32px rgba(0,0,0,.38); opacity: 0; pointer-events: none; transform: translateY(5px); transition: opacity .16s ease, transform .16s ease, visibility 0s linear .16s; }
+.sj-friends-settings.is-open > div { visibility: visible; opacity: 1; pointer-events: auto; transform: translateY(0); transition-delay: 0s; }
 .sj-friends-settings label { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: #aeb8c3; font-size: 9px; font-weight: 750; }
 .sj-friends-settings select { min-height: 32px; padding: 0 28px 0 9px; border: 1px solid rgba(255,255,255,.12); border-radius: 8px; color: #eef5f3; background: #111821; font: inherit; }
 .sj-friends-settings select:disabled { opacity: 1; color: #eef5f3; background: #111821; -webkit-text-fill-color: #eef5f3; }
