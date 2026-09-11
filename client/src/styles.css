@@ -4463,7 +4463,7 @@ button.sj-action-count-badge:focus-visible {
 .sj-friends-more-menu > button.is-danger:focus-visible { color: #ffc4c0; background: rgba(239,106,97,.11); }
 @media (hover: none), (pointer: coarse), (max-width: 680px) {
   .sj-friends-more-menu { min-width: 210px; max-width: min(250px, calc(100vw - 24px)); }
-  .sj-friends-more-menu > button { min-height: 38px; padding: 6px 7px; font-size: 9.5px; }
+  .sj-friends-more-menu > button { min-height: 36px; padding: 4px 7px; font-size: 9.5px; }
 }
 .sj-lobby-player-badges > span.is-online { background: rgba(91,211,169,.11); color: #a9f1d3; }
 .sj-lobby-player-badges > span.is-invited { color: #d9ceff; background: rgba(142,112,224,.16); }
@@ -11423,7 +11423,8 @@ select:focus {
 .sj-lobby-player-list li:hover .sj-lobby-player-remove,
 .sj-lobby-player-remove:focus-visible { opacity: 1; }
 @media (hover: none), (pointer: coarse) {
-  .sj-lobby-player-remove {
+  .sj-room-lobby .sj-lobby-player-remove,
+  .sj-room-admin-player-list .sj-lobby-player-remove {
     opacity: 1;
     border-color: rgba(239, 106, 97, 0.42);
     background: rgba(239, 106, 97, 0.1);
