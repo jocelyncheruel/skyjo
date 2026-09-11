@@ -8,6 +8,12 @@ const CARD_PILE_FRAME_INSET = 1.2;
 const REPEATED_VALUE_SIZE = 11.5;
 const REPEATED_VALUE_ANGLE = -18;
 const FACET_OPACITY = 0.32;
+const REPEATED_VALUE_POSITIONS = Array.from({ length: 10 }, (_, row) => (
+  Array.from({ length: 8 }, (_, column) => ({
+    x: -20 + column * 20 + (row % 2) * 10,
+    y: -15 + row * 17,
+  }))
+)).flat();
 const STAR_PATH = [
   'M 44 32',
   'L 51.94 51.08',
@@ -207,29 +213,6 @@ function centerValueSize(value) {
 
 function RepeatedCardValue({ value, palette, rid, inset }) {
   const clipId = `sj-card-value-clip-${rid}`;
-  const maskId = `sj-card-value-mask-${rid}`;
-  const evenPatternId = `sj-card-value-pattern-even-${rid}`;
-  const oddPatternId = `sj-card-value-pattern-odd-${rid}`;
-  const numericValue = Number(value);
-  const patternText = (y) => (
-    <text
-      x="10"
-      y={y}
-      textAnchor="middle"
-      dominantBaseline="central"
-      fontFamily="Arial, sans-serif"
-      fontWeight="900"
-      fontSize={REPEATED_VALUE_SIZE}
-      fill={palette.ink}
-      stroke={haloFor(palette.ink)}
-      strokeWidth="1.65"
-      paintOrder="stroke"
-      opacity="0.62"
-      transform={`rotate(${REPEATED_VALUE_ANGLE} 10 ${y})`}
-    >
-      {value}
-    </text>
-  );
 
   return (
     <>
@@ -237,47 +220,46 @@ function RepeatedCardValue({ value, palette, rid, inset }) {
         <clipPath id={clipId}>
           <rect {...cardRect(inset)} />
         </clipPath>
-        <mask id={maskId} x="0" y="0" width={CARD_W} height={CARD_H} maskUnits="userSpaceOnUse">
-          <rect x="0" y="0" width={CARD_W} height={CARD_H} fill="#fff" />
+      </defs>
+      <g clipPath={`url(#${clipId})`} aria-hidden="true">
+        {REPEATED_VALUE_POSITIONS.map(({ x, y }) => (
           <text
-            x={CARD_W / 2}
-            y={CARD_H / 2 + 1}
+            key={`${x}-${y}`}
+            x={x}
+            y={y}
             textAnchor="middle"
             dominantBaseline="central"
             fontFamily="Arial, sans-serif"
             fontWeight="900"
-            fontSize={centerValueSize(numericValue)}
-            fill="#000"
-            stroke="#000"
-            strokeWidth="16"
-            strokeLinejoin="round"
+            fontSize={REPEATED_VALUE_SIZE}
+            fill={palette.ink}
+            stroke={haloFor(palette.ink)}
+            strokeWidth="1.65"
             paintOrder="stroke"
+            opacity="0.62"
+            transform={`rotate(${REPEATED_VALUE_ANGLE} ${x} ${y})`}
           >
             {value}
           </text>
-        </mask>
-        <pattern
-          id={evenPatternId}
-          width="20"
-          height="34"
-          patternUnits="userSpaceOnUse"
-        >
-          {patternText(7)}
-        </pattern>
-        <pattern
-          id={oddPatternId}
-          width="20"
-          height="34"
-          patternUnits="userSpaceOnUse"
-          patternTransform="translate(10 0)"
-        >
-          {patternText(24)}
-        </pattern>
-      </defs>
-      <g clipPath={`url(#${clipId})`} mask={`url(#${maskId})`} aria-hidden="true">
-        <rect {...cardRect(inset)} fill={`url(#${evenPatternId})`} />
-        <rect {...cardRect(inset)} fill={`url(#${oddPatternId})`} />
+        ))}
       </g>
+      <text
+        x={CARD_W / 2}
+        y={CARD_H / 2 + 1}
+        textAnchor="middle"
+        dominantBaseline="central"
+        fontFamily="Arial, sans-serif"
+        fontWeight="900"
+        fontSize={centerValueSize(Number(value))}
+        fill={palette.base}
+        stroke={palette.base}
+        strokeWidth="16"
+        strokeLinejoin="round"
+        paintOrder="stroke"
+        aria-hidden="true"
+      >
+        {value}
+      </text>
     </>
   );
 }

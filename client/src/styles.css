@@ -3684,6 +3684,24 @@ input:focus {
     sjCardFlightFade var(--sj-flight-duration) linear var(--sj-flight-delay) both;
 }
 
+.sj-card-flight-preparing {
+  opacity: 0 !important;
+  animation-play-state: paused !important;
+}
+
+.sj-card-flight-preparing * {
+  animation-play-state: paused !important;
+}
+
+.sj-card-motion-part-preparing {
+  visibility: hidden !important;
+  animation-play-state: paused !important;
+}
+
+.sj-card-motion-part-preparing * {
+  animation-play-state: paused !important;
+}
+
 .sj-card-target-hold {
   position: absolute;
   z-index: 0;
