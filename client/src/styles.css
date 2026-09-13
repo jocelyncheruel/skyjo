@@ -4117,6 +4117,17 @@ button.sj-action-count-badge:focus-visible {
   height: 100%;
 }
 
+@media (hover: none), (pointer: coarse) {
+  .sj-card-slot {
+    transform: translateZ(0);
+    backface-visibility: hidden;
+  }
+
+  .sj-card-slot > .sj-card:not(.sj-card-flip):not(.sj-card-reveal) {
+    transform: translateZ(0);
+  }
+}
+
 .sj-card {
   --sj-card-frame-color: rgba(255, 255, 255, 0.52);
   --sj-card-frame-width: 1.2;

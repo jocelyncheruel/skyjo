@@ -1944,7 +1944,7 @@ function GameScreen({
     actionPanelRef,
     layoutReady,
     layoutClassName,
-  } = useAdaptiveBoardSizing(state.players.length, layoutKey);
+  } = useAdaptiveBoardSizing(state.players.length, layoutKey, cardMotionEndsAt);
 
   useEffect(() => {
     if (isSpectator) return;

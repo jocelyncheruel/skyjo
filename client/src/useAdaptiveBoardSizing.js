@@ -17,7 +17,7 @@ function contentBoxWidth(element, fallback = 0) {
   return Math.max(0, rect.width - readPx(styles.paddingLeft) - readPx(styles.paddingRight));
 }
 
-export function useAdaptiveBoardSizing(playerCount, layoutKey) {
+export function useAdaptiveBoardSizing(playerCount, layoutKey, layoutLockedUntil = 0) {
   const shellRef = useRef(null);
   const boardAreaRef = useRef(null);
   const opponentsRef = useRef(null);
@@ -31,9 +31,12 @@ export function useAdaptiveBoardSizing(playerCount, layoutKey) {
   const measuredViewportRef = useRef({ width: 0, height: 0 });
   const baselineDevicePixelRatioRef = useRef(null);
   const appliedClassNameRef = useRef('');
+  const layoutLockedUntilRef = useRef(layoutLockedUntil);
+  layoutLockedUntilRef.current = layoutLockedUntil;
 
   useLayoutEffect(() => {
     let frame = 0;
+    let deferredResizeTimer = 0;
     let disposed = false;
 
     const measure = ({ reveal = true, force = false } = {}) => {
@@ -110,6 +113,15 @@ export function useAdaptiveBoardSizing(playerCount, layoutKey) {
     };
 
     const update = ({ reveal = true, force = false } = {}) => {
+      const remainingLock = layoutLockedUntilRef.current - Date.now();
+      if (layoutReadyRef.current && remainingLock > 0) {
+        if (deferredResizeTimer) window.clearTimeout(deferredResizeTimer);
+        deferredResizeTimer = window.setTimeout(() => {
+          deferredResizeTimer = 0;
+          update({ reveal, force });
+        }, remainingLock + 16);
+        return;
+      }
       if (frame) window.cancelAnimationFrame(frame);
       frame = window.requestAnimationFrame(() => {
         frame = 0;
@@ -138,6 +150,7 @@ export function useAdaptiveBoardSizing(playerCount, layoutKey) {
     return () => {
       disposed = true;
       if (frame) window.cancelAnimationFrame(frame);
+      if (deferredResizeTimer) window.clearTimeout(deferredResizeTimer);
       resizeObserver?.disconnect();
       window.removeEventListener('resize', handleResize);
       window.removeEventListener('orientationchange', handleOrientationChange);
