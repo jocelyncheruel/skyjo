@@ -1,14 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { Download, Share, SquarePlus, X } from 'lucide-react';
+import { isStandaloneApp } from '../appDisplayMode.js';
 
 const DISMISS_KEY = 'skyjo-install-prompt-dismissed-until';
 const DISMISS_DURATION_MS = 30 * 24 * 60 * 60 * 1000;
 const PROMPT_DELAY_MS = 6000;
-
-function isStandalone() {
-  return window.matchMedia?.('(display-mode: standalone)').matches
-    || window.navigator.standalone === true;
-}
 
 function isAppleMobile() {
   return /iPad|iPhone|iPod/i.test(window.navigator.userAgent)
@@ -39,7 +35,7 @@ export default function InstallAppPrompt() {
   const [installEvent, setInstallEvent] = useState(null);
   const [pageEligible, setPageEligible] = useState(() => !isRoomOpen());
   const [delayElapsed, setDelayElapsed] = useState(false);
-  const [dismissed, setDismissed] = useState(() => isStandalone() || dismissalIsActive());
+  const [dismissed, setDismissed] = useState(() => isStandaloneApp() || dismissalIsActive());
   const [showAppleHelp, setShowAppleHelp] = useState(false);
   const appleMobile = isAppleMobile();
 
@@ -69,7 +65,7 @@ export default function InstallAppPrompt() {
   const visible = delayElapsed
     && pageEligible
     && !dismissed
-    && !isStandalone()
+    && !isStandaloneApp()
     && (installEvent || appleMobile);
 
   function decline() {
