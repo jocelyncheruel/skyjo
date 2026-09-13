@@ -1,5 +1,5 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { createPortal, flushSync } from 'react-dom';
+import { createPortal } from 'react-dom';
 import Card from './Card.jsx';
 
 const MOTION_MIN_DURATION_MS = 480;
@@ -493,14 +493,11 @@ export default function CardMotionLayer({
   const previousStateRef = useRef(state);
   const sequenceRef = useRef(0);
   const timersRef = useRef(new Set());
-  const animationFramesRef = useRef(new Set());
   const destinationsRef = useRef(new Set());
   const [flights, setFlights] = useState([]);
-  const [preparedFlightIds, setPreparedFlightIds] = useState(() => new Set());
 
   useEffect(() => () => {
     for (const timer of timersRef.current) window.clearTimeout(timer);
-    for (const frame of animationFramesRef.current) window.cancelAnimationFrame(frame);
     for (const destination of destinationsRef.current) {
       destination.classList.remove('sj-card-motion-destination');
       destination.classList.remove('sj-card-motion-destination-late');
@@ -579,49 +576,36 @@ export default function CardMotionLayer({
 
     const flightsByDestination = prepareDestinationSnapshots(nextFlights);
 
+    for (const [destination, destinationFlights] of flightsByDestination) {
+      const finalFlight = destinationFlights.at(-1);
+      destination.dataset.sjCardMotionBatch = batch;
+      destination.style.setProperty('--sj-card-arrival-duration', `${finalFlight.duration}ms`);
+      destination.style.setProperty('--sj-card-arrival-delay', `${finalFlight.delay}ms`);
+      destination.classList.add('sj-card-motion-destination');
+      destination.classList.toggle(
+        'sj-card-motion-destination-late',
+        !!finalFlight.lateHandoff,
+      );
+      destinationsRef.current.add(destination);
+    }
     setFlights((current) => [...current, ...nextFlights]);
 
     const lifetime = Math.max(...nextFlights.map((flight) => flight.duration + flight.delay)) + 80;
-    const firstFrame = window.requestAnimationFrame(() => {
-      animationFramesRef.current.delete(firstFrame);
-      const secondFrame = window.requestAnimationFrame(() => {
-        animationFramesRef.current.delete(secondFrame);
-        const nextFlightIds = new Set(nextFlights.map(({ id }) => id));
-        flushSync(() => {
-          setPreparedFlightIds((current) => new Set([...current, ...nextFlightIds]));
-        });
-        for (const [destination, destinationFlights] of flightsByDestination) {
-          const finalFlight = destinationFlights.at(-1);
-          destination.dataset.sjCardMotionBatch = batch;
-          destination.style.setProperty('--sj-card-arrival-duration', `${finalFlight.duration}ms`);
-          destination.style.setProperty('--sj-card-arrival-delay', `${finalFlight.delay}ms`);
-          destination.classList.add('sj-card-motion-destination');
-          destination.classList.toggle(
-            'sj-card-motion-destination-late',
-            !!finalFlight.lateHandoff,
-          );
-          destinationsRef.current.add(destination);
-        }
-        onMotionBatch?.(Date.now() + lifetime);
-        const timer = window.setTimeout(() => {
-          timersRef.current.delete(timer);
-          setFlights((current) => current.filter((flight) => !nextFlightIds.has(flight.id)));
-          setPreparedFlightIds((current) => new Set([...current].filter((id) => !nextFlightIds.has(id))));
-          for (const flight of nextFlights) {
-            if (flight.destination.dataset.sjCardMotionBatch !== batch) continue;
-            flight.destination.classList.remove('sj-card-motion-destination');
-            flight.destination.classList.remove('sj-card-motion-destination-late');
-            delete flight.destination.dataset.sjCardMotionBatch;
-            flight.destination.style.removeProperty('--sj-card-arrival-duration');
-            flight.destination.style.removeProperty('--sj-card-arrival-delay');
-            destinationsRef.current.delete(flight.destination);
-          }
-        }, lifetime);
-        timersRef.current.add(timer);
-      });
-      animationFramesRef.current.add(secondFrame);
-    });
-    animationFramesRef.current.add(firstFrame);
+    onMotionBatch?.(Date.now() + lifetime);
+    const timer = window.setTimeout(() => {
+      timersRef.current.delete(timer);
+      setFlights((current) => current.filter((flight) => !nextFlights.some(({ id }) => id === flight.id)));
+      for (const flight of nextFlights) {
+        if (flight.destination.dataset.sjCardMotionBatch !== batch) continue;
+        flight.destination.classList.remove('sj-card-motion-destination');
+        flight.destination.classList.remove('sj-card-motion-destination-late');
+        delete flight.destination.dataset.sjCardMotionBatch;
+        flight.destination.style.removeProperty('--sj-card-arrival-duration');
+        flight.destination.style.removeProperty('--sj-card-arrival-delay');
+        destinationsRef.current.delete(flight.destination);
+      }
+    }, lifetime);
+    timersRef.current.add(timer);
   }, [anchorRootRef, coordinateRootRef, enabled, onMotionBatch, state]);
 
   if (!flights.length) return null;
@@ -635,7 +619,7 @@ export default function CardMotionLayer({
         <React.Fragment key={flight.id}>
           {flight.targetCard && (
             <div
-              className={`sj-card-target-hold ${preparedFlightIds.has(flight.id) ? '' : 'sj-card-motion-part-preparing'}`.trim()}
+              className="sj-card-target-hold"
               style={{
                 left: `${flight.destinationRect.left}px`,
                 top: `${flight.destinationRect.top}px`,
@@ -656,7 +640,7 @@ export default function CardMotionLayer({
           )}
           {flight.settledCard && (
             <div
-              className={`sj-card-target-settled ${preparedFlightIds.has(flight.id) ? '' : 'sj-card-motion-part-preparing'}`.trim()}
+              className="sj-card-target-settled"
               style={{
                 left: `${flight.destinationRect.left}px`,
                 top: `${flight.destinationRect.top}px`,
@@ -678,7 +662,6 @@ export default function CardMotionLayer({
           <div
             className={[
               'sj-card-flight',
-            preparedFlightIds.has(flight.id) ? '' : 'sj-card-flight-preparing',
             `sj-card-flight-${flight.tone || 'place'}`,
             flight.stack ? `sj-card-flight-${flight.tone}-${flight.stack}` : '',
             flight.handoffRole ? `sj-card-flight-handoff-${flight.handoffRole}` : '',
