@@ -11509,9 +11509,24 @@ select:focus {
 }
 .sj-room-lobby-actions { flex: 0 0 auto; display: grid; grid-template-columns: repeat(2, minmax(150px, 1fr)); gap: 8px; }
 .sj-room-lobby-actions:has(> :only-child) { grid-template-columns: minmax(150px, 1fr); }
-.sj-room-lobby-actions > button { width: 100%; min-height: 43px; border-radius: 12px; }
-.sj-room-lobby-actions .sj-guide-open-button { padding-inline: 14px; }
-.sj-room-lobby-start { display: flex; align-items: center; justify-content: center; gap: 6px; }
+.sj-room-lobby-actions > .sj-room-lobby-action-button {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: 43px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: 12px;
+  font: inherit;
+  font-weight: 850;
+  line-height: 1;
+  white-space: nowrap;
+}
+.sj-room-lobby-actions :where(.sj-guide-open-button) { padding-inline: 14px; }
 
 @media (max-width: 780px) {
   .sj-room-lobby { width: min(620px, 100%); }
@@ -11570,10 +11585,35 @@ select:focus {
   .sj-lobby-format-values button,
   .sj-lobby-format-values .sj-admin-custom-number { min-height: 29px; }
   .sj-lobby-format-values .sj-admin-custom-number input { min-height: 21px; }
-  .sj-room-lobby-footer { display: grid; gap: 9px; padding: 10px 14px 12px; }
-  .sj-room-lobby-actions { width: 100%; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .sj-room-lobby-footer { width: 100%; display: grid; gap: 9px; padding: 10px 14px 12px; }
+  .sj-room-lobby-actions {
+    width: 100%;
+    min-width: 0;
+    justify-self: stretch;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
   .sj-room-lobby-actions:has(> :only-child) { grid-template-columns: 1fr; }
-  .sj-room-lobby-actions > button { min-width: 0; min-height: 40px; font-size: 10px; }
+  .sj-room-lobby-actions > .sj-room-lobby-action-button {
+    width: 100%;
+    height: 40px;
+    min-width: 0;
+    min-height: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    padding: 0 9px;
+    font-size: clamp(8px, 2.55vw, 10px);
+    font-weight: 850;
+    line-height: 1;
+  }
+  .sj-room-lobby-actions > .sj-room-lobby-action-button > span { display: block; }
+  .sj-room-lobby-actions > .sj-room-lobby-action-button svg {
+    width: 18px;
+    height: 18px;
+    flex: 0 0 18px;
+    display: block;
+  }
 }
 
 @media (max-width: 500px) {
@@ -11642,6 +11682,17 @@ select:focus {
 }
 
 @media (max-width: 390px) {
+  .sj-room-lobby-actions { gap: 5px; }
+  .sj-room-lobby-actions > .sj-room-lobby-action-button {
+    gap: 3px;
+    padding: 0 7px;
+    font-size: 8px;
+  }
+  .sj-room-lobby-actions > .sj-room-lobby-action-button svg {
+    width: 16px;
+    height: 16px;
+    flex-basis: 16px;
+  }
   .sj-lobby-player-badges em { display: none; }
   .sj-room-lobby-player-badges > span { padding-inline: 5px; }
   .sj-room-lobby-summary > span:nth-child(3) { max-width: 100%; }

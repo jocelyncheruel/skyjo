@@ -93,9 +93,9 @@ function RuleChoice({ number, title, children, tone = 'green' }) {
   );
 }
 
-export function GameGuideButton({ onClick }) {
+export function GameGuideButton({ onClick, className = '' }) {
   return (
-    <button type="button" className="sj-guide-open-button" onClick={onClick} aria-haspopup="dialog">
+    <button type="button" className={`sj-guide-open-button ${className}`.trim()} onClick={onClick} aria-haspopup="dialog">
       <BookOpen aria-hidden="true" size={19} />
       <span>Comment jouer ?</span>
     </button>

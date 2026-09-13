@@ -215,15 +215,21 @@ export default function RoomLobby({
 
       <footer className="sj-room-lobby-footer">
         <div className="sj-room-lobby-actions">
-          <GameGuideButton onClick={onOpenGuide} />
-          {!isSpectator && availableSeats > 0 && <button type="button" className="sj-btn sj-room-lobby-friends" onClick={onOpenFriends}><UserPlus aria-hidden="true" size={16} /> Inviter des amis</button>}
+          <GameGuideButton className="sj-room-lobby-action-button" onClick={onOpenGuide} />
+          {!isSpectator && availableSeats > 0 && (
+            <button type="button" className="sj-btn sj-room-lobby-friends sj-room-lobby-action-button" onClick={onOpenFriends}>
+              <UserPlus aria-hidden="true" size={16} />
+              <span>Inviter des amis</span>
+            </button>
+          )}
           {hostControlsEnabled && (
             <button
-              className="sj-btn sj-btn-primary sj-room-lobby-start"
+              className="sj-btn sj-btn-primary sj-room-lobby-start sj-room-lobby-action-button"
               disabled={players.length < 2}
               onClick={onStart}
             >
-              Lancer la partie <ChevronRight aria-hidden="true" size={18} />
+              <ChevronRight aria-hidden="true" size={18} />
+              <span>Lancer la partie</span>
             </button>
           )}
         </div>
