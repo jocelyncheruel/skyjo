@@ -11628,6 +11628,17 @@ select:focus {
 }
 
 @media (max-width: 500px) {
+  .sj-room-lobby-actions { gap: 6px; }
+  .sj-room-lobby-actions > .sj-room-lobby-action-button {
+    gap: 4px;
+    padding: 0 8px;
+    font-size: 8px;
+  }
+  .sj-room-lobby-actions > .sj-room-lobby-action-button svg {
+    width: 16px;
+    height: 16px;
+    flex-basis: 16px;
+  }
   .sj-room-lobby-header {
     flex-direction: column;
     align-items: stretch;
@@ -11696,13 +11707,7 @@ select:focus {
   .sj-room-lobby-actions { gap: 5px; }
   .sj-room-lobby-actions > .sj-room-lobby-action-button {
     gap: 3px;
-    padding: 0 7px;
-    font-size: 8px;
-  }
-  .sj-room-lobby-actions > .sj-room-lobby-action-button svg {
-    width: 16px;
-    height: 16px;
-    flex-basis: 16px;
+    padding-inline: 7px;
   }
   .sj-lobby-player-badges em { display: none; }
   .sj-room-lobby-player-badges > span { padding-inline: 5px; }
