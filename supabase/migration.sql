@@ -253,9 +253,13 @@ CREATE TABLE IF NOT EXISTS public.friend_online_notifications (
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   friend_user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  last_notified_at TIMESTAMPTZ,
   PRIMARY KEY (user_id, friend_user_id),
   CONSTRAINT friend_online_notifications_distinct_users_check CHECK (user_id <> friend_user_id)
 );
+
+ALTER TABLE public.friend_online_notifications
+  ADD COLUMN IF NOT EXISTS last_notified_at TIMESTAMPTZ;
 
 CREATE INDEX IF NOT EXISTS friend_online_notifications_friend_idx
   ON public.friend_online_notifications (friend_user_id, user_id);
@@ -280,6 +284,10 @@ CREATE INDEX IF NOT EXISTS web_push_subscriptions_user_idx
 
 INSERT INTO public.skyjo_schema_migrations (version)
 VALUES ('v9')
+ON CONFLICT (version) DO NOTHING;
+
+INSERT INTO public.skyjo_schema_migrations (version)
+VALUES ('v10')
 ON CONFLICT (version) DO NOTHING;
 
 INSERT INTO public.skyjo_schema_migrations (version)

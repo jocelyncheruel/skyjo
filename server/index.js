@@ -91,6 +91,7 @@ const TURNSTILE_SECRET_KEY = String(process.env.TURNSTILE_SECRET_KEY || '').trim
 const WEB_PUSH_VAPID_PUBLIC_KEY = String(process.env.WEB_PUSH_VAPID_PUBLIC_KEY || '').trim();
 const WEB_PUSH_VAPID_PRIVATE_KEY = String(process.env.WEB_PUSH_VAPID_PRIVATE_KEY || '').trim();
 const WEB_PUSH_CONTACT = String(process.env.WEB_PUSH_CONTACT || '').trim();
+const FRIEND_ONLINE_NOTIFICATION_COOLDOWN_MS = 30 * 60 * 1000;
 const WEB_PUSH_ENABLED = Boolean(
   WEB_PUSH_VAPID_PUBLIC_KEY && WEB_PUSH_VAPID_PRIVATE_KEY && WEB_PUSH_CONTACT,
 );
@@ -1732,13 +1733,27 @@ async function notifyWatchedFriendOnline(friendUserId) {
     relation.requester_user_id === friendUserId
       ? relation.addressee_user_id : relation.requester_user_id
   )));
-  await Promise.all((watchers || []).filter(({ user_id: userId }) => acceptedFriendIds.has(userId))
-    .map(({ user_id: userId }) => sendOfflinePush(userId, {
-    title: 'Un ami est en ligne',
-    body: `${friendProfile.display_name} est maintenant en ligne.`,
-    tag: `friend-online-${friendUserId}`,
-    url: '/',
-  })));
+  const cooldownStartedAt = new Date(Date.now() - FRIEND_ONLINE_NOTIFICATION_COOLDOWN_MS).toISOString();
+  await Promise.all((watchers || [])
+    .filter(({ user_id: userId }) => acceptedFriendIds.has(userId) && !userHasActiveSocket(userId))
+    .map(async ({ user_id: userId }) => {
+      const { data: claimedWatcher, error: claimError } = await supabase
+        .from('friend_online_notifications')
+        .update({ last_notified_at: new Date().toISOString() })
+        .eq('user_id', userId)
+        .eq('friend_user_id', friendUserId)
+        .or(`last_notified_at.is.null,last_notified_at.lt.${cooldownStartedAt}`)
+        .select('user_id')
+        .maybeSingle();
+      if (claimError) throw claimError;
+      if (!claimedWatcher) return;
+      await sendOfflinePush(userId, {
+        title: 'Un ami est en ligne',
+        body: `${friendProfile.display_name} est maintenant en ligne.`,
+        tag: `friend-online-${friendUserId}`,
+        url: '/',
+      });
+    }));
 }
 
 const app = express();
