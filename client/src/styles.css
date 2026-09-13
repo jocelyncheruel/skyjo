@@ -4527,12 +4527,24 @@ button.sj-action-count-badge:focus-visible {
   .sj-friends-content { max-height: min(430px, calc(var(--sj-modal-available-height) - 270px)); padding: 16px; overflow-y: auto; }
   .sj-friends-modal form button { padding-inline: 11px; }
   .sj-friends-content .sj-friends-list li {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+  }
+  .sj-friends-list .sj-lobby-player-badges {
+    grid-column: auto;
+    display: flex;
+    min-width: 0;
+    gap: 3px;
+  }
+  .sj-friends-list .sj-lobby-player-badges > span {
+    padding: 3px 5px;
+    font-size: 7px;
+    white-space: nowrap;
+  }
+  .sj-friends-player-actions { grid-column: 3; }
+  .sj-friends-content .sj-friends-request-list li {
     grid-template-columns: minmax(0, 1fr) auto;
   }
-  .sj-friends-list .sj-lobby-player-badges { display: none; }
-  .sj-friends-list .sj-lobby-player-badges:has(.is-invited) { grid-column: 1; display: flex; }
-  .sj-friends-list .sj-lobby-player-badges:has(.is-invited) > span:not(.is-invited) { display: none; }
-  .sj-friends-player-actions { grid-column: 2; }
+  .sj-friends-request-list .sj-friends-player-actions { grid-column: 2; }
   .sj-friends-settings { margin-inline: 16px; }
 }
 
