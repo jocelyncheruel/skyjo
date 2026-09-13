@@ -5384,9 +5384,12 @@ button.sj-action-count-badge:focus-visible {
   cursor: pointer;
 }
 
-.sj-profile-main-tabs button:hover,
-.sj-profile-statistics-tabs button:hover {
-  color: var(--text);
+@media (hover: hover) and (pointer: fine) {
+  .sj-profile-main-tabs button:hover:not([aria-selected="true"]),
+  .sj-profile-statistics-tabs button:hover:not([aria-selected="true"]) {
+    border-radius: 7px 7px 0 0;
+    background: rgba(255, 255, 255, 0.035);
+  }
 }
 
 .sj-profile-main-tabs button[aria-selected="true"],
