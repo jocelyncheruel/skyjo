@@ -103,6 +103,7 @@ export default function FriendsModal({ open, onClose, onWatch, onJoin, onError, 
   const [profileFriend, setProfileFriend] = useState(null);
   const [friendMenu, setFriendMenu] = useState(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [visibleNotifications, setVisibleNotifications] = useState([]);
   const applyOnlineNotificationOverrides = useCallback((nextData) => {
     const desiredByRelation = onlineNotificationDesiredRef.current;
     const overridesByRelation = onlineNotificationOverrideRef.current;
@@ -131,9 +132,14 @@ export default function FriendsModal({ open, onClose, onWatch, onJoin, onError, 
       if (!preferenceSyncingRef.current && !preferenceDesiredRef.current && !preferenceOverrideRef.current) {
         preferenceConfirmedRef.current = nextData.preferences;
       }
-      setData(applyOnlineNotificationOverrides(nextData));
+      const resolvedData = applyOnlineNotificationOverrides(nextData);
+      setData(resolvedData);
       setLoaded(true);
-    } catch (error) { if (report) onError(error.message); }
+      return resolvedData;
+    } catch (error) {
+      if (report) onError(error.message);
+      return null;
+    }
   }, [applyOnlineNotificationOverrides, onError]);
 
   useLayoutEffect(() => {
@@ -145,15 +151,25 @@ export default function FriendsModal({ open, onClose, onWatch, onJoin, onError, 
       preferenceConfirmedRef.current = friendsCache.preferences;
     }
     setData(applyOnlineNotificationOverrides(friendsCache));
+    if (!markedOpenRef.current) {
+      setVisibleNotifications((friendsCache.notifications || []).filter(({ read_at: readAt }) => !readAt));
+    }
     setLoaded(true);
   }, [applyOnlineNotificationOverrides, open]);
 
   useEffect(() => {
-    if (!open) { markedOpenRef.current = false; setFriendMenu(null); setSettingsOpen(false); return undefined; }
-    load(true);
-    const timer = window.setInterval(load, 15_000);
-    if (!markedOpenRef.current) {
+    if (!open) {
+      markedOpenRef.current = false;
+      setVisibleNotifications([]);
+      setFriendMenu(null);
+      setSettingsOpen(false);
+      return undefined;
+    }
+    let active = true;
+    load(true).then((nextData) => {
+      if (!active || markedOpenRef.current || !nextData) return;
       markedOpenRef.current = true;
+      setVisibleNotifications((nextData.notifications || []).filter(({ read_at: readAt }) => !readAt));
       friendsApi({ method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'mark_read' }) }).then(() => {
         setData((current) => current ? {
           ...current,
@@ -164,8 +180,9 @@ export default function FriendsModal({ open, onClose, onWatch, onJoin, onError, 
           unreadCount: 0,
         } : current);
       }).catch(() => {});
-    }
-    return () => window.clearInterval(timer);
+    });
+    const timer = window.setInterval(load, 15_000);
+    return () => { active = false; window.clearInterval(timer); };
   }, [load, open, refreshToken]);
   useEffect(() => { if (open && data) modalRef.current?.focus({ preventScroll: true }); }, [data, open]);
   useEffect(() => {
@@ -406,7 +423,7 @@ export default function FriendsModal({ open, onClose, onWatch, onJoin, onError, 
         <div className="sj-friends-layout">
           <section className="sj-friends-access" aria-label="Ajouter un ami"><div className="sj-room-lobby-invite sj-friends-code"><span>Votre code ami</span><div><span className="sj-room-code-copy"><button type="button" className={`sj-room-lobby-code ${copied ? 'sj-room-copy-copied' : ''}`} disabled={!loaded} onClick={copyFriendCode}>{data.friendCode || '••••••••'}</button>{copied && <span className="sj-copy-toast" role="status">✓</span>}</span></div><small>Appuyez sur le code pour le copier</small></div><form onSubmit={(event) => { event.preventDefault(); mutate('request', { friendCode: code }); }}><input value={code} onChange={(event) => setCode(event.target.value.replace(/[^a-z0-9]/gi, '').toUpperCase().slice(0, 8))} placeholder="Code ami" aria-label="Code ami" disabled={!loaded} /><button type="submit" disabled={!loaded || busyAction === 'request:' || code.length !== 8}><UserPlus aria-hidden="true" size={17} /> Ajouter</button></form></section>
           <div className="sj-friends-content" onScroll={() => setFriendMenu(null)}>
-            {!!data.notifications?.length && <section><h3><span>Nouveautés</span></h3><div className="sj-friends-notifications">{data.notifications.slice(0, 3).map((item) => <p key={item.id}><Check aria-hidden="true" size={13} />{item.message}</p>)}</div></section>}
+            {!!visibleNotifications.length && <section><h3><span>Nouveautés</span></h3><div className="sj-friends-notifications">{visibleNotifications.slice(0, 3).map((item) => <p key={item.id}><Check aria-hidden="true" size={13} />{item.message}</p>)}</div></section>}
             {!!data.requests?.length && <section><h3><span>Demandes</span><b>{data.requests.length}</b></h3><ul className="sj-lobby-player-list sj-friends-list sj-friends-request-list">{data.requests.map((friend) => <li className="sj-pop-in" key={friend.relationId}><span className="sj-lobby-player-copy"><strong>{friend.name}</strong></span><span className="sj-friends-player-actions">{friend.direction === 'incoming' && actionButton('sj-friends-accept', 'Accepter', <Check aria-hidden="true" size={17} />, () => mutate('accept', { relationId: friend.relationId }))}{actionButton('sj-friends-decline', friend.direction === 'incoming' ? 'Refuser' : 'Annuler', <X aria-hidden="true" size={17} />, () => mutate(friend.direction === 'incoming' ? 'decline' : 'cancel', { relationId: friend.relationId }))}</span></li>)}</ul></section>}
             <section><h3><span>Mes amis</span><span className="sj-friends-online-count"><i aria-hidden="true" />{onlineCount} en ligne</span></h3>{!loaded ? <div className="sj-friends-loading" aria-hidden="true"><span /><span /></div> : friends.length ? <ul className="sj-lobby-player-list sj-friends-list">{friends.map((friend) => {
               const invitationPending = data.sentInvitations?.some((invitation) => invitation.relationId === friend.relationId && invitation.roomId === roomId);
