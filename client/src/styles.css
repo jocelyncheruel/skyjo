@@ -13022,3 +13022,150 @@ select:focus {
   }
 
 }
+
+/* The desktop lobby needs a dedicated compact composition on short phones in landscape. */
+@media (min-width: 781px) and (max-height: 520px) {
+  .sj-app-shell.sj-lobby-room.sj-room-controls-layout:has(.sj-room-lobby) {
+    --sj-lobby-control-clearance: max(
+      calc(max(7px, env(safe-area-inset-top)) + 42px),
+      calc(max(7px, env(safe-area-inset-bottom)) + 42px)
+    );
+  }
+
+  .sj-room-lobby-header {
+    gap: 18px;
+    padding: 8px 14px 6px;
+  }
+
+  .sj-room-lobby-eyebrow,
+  .sj-room-lobby-title p,
+  .sj-room-lobby-invite > span,
+  .sj-room-lobby-invite > small,
+  .sj-room-lobby-seats,
+  .sj-room-lobby-add-bot,
+  .sj-room-lobby-role-note,
+  .sj-lobby-format {
+    display: none;
+  }
+
+  .sj-room-lobby-title h1 {
+    margin: 0;
+    font-size: 21px;
+  }
+
+  .sj-room-lobby-code,
+  .sj-room-lobby-qr {
+    min-height: 32px;
+    border-radius: 9px;
+  }
+
+  .sj-room-lobby-code {
+    padding: 4px 10px;
+    font-size: 16px;
+  }
+
+  .sj-room-lobby-qr {
+    width: 32px;
+  }
+
+  .sj-room-lobby-summary {
+    gap: 5px;
+    margin-inline: 14px;
+    padding: 4px 7px;
+  }
+
+  .sj-room-lobby-summary > span {
+    padding: 4px 7px;
+    font-size: 8px;
+  }
+
+  .sj-room-lobby-content {
+    gap: 8px;
+    padding: 6px 14px;
+  }
+
+  .sj-room-lobby-section-head {
+    padding: 6px 9px 5px;
+  }
+
+  .sj-room-lobby-section-icon {
+    display: none;
+  }
+
+  .sj-lobby-player-list {
+    gap: 4px;
+    padding-inline: 7px;
+  }
+
+  .sj-lobby-player-list li {
+    min-height: 31px;
+    padding: 3px 7px;
+  }
+
+  .sj-room-lobby-settings {
+    display: block;
+  }
+
+  .sj-room-lobby-mode-options {
+    min-height: 34px;
+    margin: 0 8px 8px;
+    padding: 3px;
+  }
+
+  .sj-room-lobby-mode-options > button {
+    min-height: 26px;
+  }
+
+  .sj-room-lobby-footer {
+    padding: 6px 14px 7px;
+  }
+
+  .sj-room-lobby-actions > .sj-room-lobby-action-button {
+    min-height: 34px;
+    padding-block: 6px;
+  }
+}
+
+/*
+ * Installed-app viewport contract
+ *
+ * Some standalone engines expose a dynamic viewport that is shorter than the
+ * initial containing block (notably around Android system UI). Mixing 100dvh
+ * shells with percentage-height roots then leaves the app and its fixed
+ * overlays ending on different lines. In an installed PWA the root containing
+ * block is the stable source of truth; safe-area insets still protect every
+ * interactive control from notches and gesture navigation.
+ *
+ * This is intentionally display-mode scoped so the browser layout keeps its
+ * existing dynamic-toolbar behaviour.
+ */
+@media (display-mode: standalone), (display-mode: fullscreen) {
+  html,
+  body,
+  #root {
+    width: 100%;
+    height: 100%;
+    min-height: 100%;
+    overflow: hidden;
+    background-color: #0d1117;
+  }
+
+  .sj-app-shell,
+  .sj-lobby,
+  .auth-page,
+  .legal-page {
+    height: 100%;
+    min-height: 100%;
+  }
+
+  .sj-modal-overlay {
+    --sj-modal-available-height: calc(
+      100% - var(--sj-modal-space-top) - var(--sj-modal-space-bottom)
+    );
+    height: 100%;
+  }
+
+  .sj-home-portal-stack {
+    height: min(720px, calc(100% - 36px));
+  }
+}
