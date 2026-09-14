@@ -872,7 +872,7 @@ const LEGAL_DOCUMENTS = {
       ],
       [
         "Données techniques et stockage local",
-        "L'adresse IP est utilisée temporairement en mémoire pour limiter les requêtes abusives. Le navigateur reçoit uniquement un identifiant de session aléatoire dans un cookie HttpOnly, Secure et SameSite, inaccessible au JavaScript. Les jetons Supabase restent chiffrés côté serveur. Si vous choisissez « Rester connecté », le cookie peut persister jusqu'à sept jours ; sinon il disparaît à la fermeture du navigateur. Le navigateur peut conserver la préférence, le pseudonyme et le code de la dernière salle. Aucun jeton de reconnexion joueur distinct n'est utilisé.",
+        "L'adresse IP est utilisée temporairement en mémoire pour limiter les requêtes abusives. Le navigateur reçoit uniquement un identifiant de session aléatoire dans un cookie HttpOnly, Secure et SameSite, inaccessible au JavaScript. Les jetons Supabase restent chiffrés côté serveur. Si vous choisissez « Rester connecté », le cookie peut persister jusqu'à trente jours ; sinon il s'agit d'un cookie de session destiné à disparaître à la fermeture du navigateur. Le navigateur peut conserver la préférence, le pseudonyme et le code de la dernière salle. Aucun jeton de reconnexion joueur distinct n'est utilisé.",
       ],
       [
         "Caméra et QR codes",
@@ -895,7 +895,7 @@ const LEGAL_DOCUMENTS = {
       ],
       [
         "Conservation",
-        "Le compte et ses statistiques de jeu sont conservés jusqu'à sa suppression. Une session BFF expire après 24 heures d'inactivité et au plus tard après sept jours ; elle est aussi supprimée lors d'une déconnexion globale. Avec la configuration actuelle, une salle devient éligible à la suppression après 24 heures sans activité enregistrée ; elle est supprimée avec son historique et ses messages lors du prochain nettoyage automatique. Une reconnexion ou une action avant ce nettoyage actualise sa date d'activité. Les limites de requêtes sont conservées uniquement en mémoire pendant leur courte fenêtre de contrôle. Les données du navigateur restent présentes jusqu'à la déconnexion, la sortie de salle ou leur effacement manuel, selon leur nature.",
+        "Le compte et ses statistiques de jeu sont conservés jusqu'à sa suppression. Sans « Rester connecté », une session BFF expire après 24 heures d'inactivité et au plus tard après sept jours. Avec cette option, elle expire après quatorze jours d'inactivité et au plus tard après trente jours. Elle est aussi supprimée lors d'une déconnexion globale. Avec la configuration actuelle, une salle devient éligible à la suppression après 24 heures sans activité enregistrée ; elle est supprimée avec son historique et ses messages lors du prochain nettoyage automatique. Une reconnexion ou une action avant ce nettoyage actualise sa date d'activité. Les limites de requêtes sont conservées uniquement en mémoire pendant leur courte fenêtre de contrôle. Les données du navigateur restent présentes jusqu'à la déconnexion, la sortie de salle ou leur effacement manuel, selon leur nature.",
       ],
       [
         "Visibilité et destinataires",

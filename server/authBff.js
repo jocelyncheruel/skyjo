@@ -12,6 +12,8 @@ const OAUTH_COOKIE_PROD = '__Host-skyjo_oauth';
 const OAUTH_COOKIE_DEV = 'skyjo_oauth';
 const SESSION_IDLE_MS = 24 * 60 * 60 * 1000;
 const SESSION_ABSOLUTE_MS = 7 * 24 * 60 * 60 * 1000;
+const REMEMBERED_SESSION_IDLE_MS = 14 * 24 * 60 * 60 * 1000;
+const REMEMBERED_SESSION_ABSOLUTE_MS = 30 * 24 * 60 * 60 * 1000;
 const OAUTH_FLOW_MS = 10 * 60 * 1000;
 const RECENT_AUTHENTICATION_MS = 10 * 60 * 1000;
 const ACCESS_REFRESH_MARGIN_MS = 60_000;
@@ -384,7 +386,7 @@ export function createAuthBff({
   function setSessionCookie(res, rawToken, remember) {
     res.append('Set-Cookie', serializeAuthCookie(sessionCookieName, rawToken, {
       production,
-      maxAge: remember ? Math.floor(SESSION_ABSOLUTE_MS / 1000) : null,
+      maxAge: remember ? Math.floor(REMEMBERED_SESSION_ABSOLUTE_MS / 1000) : null,
     }));
   }
 
@@ -407,7 +409,10 @@ export function createAuthBff({
     const rawToken = randomBytes(32).toString('base64url');
     const csrfToken = randomBytes(32).toString('base64url');
     const now = Date.now();
-    const absoluteExpiresAt = new Date(now + SESSION_ABSOLUTE_MS).toISOString();
+    const remembered = Boolean(remember);
+    const idleMs = remembered ? REMEMBERED_SESSION_IDLE_MS : SESSION_IDLE_MS;
+    const absoluteMs = remembered ? REMEMBERED_SESSION_ABSOLUTE_MS : SESSION_ABSOLUTE_MS;
+    const absoluteExpiresAt = new Date(now + absoluteMs).toISOString();
     const { error } = await serviceClient.from('app_sessions').insert({
       token_hash: sha256(rawToken),
       user_id: supabaseSession.user.id,
@@ -418,9 +423,9 @@ export function createAuthBff({
         authContext: authContext === 'recovery' ? 'recovery' : 'standard',
       }, 'session'),
       access_expires_at: new Date(claims.exp * 1000).toISOString(),
-      idle_expires_at: new Date(now + SESSION_IDLE_MS).toISOString(),
+      idle_expires_at: new Date(now + idleMs).toISOString(),
       absolute_expires_at: absoluteExpiresAt,
-      remember: Boolean(remember),
+      remember: remembered,
       last_seen_at: new Date(now).toISOString(),
     });
     if (error) throw error;
@@ -433,8 +438,8 @@ export function createAuthBff({
         .delete().in('id', excess.map((item) => item.id));
       if (pruneError) throw pruneError;
     }
-    setSessionCookie(res, rawToken, Boolean(remember));
-    return { user: publicUser(supabaseSession.user), csrfToken, remember: Boolean(remember) };
+    setSessionCookie(res, rawToken, remembered);
+    return { user: publicUser(supabaseSession.user), csrfToken, remember: remembered };
   }
 
   async function deleteSessionByToken(rawToken) {
@@ -509,7 +514,8 @@ export function createAuthBff({
       await serviceClient.from('app_sessions').delete().eq('id', row.id);
       return null;
     }
-    const nextIdle = new Date(Math.min(now + SESSION_IDLE_MS, Date.parse(row.absolute_expires_at))).toISOString();
+    const idleMs = row.remember === true ? REMEMBERED_SESSION_IDLE_MS : SESSION_IDLE_MS;
+    const nextIdle = new Date(Math.min(now + idleMs, Date.parse(row.absolute_expires_at))).toISOString();
     if (Date.parse(row.last_seen_at) < now - 60_000) {
       const { error: touchError } = await serviceClient.from('app_sessions').update({
         last_seen_at: new Date(now).toISOString(), idle_expires_at: nextIdle,
