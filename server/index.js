@@ -1498,6 +1498,7 @@ async function persistedFriendGames(userIds) {
 
 async function friendshipPayload(user) {
   const profile = await ensureSocialProfile(user);
+  const currentRoomId = liveFriendPresence(user.id).game?.roomId || null;
   const { data: relations, error } = await supabase.from('friendships')
     .select('id, requester_user_id, addressee_user_id, status, created_at, updated_at')
     .or(`requester_user_id.eq.${user.id},addressee_user_id.eq.${user.id}`)
@@ -1555,6 +1556,7 @@ async function friendshipPayload(user) {
     const otherProfile = profilesById.get(otherUserId) || {};
     const livePresence = includePresence ? liveFriendPresence(otherUserId) : null;
     const rawGame = livePresence?.game || storedGames.get(otherUserId) || null;
+    const inSameRoom = Boolean(currentRoomId && rawGame?.roomId === currentRoomId);
     const gameVisible = otherProfile.show_game !== false;
     const directFriendAccess = rawGame?.visibility === 'public';
     const canJoin = Boolean(
@@ -1590,6 +1592,7 @@ async function friendshipPayload(user) {
             ? visibleGame.phase === 'lobby' ? 'lobby' : 'playing'
             : livePresence.online ? otherProfile.presence_status || 'available' : 'offline',
         game: visibleGame,
+        inSameRoom,
         profile: otherProfile.show_quick_profile === false ? null : quickStats,
         notifyOnline: onlineNotificationIds.has(otherUserId),
       } : {}),
@@ -2092,15 +2095,19 @@ app.post('/api/friends', requireHttpAuth, authBff.requireStandardSession, authBf
           if (!relation) throw new PublicError('friend_request_missing', 'Cet ami n’est plus disponible.', 404);
           const targetUserId = relation.requester_user_id === currentUserId
             ? relation.addressee_user_id : relation.requester_user_id;
-          const [room, member, targetProfile] = await Promise.all([
+          const [room, member, targetMember, targetProfile] = await Promise.all([
             getOrLoadRoom(roomId),
             findMemberByUser(roomId, currentUserId),
+            findMemberByUser(roomId, targetUserId),
             supabase.from('social_profiles').select('allow_friend_join, presence_status, notify_game_invites')
               .eq('user_id', targetUserId).maybeSingle(),
           ]);
           const settings = room ? effectiveRoomSettings(room) : null;
           if (!room || !member || room.phase !== 'lobby' || settings.locked || room.order.length >= settings.maxPlayers) {
             throw new PublicError('room_unavailable', 'Cette salle ne peut plus recevoir d’invitation.', 409);
+          }
+          if (targetMember) {
+            throw new PublicError('friend_already_in_room', 'Cet ami est déjà dans cette salle.', 409);
           }
           if (targetProfile.error) throw targetProfile.error;
           if (targetProfile.data?.allow_friend_join === false || targetProfile.data?.presence_status === 'dnd') {
